@@ -5624,10 +5624,12 @@ div[aria-label="Advertisement"] {
 }
 
 .asc-income-delta {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   margin: 4px 0 10px;
   min-height: 18px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .asc-income-delta.up { color: #4fd6c4; }

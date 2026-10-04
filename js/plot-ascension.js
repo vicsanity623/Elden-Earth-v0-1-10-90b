@@ -612,6 +612,27 @@ const PlotAscension = (() => {
     const delta = incomeAfter - beforeIncome;
     const deltaPct = beforeIncome > 0 ? ((delta / beforeIncome) * 100) : 0;
 
+    // Portfolio % can be tiny when you own hundreds of plots — never show "0.0%" on a real increase
+    function formatDeltaPct(pct) {
+      const a = Math.abs(pct);
+      if (a === 0) return "0%";
+      if (a < 0.01) return pct.toFixed(4) + "%";
+      if (a < 1) return pct.toFixed(3) + "%";
+      return pct.toFixed(2) + "%";
+    }
+
+    // Forge-step math: 3× old rarity vs 1× new rarity (the real ascension win)
+    let forgeStepTxt = "";
+    if (result.fromRarity) {
+      const fromConf = rarityConf(result.fromRarity);
+      const toConf2 = rarityConf(newRarity);
+      const inRate = 3 * fromConf.rate;
+      const outRate = toConf2.rate;
+      const stepDelta = outRate - inRate;
+      const stepPct = inRate > 0 ? (stepDelta / inRate) * 100 : 0;
+      forgeStepTxt = `Forge step: 3× ${fromConf.label} ($${formatIncome(inRate)}) → 1× ${toConf2.label} ($${formatIncome(outRate)}) = ${stepDelta >= 0 ? "+" : "−"}${formatDeltaPct(Math.abs(stepPct))} on those plots`;
+    }
+
     const setTxt = (id, val) => { const n = el(id); if (n) n.textContent = val; };
 
     const rarityBadge = el("asc-complete-rarity");
@@ -632,13 +653,13 @@ const PlotAscension = (() => {
       deltaEl.classList.remove("up", "down", "flat");
       if (delta > 0) {
         deltaEl.classList.add("up");
-        deltaEl.textContent = `▲ Income +$${formatIncome(delta)}/s (${deltaPct.toFixed(1)}%)`;
+        deltaEl.textContent = `▲ Income up +$${formatIncome(delta)}/s · portfolio ${formatDeltaPct(deltaPct)}${forgeStepTxt ? " · " + forgeStepTxt : ""}`;
       } else if (delta < 0) {
         deltaEl.classList.add("down");
         deltaEl.textContent = `▼ Income −$${formatIncome(Math.abs(delta))}/s · Prestige & plot-cap gained`;
       } else {
         deltaEl.classList.add("flat");
-        deltaEl.textContent = "◆ Income steady · Prestige unlocked";
+        deltaEl.textContent = forgeStepTxt || "◆ Income steady · Prestige unlocked";
       }
     }
 
