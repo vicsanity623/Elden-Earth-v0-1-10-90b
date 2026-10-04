@@ -405,6 +405,13 @@ var Referrals;
       }
     }
 
+    function applyFromInput() {
+      const input = document.getElementById("referral-code-input");
+      if (input && input.value.trim()) {
+        applyReferral(input.value.trim());
+      }
+    }
+
     function escapeHtml(str) {
       const div = document.createElement("div");
       div.textContent = str;
