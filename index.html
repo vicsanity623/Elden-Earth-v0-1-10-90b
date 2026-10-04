@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.21b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.22b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 30X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -270,6 +270,16 @@
   <div class="side-hud-stack" id="side-hud-stack">
     <button class="side-hud-collapse-btn" id="side-hud-collapse" aria-label="Toggle HUD stack">
       <span class="collapse-icon">◀</span>
+    </button>
+
+    <!-- GLOBAL EVENT: Wheel Marathon (top priority) -->
+    <button id="global-event-hud-btn" class="side-hud-btn global-event-btn" aria-label="Global Event">
+      <div class="side-hud-card custom-hud-card global-event-card">
+        <span class="global-event-icon">🌍</span>
+        <span id="global-event-hud-chip" class="global-event-chip">0%</span>
+      </div>
+      <span class="side-hud-subtext" id="global-event-hud-label">EVENT</span>
+      <div class="global-event-mini-bar"><div id="global-event-hud-bar" class="global-event-mini-bar-fill"></div></div>
     </button>
 
     <!-- Diamond Extractor Quick Button -->
@@ -1049,6 +1059,70 @@
 </div>
 
 <!-- ===================== WEEKLY REALM DIVIDEND POOL MODAL ===================== -->
+<div id="global-event-modal" class="modal hidden">
+  <div class="modal-card global-event-card-modal">
+    <button class="close-btn" data-close="global-event-modal" id="ge-close-btn">✕</button>
+    <div class="forge-icon">🌍</div>
+    <h2 id="ge-title">Wheel Marathon</h2>
+    <p class="modal-sub" id="ge-sub">Spin the Wheel — help the Realm hit the goal!</p>
+
+    <div class="ge-progress-wrap">
+      <div class="ge-progress-meta">
+        <span>Realm Progress</span>
+        <strong id="ge-pct">0%</strong>
+      </div>
+      <div class="ge-progress-track">
+        <div id="ge-progress-bar" class="ge-progress-fill"></div>
+      </div>
+      <div class="ge-progress-nums">
+        <span><strong id="ge-total">0</strong> EB raised</span>
+        <span>Goal <strong id="ge-goal">200K</strong> EB</span>
+      </div>
+      <div id="ge-status" class="ge-status">Keep spinning — every EB counts!</div>
+      <div class="ge-countdown-row">
+        <span>⏱ Time Remaining</span>
+        <strong id="ge-countdown">--D : --H : --M : --s</strong>
+      </div>
+    </div>
+
+    <div class="ge-my-stats">
+      <div class="ge-stat">
+        <span>Your Contribution</span>
+        <strong id="ge-my-amount">0</strong>
+      </div>
+      <div class="ge-stat">
+        <span>Your Est. Prize</span>
+        <strong id="ge-my-prize">0</strong>
+      </div>
+      <div class="ge-stat">
+        <span>Your Rank</span>
+        <strong id="ge-my-rank">—</strong>
+      </div>
+    </div>
+
+    <div class="ge-pool-note" id="ge-pool-note">
+      Prize pool = 200,000 EB ÷ <strong id="ge-participants">0</strong> players =
+      <strong id="ge-total-pool">0</strong> EB, split by contribution share.
+    </div>
+
+    <div class="ge-rewards-box">
+      <strong>🏆 Top 10 Plot Rewards</strong>
+      <div class="ge-reward-line"><span>🥇 Rank 1</span><span>2 Legendary · 3 Epic · 10 Rare plots</span></div>
+      <div class="ge-reward-line"><span>🥈🥉 Ranks 2–10</span><span>1 Legendary · 3 Epic plots each</span></div>
+      <div class="ge-reward-line muted"><span>✓ All contributors</span><span>Share of (200,000 ÷ players) EB pool after event</span></div>
+    </div>
+
+    <div class="ge-top10-header">Hall of Fame — Top Contributors</div>
+    <div id="ge-top10" class="ge-top10"></div>
+
+    <div class="modal-actions">
+      <button id="ge-claim-btn" class="btn btn-primary hidden">Claim Reward</button>
+      <button id="ge-admin-btn" class="btn btn-secondary hidden">Process Top 10 Plots</button>
+      <button class="btn btn-secondary" data-close="global-event-modal">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="weekly-pool-modal" class="modal hidden">
   <div class="modal-card weekly-pool-card">
     <button class="close-btn" data-close="weekly-pool-modal">✕</button>
@@ -1560,6 +1634,7 @@
 <script src="js/referrals.js"></script>
 <script src="js/server-anticheat.js"></script>
 <script src="js/plot-ascension.js"></script>
+<script src="js/global-event.js"></script>
 <script src="js/profanity-filter.js"></script>
 <script src="js/pet.js"></script>
 <script src="js/main.js"></script>

@@ -5667,6 +5667,316 @@ div[aria-label="Advertisement"] {
   50% { text-shadow: 0 0 28px rgba(224, 168, 79, 0.9), 0 0 40px rgba(255, 43, 67, 0.35); }
 }
 
+/* ================= GLOBAL EVENT (WHEEL MARATHON) ================= */
+.global-event-btn.side-hud-btn {
+  /* Already first in DOM after collapse — highest priority in stack */
+}
+
+/* Match other side-hud cards: no outline/border */
+.global-event-card {
+  background: linear-gradient(160deg, #1c2a3d 0%, #2a1520 55%, #1a1020 100%) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.global-event-icon {
+  font-size: 44px;
+  line-height: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 6px rgba(255, 211, 138, 0.7));
+}
+
+.global-event-chip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: #fff;
+  background: rgba(255, 43, 67, 0.9);
+  border-radius: 999px;
+  padding: 1px 5px;
+  line-height: 1.2;
+  z-index: 2;
+}
+
+.global-event-mini-bar {
+  width: clamp(38px, 10vw, 48px);
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.global-event-mini-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff2b43, #ff2b43 40%, #e0a84f);
+  box-shadow: 0 0 8px rgba(255, 43, 67, 0.6);
+  transition: width 0.4s ease;
+}
+
+.global-event-card-modal {
+  max-width: 420px;
+  text-align: center;
+}
+
+.ge-progress-wrap {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  text-align: left;
+}
+
+.ge-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.ge-progress-meta strong {
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+}
+
+.ge-progress-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 43, 67, 0.35);
+  overflow: hidden;
+}
+
+.ge-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff2b43 0%, #ff6b4a 50%, #e0a84f 100%);
+  box-shadow: 0 0 12px rgba(255, 43, 67, 0.55);
+  transition: width 0.45s ease;
+}
+
+.ge-progress-nums {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.ge-progress-nums strong {
+  color: var(--parchment);
+  font-family: var(--font-display);
+}
+
+.ge-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.ge-countdown-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 43, 67, 0.3);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.ge-countdown-row strong {
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+}
+
+.ge-my-stats {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.ge-stat {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 6px;
+}
+
+.ge-stat span {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.ge-stat strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--gold-hi);
+}
+
+.ge-rewards-box {
+  text-align: left;
+  background: rgba(255, 43, 67, 0.06);
+  border: 1px dashed rgba(255, 43, 67, 0.4);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.ge-rewards-box > strong {
+  display: block;
+  color: var(--parchment);
+  margin-bottom: 6px;
+  font-family: var(--font-display);
+}
+
+.ge-reward-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.ge-reward-line span:last-child {
+  color: var(--parchment);
+  text-align: right;
+}
+
+.ge-reward-line.muted span:last-child {
+  color: var(--text-dim);
+}
+
+.ge-pool-note {
+  text-align: left;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px dashed rgba(79, 214, 196, 0.35);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 4px 0 10px;
+  line-height: 1.45;
+}
+
+.ge-pool-note strong {
+  color: var(--teal);
+}
+
+.ge-top10-header {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gold-hi);
+  letter-spacing: 0.6px;
+  margin: 8px 0 6px;
+  text-align: left;
+}
+
+.ge-top10 {
+  max-height: 180px;
+  overflow-y: auto;
+  text-align: left;
+  margin-bottom: 8px;
+}
+
+.ge-top10::-webkit-scrollbar {
+  width: 4px;
+}
+.ge-top10::-webkit-scrollbar-thumb {
+  background: rgba(255, 43, 67, 0.45);
+  border-radius: 4px;
+}
+
+.ge-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--parchment);
+}
+
+.ge-top-row.me {
+  border-color: rgba(255, 211, 138, 0.65);
+  background: rgba(255, 211, 138, 0.08);
+}
+
+.ge-top-row.empty {
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.ge-rank {
+  min-width: 28px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--gold-hi);
+}
+
+.ge-avatar {
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ge-avatar-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ge-avatar-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ge-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ge-amt {
+  color: var(--teal);
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+
 /* ---------- Diamond Extractor Upgrade Elements ---------- */
 .extractor-level-header {
   display: flex;

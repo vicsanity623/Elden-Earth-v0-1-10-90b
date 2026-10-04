@@ -4,7 +4,7 @@
 // ============================================================
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.21b",
+  GAME_VERSION: "0.1.11.22b",
 
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -129,6 +129,20 @@ const CONFIG = {
     common:    { next: "rare",      count: 3, eb: 50,  cashRequired: 0.25 },
     rare:      { next: "epic",      count: 3, eb: 100, cashRequired: 0.75 },
     epic:      { next: "legendary", count: 3, eb: 150, cashRequired: 1.25 },
+  },
+
+  // --- Global Event Engine (Wheel Marathon) ---
+  GLOBAL_EVENT: {
+    id: "wheel_marathon",
+    title: "Wheel Marathon",
+    subtitle: "Spin the Wheel — help the Realm hit the goal!",
+    goal: 200000,
+    rewardPoolEB: 200000,
+    durationMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    top10: {
+      rank1:  { legendary: 2, epic: 3, rare: 10 },
+      rank2plus: { legendary: 1, epic: 3 },
+    },
   },
 
   

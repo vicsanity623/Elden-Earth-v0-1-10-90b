@@ -640,6 +640,11 @@
     } else {
       launchGame();
     }
+
+    // Global Event: (re)start now that Auth + session are ready
+    if (typeof GlobalEvent !== "undefined" && GlobalEvent.startWhenReady) {
+      GlobalEvent.startWhenReady(0);
+    }
   }
 
   // ---------------- Location ----------------
@@ -3672,12 +3677,20 @@
         } else if (slice.type === "miss") {
           el("wheel-result").textContent = "Better luck next time! (No reward)";
           showToast("🚫 Nothing this time — keep searching!");
+          if (spinResult.eventContributed > 0 && typeof GlobalEvent !== "undefined") {
+            GlobalEvent.notifySpinContributed(spinResult.eventContributed);
+          }
 
         } else {
           // 🪙 Elden Bucks Winner
           const winAmount = (Number(slice.amount) || 0) * multAward;
           el("wheel-result").textContent = `🎉 You won ${winAmount} EB!`;
           showToast(`🎉 Won +${winAmount} Elden Bucks!`);
+
+          // Global Event: server already recorded contribution via spinWheel
+          if (spinResult.eventContributed > 0 && typeof GlobalEvent !== "undefined") {
+            GlobalEvent.notifySpinContributed(spinResult.eventContributed);
+          }
 
           // Only broadcast 25+ EB Jackpots on 1X spins (not 10X) to prevent feed flooding
           if (winAmount >= 25 && multAward === 1 && typeof Feed !== "undefined") {
@@ -4168,6 +4181,7 @@
     }
     Auth.init(onSignedIn);
     if (typeof ServerAntiCheat !== "undefined") ServerAntiCheat.init();
+    if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     el("locate-btn")?.addEventListener("click", startLocating);
     el("retry-location-btn")?.addEventListener("click", startLocating);
 
