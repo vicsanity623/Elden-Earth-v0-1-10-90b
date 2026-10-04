@@ -8630,6 +8630,21 @@ body.birds-eye-mode .top-hud-row {
   color: var(--teal);
 }
 
+.cashout-weekly-limit {
+  font-size: 11px;
+  color: var(--teal);
+  text-align: center;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.cashout-cooldown {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .cashout-submit-btn {
   width: 100%;
   padding: 14px;

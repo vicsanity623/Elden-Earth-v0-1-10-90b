@@ -41,6 +41,7 @@ const Cashout = (() => {
     const cash = getCashBalance();
     const age = getAccountAgeDays();
     const pending = hasPendingWithdrawal();
+    const weeklyData = Store.get()?.withdrawalWeekly || { paid: 0, lastPaidAt: 0 };
 
     const openBtn = el("cashout-open-withdraw-btn");
     const form = el("cashout-withdraw-form");
@@ -53,6 +54,8 @@ const Cashout = (() => {
     const emailInput = el("cashout-paypal-email");
     const decreaseBtn = el("cashout-withdraw-decrease");
     const increaseBtn = el("cashout-withdraw-increase");
+    const weeklyLimitEl = el("cashout-weekly-limit");
+    const cooldownEl = el("cashout-cooldown");
 
     // Determine eligibility
     const ageOk = getAccountAgeDays() >= 30;
@@ -61,6 +64,15 @@ const Cashout = (() => {
     const amountOk = withdrawAmount >= minWithdraw && withdrawAmount <= Math.min(cash, maxWithdraw);
     const noPending = !pending;
     const allOk = ageOk && balanceOk && emailOk && amountOk && noPending;
+
+    // Weekly limit & cooldown info
+    const weeklyPaid = weeklyData?.paid || 0;
+    const weeklyLimit = 15.00;
+    const weeklyRemaining = Math.max(0, 15.00 - weeklyData?.paid || 0);
+    const lastPaidAt = weeklyData?.lastPaidAt || 0;
+    const cooldownMs = 48 * 60 * 60 * 1000;
+    const cooldownActive = lastPaidAt && (Date.now() - lastPaidAt) < 48 * 60 * 60 * 1000;
+    const cooldownHoursLeft = cooldownActive ? Math.ceil((48 * 60 * 60 * 1000 - (Date.now() - weeklyData.lastPaidAt)) / (60 * 60 * 1000)) : 0;
 
     // Show/hide form
     if (cash >= minWithdraw && !pending) {
@@ -185,6 +197,9 @@ const Cashout = (() => {
           already_pending: "You already have a pending request.",
           invalid_email: "Invalid PayPal email.",
           rate_limited: "Too many requests. Try again later.",
+          weekly_limit_exceeded: `Weekly limit reached ($${result.weeklyPaid?.toFixed(2) || 0}/$15.00). Try next week.`,
+          cooldown_active: `Cooldown active: ${result.hoursLeft}h until next withdrawal.`,
+          region_restricted: "Withdrawals not available in your region.",
         };
         toast(msgs[result?.reason] || `Failed: ${result?.reason || "unknown"}`, 4000);
         return;

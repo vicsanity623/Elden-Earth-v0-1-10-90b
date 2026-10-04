@@ -146,6 +146,15 @@ const CONFIG = {
     },
   },
 
+  // --- Withdrawal Limits ---
+  WITHDRAWAL: {
+    minUsd: 5.00,
+    maxUsd: 1000.00,
+    weeklyLimitUsd: 15.00,
+    minAccountAgeDays: 30,
+    cooldownHours: 48,
+  },
+
   // --- Regional Compliance (Server-Authoritative) ---
   // Players from these ISO 3166-1 alpha-2 country codes are BLOCKED from:
   // 1. Playing the game (login/registration blocked)
