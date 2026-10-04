@@ -104,13 +104,18 @@ const GlobalEvent = (() => {
       cdEl.textContent = expired ? "ENDED" : fmtCountdown(remain);
     }
 
-    // Pool note: 200k ÷ participants
+    // Pool note: reward pool ÷ participants
     const participantsEl = el("ge-participants");
     const totalPoolEl = el("ge-total-pool");
     const participants = Number(ev.participantCount) || 0;
     const totalPool = Number(ev.totalPrizePool) || 0;
+    const basePool = Number(ev.rewardPoolEB) || 75000;
     if (participantsEl) participantsEl.textContent = String(participants);
     if (totalPoolEl) totalPoolEl.textContent = fmtEB(totalPool);
+    const poolNote = el("ge-pool-note");
+    if (poolNote) {
+      poolNote.innerHTML = `Prize pool = ${fmtEB(basePool)} EB ÷ <strong id="ge-participants">${participants}</strong> players = <strong id="ge-total-pool">${fmtEB(totalPool)}</strong> EB, split by contribution share.`;
+    }
 
     const myAmtEl = el("ge-my-amount");
     if (myAmtEl) myAmtEl.textContent = fmtEB(me?.amount || 0);
@@ -326,7 +331,7 @@ const GlobalEvent = (() => {
             startedAt: Number(d.startedAt) || 0,
             completed: d.completed === true || expired,
             payoutsProcessed: d.payoutsProcessed === true,
-            rewardPoolEB: Number(d.rewardPoolEB) || 200000,
+            rewardPoolEB: Number(d.rewardPoolEB) || 75000,
             participantCount: Number(d.participantCount) || lastEvent?.participantCount || 0,
             totalPrizePool: Number(d.totalPrizePool) || lastEvent?.totalPrizePool || 0,
           };

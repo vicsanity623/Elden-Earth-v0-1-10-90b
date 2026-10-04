@@ -132,13 +132,14 @@ const CONFIG = {
   },
 
   // --- Global Event Engine (Wheel Marathon) ---
+  // Live now (surprise Sat start, 3 days). Future rounds: Mon–Wed weekly.
   GLOBAL_EVENT: {
     id: "wheel_marathon",
     title: "Wheel Marathon",
     subtitle: "Spin the Wheel — help the Realm hit the goal!",
-    goal: 200000,
-    rewardPoolEB: 200000,
-    durationMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    goal: 75000,
+    rewardPoolEB: 75000,
+    durationMs: 3 * 24 * 60 * 60 * 1000, // 3 days (Mon–Wed for future weeks)
     top10: {
       rank1:  { legendary: 2, epic: 3, rare: 10 },
       rank2plus: { legendary: 1, epic: 3 },
