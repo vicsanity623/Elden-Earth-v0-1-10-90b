@@ -83,7 +83,7 @@ const CONFIG = {
   // --- Spin wheel --- (+12 & +24 Diamond Jackpots, 1 Miss Slice)
   WHEEL_SLICES: [
     { type: "diamond",         amount: 1,  label: "+1 ◆",  color: "#8fa3b8", weight: 110 },
-    { type: "eb",              amount: 1,  label: "1 EB",  color: "#4fd6c4", weight: 240 },
+    { type: "eb",              amount: 3,  label: "3 EB",  color: "#4fd6c4", weight: 240 },
     { type: "diamond_jackpot", amount: 12, label: "+12 ◆", color: "#4fd6c4", weight: 20  }, // 💎 +12 Diamond Jackpot!
     { type: "eb",              amount: 2,  label: "2 EB",  color: "#4f9dd6", weight: 130 },
     { type: "eb",              amount: 5,  label: "5 EB",  color: "#a86ee0", weight: 50  },
