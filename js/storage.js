@@ -57,6 +57,7 @@ const Store = (() => {
       plotBag: {},
       plotBagItems: {},
       plotsVersion: 0,
+      saveVersion: 0,
       eldenStopSeeds: 0,
       eldenStopCooldowns: {},
       calendar: { claimedDays: 0, lastClaimTime: 0, lastClaimDate: null },
@@ -256,9 +257,17 @@ const Store = (() => {
     // A superseded/stale session (lock stolen by another tab) must never clobber
     // the shared localStorage with its own outdated in-memory state.
     if (isSessionPaused) return;
+    
+    // PREVENT BACKGROUND TAB SAVES: hidden tabs cannot overwrite the session leader
+    if (typeof document !== "undefined" && document.hidden) {
+      console.warn("[Store] Blocked save from hidden tab — only the active session may persist.");
+      return;
+    }
+    
     try {
       state._gameVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
       state.lastSavedAt = Date.now(); // Timestamp for conflict resolution
+      state.saveVersion = (state.saveVersion || 0) + 1; // LWW version counter
       localStorage.setItem(KEY, JSON.stringify(state));
       syncToCloudDebounced(immediateCloud);
     } catch (e) {
@@ -340,6 +349,14 @@ const Store = (() => {
   function syncToCloud() {
     if (isSessionPaused) return;
     if (!cloudSyncComplete) return; // Block until syncFromCloud completes
+    
+    // PREVENT BACKGROUND TAB SYNC: hidden tabs cannot push to cloud
+    // This prevents the "stale desktop tab" from overwriting the active mobile session
+    if (typeof document !== "undefined" && document.hidden) {
+      console.warn("[Store] Blocked syncToCloud from hidden tab — only active session syncs.");
+      return;
+    }
+    
     // Block guest saves from syncing to cloud - guest data stays local only
     if (state && state.player && (!state.player.id || state.player.id.startsWith("guest-"))) {
       return;
@@ -412,7 +429,7 @@ const Store = (() => {
       localStorage.setItem(KEY, JSON.stringify(state));
     }
 
-    // SESSION LOCK: Check if another session is actively running
+    // SESSION LOCK with PRESENCE HEARTBEAT: Check if another session is actively running
     try {
       const saveDoc = await firestore.collection("saves").doc(playerId).get();
       if (saveDoc.exists) {
@@ -421,7 +438,21 @@ const Store = (() => {
         const lockAge = existingLock ? (Date.now() - Number(existingLock.lockedAt || 0)) : Infinity;
         const LOCK_STALE_MS = 30000; // Lock considered stale after 30s without heartbeat
 
-        if (existingLock && existingLock.sessionId !== localSessionId && lockAge < LOCK_STALE_MS) {
+        // Also check presence collection for heartbeat (more real-time than sessionLock)
+        let presenceAge = Infinity;
+        try {
+          const presenceDoc = await firestore.collection("presence").doc(playerId).get();
+          if (presenceDoc.exists) {
+            const presenceData = presenceDoc.data() || {};
+            const heartbeat = Number(presenceData.lastHeartbeat || 0);
+            presenceAge = heartbeat ? (Date.now() - heartbeat) : Infinity;
+          }
+        } catch (e) {
+          console.warn("[Presence] Read error:", e.message);
+        }
+        const effectiveLockAge = Math.min(lockAge, presenceAge);
+
+        if (existingLock && existingLock.sessionId !== localSessionId && effectiveLockAge < LOCK_STALE_MS) {
           // Another session is active and its lock is fresh — BLOCK this session
           console.warn(`[Session] BLOCKED — account already active in another window/tab (lock age: ${Math.round(lockAge / 1000)}s)`);
           isSessionPaused = true;
@@ -490,6 +521,30 @@ const Store = (() => {
       console.warn("[Session] Lock claim error (proceeding anyway):", lockErr);
     }
 
+    // Start presence heartbeat: update presence/{uid} every 10s so other tabs know this session is alive
+    if (typeof heartbeatInterval === "undefined") {
+      window.heartbeatInterval = setInterval(async () => {
+        if (state && state.player && state.player.id) {
+          try {
+            const firestore = getDb();
+            if (firestore) {
+              await firestore.collection("presence").doc(state.player.id).set({
+                sessionId: localSessionId,
+                lastHeartbeat: Date.now(),
+                tabId: localSessionId, // distinguish tabs
+              }, { merge: true });
+            }
+          } catch (e) {
+            // Silent fail — heartbeat is best-effort
+          }
+        }
+      }, 10000);
+      // Cleanup on unload
+      window.addEventListener("beforeunload", () => {
+        if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);
+      });
+    }
+
     try {
       const doc = await firestore.collection("saves").doc(playerId).get();
       if (doc.exists) {
@@ -555,19 +610,17 @@ const Store = (() => {
           mergedQuests = localQuests.date === today ? localQuests : cloudQuests;
         }
 
-        // --- TIMESTAMP-AWARE CONFLICT RESOLUTION ---
-        // Uses lastSavedAt (set on every Store.save) to prevent income loop's
-        // lastTick updates from making local state appear newer than cloud.
-        // Deliberately does NOT fall back to createdAt: a freshly-initialized or
-        // reset local state has no real lastSavedAt and must never be able to
-        // masquerade as "newer" than an existing cloud save and overwrite it.
-        const localTimestamp = Number(state?.lastSavedAt) || 0;
-        const cloudTimestamp = Number(cloudData.lastSavedAt) || 0;
+        // --- VERSION-AWARE CONFLICT RESOLUTION (LWW) ---
+        // Uses saveVersion (incremented on every Store.save) for authoritative
+        // last-write-wins. This prevents timestamp manipulation and stale tab overwrites.
+        // A stale tab with a newer localTimestamp but OLDER saveVersion is REJECTED.
+        const localVersion = Number(state?.saveVersion) || 0;
+        const cloudVersion = Number(cloudData.saveVersion) || 0;
 
-        if (localTimestamp > cloudTimestamp && state?.player?.id === playerId) {
+        if (localVersion > cloudVersion && state?.player?.id === playerId) {
           // LOCAL IS NEWER: Device has uncommitted actions (boost, wheel, etc.)
           // Keep local state, but merge in any cloud-only plots
-          console.log(`[Cloud] Local state is newer (${localTimestamp} > ${cloudTimestamp}). Preserving local progress.`);
+          console.log(`[Cloud] Local state is newer (v${localVersion} > v${cloudVersion}). Preserving local progress.`);
           // Preserve ephemeral local-only state across sync
           const prevLiveDiamonds = state.liveDiamonds || {};
           const prevCollected = state.collectedDiamondIds || [];
@@ -600,12 +653,17 @@ const Store = (() => {
           state.lastDiamondPlayerPosition = prevLastDiamondPlayerPosition || state.lastDiamondPlayerPosition;
           // Upload merged state to cloud immediately
           state.lastSavedAt = Date.now();
+          state.saveVersion = (state.saveVersion || 0) + 1; // bump version on merge
           localStorage.setItem(KEY, JSON.stringify(state));
           // Fire-and-forget cloud upload
           syncSafeStateToCloud();
         } else {
-          // CLOUD IS NEWER OR EQUAL: Safely adopt cloud data
-          console.log(`[Cloud] Cloud state is newer or equal (${cloudTimestamp} >= ${localTimestamp}). Adopting cloud data.`);
+          // CLOUD IS NEWER OR EQUAL: Safely adopt cloud data (LWW rejects stale local)
+          if (localVersion < cloudVersion) {
+            console.warn(`[Cloud] DISCARDING STALE LOCAL STATE — local v${localVersion} < cloud v${cloudVersion}. Cloud is authoritative.`);
+          } else {
+            console.log(`[Cloud] Cloud state is newer or equal (v${cloudVersion} >= v${localVersion}). Adopting cloud data.`);
+          }
           // Preserve ephemeral local-only state before cloud overwrite
           const prevLiveDiamonds = state.liveDiamonds || {};
           const prevCollected = state.collectedDiamondIds || [];
