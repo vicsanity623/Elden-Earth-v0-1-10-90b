@@ -33,3 +33,6 @@ Thumbs.db
 
 # Node
 node_modules/
+
+# Android local project (do not publish)
+android/
