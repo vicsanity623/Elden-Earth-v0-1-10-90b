@@ -3109,8 +3109,8 @@
     // Tap Quick Extractor Button to Open Modal
     el("extractor-hud-btn")?.addEventListener("click", openExtractorModal);
 
-    // Upgrade Extractor Button (Spends Cash Balance)
-    el("upgrade-extractor-btn")?.addEventListener("click", () => {
+    // Upgrade Extractor Button — cash spent SERVER-SIDE (upgradeExtractor callable)
+    el("upgrade-extractor-btn")?.addEventListener("click", async () => {
       const state = Store.get();
       if (!state.extractor || !state.extractor.built) return;
 
@@ -3121,12 +3121,31 @@
         showToast(`You need $${nextCost.toFixed(2)} in Cash Balance to upgrade.`);
         return;
       }
+      if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+        showToast("⚠️ Server connection required to upgrade the Extractor.", 3500);
+        return;
+      }
 
-      state.cash -= nextCost;
-      state.extractor.level = lvl + 1;
+      const result = await ServerAntiCheat.upgradeExtractor();
+      if (!result?.ok) {
+        const msgs = {
+          not_built: "⚠️ Build the Extractor first.",
+          max_level: "✅ Extractor is already max level.",
+          not_enough_cash: `🔒 You need $${Number(result?.cost || nextCost).toFixed(2)} Cash.`,
+          rate_limited: "⏳ Slow down — try again shortly.",
+        };
+        showToast(msgs[result?.reason] || `⚠️ Upgrade rejected: ${result?.reason || "server_error"}`, 3500);
+        return;
+      }
+
+      // Mirror server balances — critical so cash max-merge cannot refund the cost
+      if (Number.isFinite(Number(result.nextCash))) {
+        state.cash = Math.max(0, Number(result.nextCash));
+      }
+      state.extractor.level = result.level;
       Store.save(true);
       updateTopbar();
-      showToast(`⚡ Extractor Upgraded to Level ${lvl + 1}!`);
+      showToast(`⚡ Extractor Upgraded to Level ${result.level}! ($${Number(result.cost).toFixed(2)} Cash)`);
       checkExtractorTick();
     });
 
