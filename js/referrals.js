@@ -337,12 +337,12 @@ var Referrals;
         </div>`;
 
       referredSection = "";
-      referredByName = state.player?.referredByName;
-      if (referredByName) {
+      const currentReferredByName = state.player?.referredByName;
+      if (currentReferredByName) {
         referredSection = `
           <div class="referred-by-card">
             <span class="referred-by-icon">🔗</span>
-            <span>Referred by <strong>${referredByName}</strong></span>
+            <span>Referred by <strong>${currentReferredByName}</strong></span>
           </div>`;
       }
 
