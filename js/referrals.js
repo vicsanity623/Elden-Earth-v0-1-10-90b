@@ -74,7 +74,7 @@ var Referrals;
       }
 
       try {
-        const result = await ServerAntiCheat.applyReferral(referralCode.trim().toUpperCase());
+        const result = await ServerAntiCheat.applyReferral({ referralCode: referralCode.trim().toUpperCase() });
         if (!result?.ok) {
           const msgs = {
             invalid_code: "❌ Invalid referral code.",
@@ -354,7 +354,11 @@ var Referrals;
     }
 
     function applyInviteFromUrl() {
-      const ref = getInviteRefFromUrl();
+      // Check URL first, then sessionStorage for pending code
+      let ref = getInviteRefFromUrl();
+      if (!ref) {
+        ref = sessionStorage.getItem("pendingReferralCode");
+      }
       if (!ref) return;
       const state = Store.get();
       if (state.player?.referredBy) return; // Already referred
