@@ -647,6 +647,15 @@
       }
     }
 
+    // REFERRAL INVITE: Auto-apply referral code from URL if present
+    if (typeof Referrals !== "undefined" && Referrals.applyInviteFromUrl) {
+      try {
+        Referrals.applyInviteFromUrl();
+      } catch (e) {
+        console.warn("[Referrals] Invite auto-apply failed:", e);
+      }
+    }
+
     // Execute the professional 3D load pipeline
     if (typeof Bootloader !== "undefined" && Bootloader.run) {
       Bootloader.run(player, (coords) => {

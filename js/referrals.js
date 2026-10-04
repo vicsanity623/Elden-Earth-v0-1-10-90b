@@ -27,6 +27,25 @@ const Referrals = (() => {
     return `${base}${rand}`;
   }
 
+  // ======================== INVITE URL HANDLING ========================
+  // Supports invite URLs like: https://elden-earth.com/?ref=CODE123
+  // Auto-applies referral code when new player visits via invite link
+  function getInviteRefFromUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref && /^[A-Z0-9]{6,12}$/i.test(ref)) {
+        return ref.toUpperCase();
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function getInviteUrl(myCode) {
+    const base = window.location.origin + window.location.pathname;
+    return `${base}?ref=${myCode}`;
+  }
+
   // ======================== APPLY REFERRAL ========================
   async function applyReferral(referralCode) {
     const id = myId();
@@ -189,6 +208,11 @@ const Referrals = (() => {
         <div class="referral-code-label">Your Referral Code</div>
         <div class="referral-code-value" id="referral-code-display">${myCode}</div>
         <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyCode('${myCode}')">📋 Copy Code</button>
+      </div>
+      <div class="referral-invite-card">
+        <div class="referral-code-label">Your Invite Link</div>
+        <div class="referral-invite-url" id="referral-invite-url">${getInviteUrl(myCode)}</div>
+        <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyInviteUrl()">📋 Copy Invite Link</button>
       </div>`;
 
     let referredSection = "";
@@ -310,10 +334,28 @@ const Referrals = (() => {
     });
   }
 
-  function applyFromInput() {
-    const input = document.getElementById("referral-code-input");
-    if (input && input.value.trim()) {
-      applyReferral(input.value.trim());
+  function copyInviteUrl() {
+    const state = Store.get();
+    const myCode = state.player?.referralCode;
+    if (!myCode) return;
+    const url = getInviteUrl(myCode);
+    navigator.clipboard.writeText(url).then(() => {
+      toast("📋 Invite link copied!", 2500);
+    }).catch(() => {
+      toast("⚠️ Could not copy. Link: " + url, 4000);
+    });
+  }
+
+  function applyInviteFromUrl() {
+    const ref = getInviteRefFromUrl();
+    if (!ref) return;
+    const state = Store.get();
+    if (state.player?.referredBy) return; // Already referred
+    // Store the invite code for when player signs up
+    sessionStorage.setItem("pendingReferralCode", ref);
+    // If already signed in, apply immediately
+    if (myId()) {
+      applyReferral(ref);
     }
   }
 
@@ -328,6 +370,8 @@ const Referrals = (() => {
     claimReferralBonuses,
     renderReferralsTab,
     copyCode,
+    copyInviteUrl,
+    applyInviteFromUrl,
     applyFromInput,
     generateCode,
     REFERRAL_BONUS_EB
