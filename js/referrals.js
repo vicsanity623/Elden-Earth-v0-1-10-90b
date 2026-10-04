@@ -1,18 +1,22 @@
 // ============================================================
 // Elden Earth — Referral System (Firestore-Backed)
 // ============================================================
-const Referrals = (() => {
-  const REFERRAL_BONUS_EB = 25;
+// Use var to avoid TDZ issues if IIFE throws; assign after successful init
+var Referrals;
 
-  function db() { return Store.getDb(); }
-  function myId() { return Store.get()?.player?.id; }
-  function myName() { return Store.get()?.player?.name || "Traveler"; }
-  function myAvatar() { return Store.get()?.player?.avatar || "🙂"; }
+(function () {
+  try {
+    const REFERRAL_BONUS_EB = 25;
 
-  function toast(msg, dur) {
-    if (typeof window.showToast === "function") window.showToast(msg, dur);
-    else console.log("[Referrals]", msg);
-  }
+    function db() { return Store.getDb(); }
+    function myId() { return Store.get()?.player?.id; }
+    function myName() { return Store.get()?.player?.name || "Traveler"; }
+    function myAvatar() { return Store.get()?.player?.avatar || "🙂"; }
+
+    function toast(msg, dur) {
+      if (typeof window.showToast === "function") window.showToast(msg, dur);
+      else console.log("[Referrals]", msg);
+    }
 
   function formatRoyalty(val) {
     if (val >= 1) return val.toFixed(2);
@@ -365,7 +369,24 @@ const Referrals = (() => {
     return div.innerHTML;
   }
 
-  return {
+  } catch (e) {
+    console.error("[Referrals] Initialization failed:", e);
+    // Provide minimal fallback to avoid TDZ
+    Referrals = {
+      applyReferral: () => {},
+      claimReferralBonuses: () => {},
+      renderReferralsTab: () => {},
+      copyCode: () => {},
+      copyInviteUrl: () => {},
+      applyInviteFromUrl: () => {},
+      applyFromInput: () => {},
+      generateCode: () => "CODE",
+      REFERRAL_BONUS_EB: 25
+    };
+  }
+
+  // Assign to global after successful initialization
+  Referrals = {
     applyReferral,
     claimReferralBonuses,
     renderReferralsTab,

@@ -648,9 +648,9 @@
     }
 
     // REFERRAL INVITE: Auto-apply referral code from URL if present
-    if (typeof Referrals !== "undefined" && Referrals.applyInviteFromUrl) {
+    if (typeof window.Referrals !== "undefined" && window.Referrals?.applyInviteFromUrl) {
       try {
-        Referrals.applyInviteFromUrl();
+        window.Referrals.applyInviteFromUrl();
       } catch (e) {
         console.warn("[Referrals] Invite auto-apply failed:", e);
       }
