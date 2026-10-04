@@ -609,7 +609,7 @@
 
   // ---------------- Sign-in & Sequenced Boot ----------------
   let _onSignedInCalled = false;
-  function onSignedIn(playerData) {
+  async function onSignedIn(playerData) {
     if (_onSignedInCalled) {
       console.log("[Main] onSignedIn already called — ignoring duplicate.");
       return;
@@ -630,6 +630,22 @@
     // Ensure no other screens are visible during boot
     const locationScreen = document.getElementById("location-required-screen");
     if (locationScreen) locationScreen.classList.add("hidden");
+
+    // REGIONAL COMPLIANCE: Check if player's country/state is allowed
+    if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
+      try {
+        const countryCode = String(navigator?.language?.split("-")[1] || "").toUpperCase();
+        const usStateCode = ""; // Will be filled by server via geolocation
+        const regionResult = await ServerAntiCheat.checkCountryAccess(countryCode, "");
+        if (!regionResult?.allowed) {
+          console.warn("[Compliance] Region restricted:", regionResult);
+          document.getElementById("region-blocked-modal")?.classList.remove("hidden");
+          return;
+        }
+      } catch (e) {
+        console.warn("[Compliance] Region check failed (allowing for now):", e);
+      }
+    }
 
     // Execute the professional 3D load pipeline
     if (typeof Bootloader !== "undefined" && Bootloader.run) {
@@ -4200,6 +4216,7 @@
     }
     Auth.init(onSignedIn);
     if (typeof ServerAntiCheat !== "undefined") ServerAntiCheat.init();
+    if (typeof Cashout !== "undefined") Cashout.init();
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     el("locate-btn")?.addEventListener("click", startLocating);
     el("retry-location-btn")?.addEventListener("click", startLocating);

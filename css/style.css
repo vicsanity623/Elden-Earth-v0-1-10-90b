@@ -8541,6 +8541,172 @@ body.birds-eye-mode .top-hud-row {
   cursor: not-allowed;
 }
 
+/* ================= WITHDRAWAL REQUEST FORM ================= */
+.cashout-withdraw-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cashout-withdraw-form {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.cashout-form-group {
+  margin-bottom: 14px;
+}
+
+.cashout-form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cashout-form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--parchment);
+  font-size: 15px;
+  font-family: var(--font-body);
+}
+
+.cashout-form-group input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(79, 214, 196, 0.2);
+}
+
+.cashout-form-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.cashout-withdraw-amount {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cashout-withdraw-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.cashout-amount-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cashout-withdraw-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.cashout-withdraw-hint strong {
+  color: var(--teal);
+}
+
+.cashout-submit-btn {
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, var(--teal), #00b894);
+  color: #0d1420;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cashout-submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(79, 214, 196, 0.4);
+}
+
+.cashout-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.cashout-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cashout-warning {
+  font-size: 11px;
+  color: var(--ruby);
+  text-align: center;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.cashout-redeem-btn:not(:disabled) {
+  cursor: pointer;
+  opacity: 1;
+  background: linear-gradient(135deg, #ff6b4a, #ff2b43);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.cashout-redeem-btn:not(:disabled):hover {
+  box-shadow: 0 6px 24px rgba(255, 107, 74, 0.4);
+}
+
+/* ================= REGION BLOCKED MODAL ================= */
+.region-blocked-card {
+  max-width: 400px;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.region-blocked-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.region-blocked-info {
+  margin: 16px 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.region-blocked-info p {
+  margin: 8px 0;
+}
+
+.region-blocked-card .btn {
+  margin-top: 8px;
+}
+
 /* ================= RICKROLL BAN GATE ================= */
 #rickroll-gate {
   position: fixed;

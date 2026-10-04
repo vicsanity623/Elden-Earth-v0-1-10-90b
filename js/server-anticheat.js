@@ -273,6 +273,61 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  async function submitWithdrawalRequest(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("submitWithdrawalRequest");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Withdrawal request failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function approveWithdrawal(requestId) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("approveWithdrawal");
+      return (await fn({ requestId })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Approve withdrawal failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function rejectWithdrawal(requestId, reason) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("rejectWithdrawal");
+      return (await fn({ requestId, reason })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Reject withdrawal failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function listWithdrawals(status, limit) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("listWithdrawals");
+      return (await fn({ status, limit })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] List withdrawals failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function checkCountryAccess(countryCode, usStateCode) {
+    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("checkCountryAccess");
+      return (await fn({ countryCode, usStateCode })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Country access check failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
   async function claimReferralBonuses() {
     if (!functions) return { claimed: false, reason: "not_ready" };
     try {
@@ -409,5 +464,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage };
+  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess };
 })();

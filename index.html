@@ -1600,6 +1600,23 @@
   </div>
 </div>
 
+</div>
+</div>
+
+<!-- ===================== REGION BLOCKED MODAL ===================== -->
+<div id="region-blocked-modal" class="modal hidden">
+  <div class="modal-card region-blocked-card">
+    <div class="region-blocked-icon">🚫</div>
+    <h2>Region Not Supported</h2>
+    <p class="modal-sub">Elden Earth is not available in your region due to legal restrictions.</p>
+    <div class="region-blocked-info">
+      <p>This game involves real-money transactions and virtual economies that are regulated differently worldwide.</p>
+      <p>If you believe this is an error, please contact support with your region details.</p>
+    </div>
+    <button class="btn btn-secondary" onclick="window.location.reload()">Reload</button>
+  </div>
+</div>
+
 <div id="signout-wrap" style="display:none">
   <button id="signout-btn">Sign out</button>
 </div>
@@ -1635,6 +1652,7 @@
 <script src="js/server-anticheat.js"></script>
 <script src="js/plot-ascension.js"></script>
 <script src="js/global-event.js"></script>
+<script src="js/cashout.js"></script>
 <script src="js/profanity-filter.js"></script>
 <script src="js/pet.js"></script>
 <script src="js/main.js"></script>
@@ -1827,10 +1845,30 @@
       <!-- Convert Button -->
       <button id="cashout-convert-btn" class="cashout-convert-btn">CONVERT</button>
 
-      <!-- Redeem Section (Coming Soon) -->
-      <div class="cashout-redeem-section">
-        <p class="cashout-redeem-info">When your cash balance reaches $5.00, you can redeem it for real money.</p>
-        <button id="cashout-redeem-btn" class="cashout-redeem-btn" disabled>REDEEM NOW — COMING SOON</button>
+      <!-- Withdrawal Request Section -->
+      <div class="cashout-redeem-section" id="cashout-withdraw-section">
+        <p class="cashout-redeem-info">When your cash balance reaches <strong>$5.00</strong>, you can request a real-money withdrawal to PayPal.</p>
+        <div class="cashout-withdraw-form" id="cashout-withdraw-form" style="display: none;">
+          <div class="cashout-form-group">
+            <label for="cashout-paypal-email">PayPal Email</label>
+            <input type="email" id="cashout-paypal-email" placeholder="your@email.com" autocomplete="email" required>
+            <p class="cashout-form-hint">Must match your PayPal account for payout</p>
+          </div>
+          <div class="cashout-withdraw-amount">
+            <div class="cashout-withdraw-label">Withdrawal Amount</div>
+            <div class="cashout-amount-controls">
+              <button id="cashout-withdraw-decrease" class="cashout-arrow-btn" aria-label="Decrease">◀</button>
+              <div class="cashout-amount-display">
+                <span class="cashout-amount-dollar">$</span><span id="cashout-withdraw-amount">5.00</span>
+              </div>
+              <button id="cashout-withdraw-increase" class="cashout-arrow-btn" aria-label="Increase">▶</button>
+            </div>
+            <p class="cashout-withdraw-hint" id="cashout-withdraw-hint">Available: <strong id="cashout-available">$0.00</strong> · Minimum $5.00</p>
+          </div>
+          <button id="cashout-submit-withdrawal" class="cashout-submit-btn" disabled>Submit Withdrawal Request</button>
+          <p class="cashout-warning">⚠️ Requests are reviewed manually. Cash is locked upon submission. Approval may take up to 7 business days.</p>
+        </div>
+        <button id="cashout-open-withdraw-btn" class="cashout-redeem-btn" disabled>Request Withdrawal</button>
       </div>
     </div>
   </div>

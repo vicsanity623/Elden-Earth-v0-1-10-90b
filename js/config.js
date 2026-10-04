@@ -146,6 +146,59 @@ const CONFIG = {
     },
   },
 
+  // --- Regional Compliance (Server-Authoritative) ---
+  // Players from these ISO 3166-1 alpha-2 country codes are BLOCKED from:
+  // 1. Playing the game (login/registration blocked)
+  // 2. Cashout withdrawals (withdrawal requests rejected)
+  // Source: OFAC sanctions, GDPR/e-Privacy, US state gambling laws, PayPal availability
+  RESTRICTED_COUNTRIES: [
+    // US Sanctions (OFAC)
+    "IR", // Iran
+    "KP", // North Korea
+    "SY", // Syria
+    "CU", // Cuba
+    "RU", // Russia (sanctions)
+    "BY", // Belarus
+    // EU / GDPR / e-Privacy / strict gambling
+    "CN", // China
+    "HK", // Hong Kong
+    "MO", // Macau
+    // Strict gambling / money transmission
+    "WA", // Washington State (US - strict online gambling laws)
+    "NY", // New York (sweepstakes registration required)
+    "FL", // Florida (strict sweepstakes laws)
+    // Additional high-risk / sanctions
+    "BY", // Belarus
+    "MM", // Myanmar
+    "VE", // Venezuela
+    "YE", // Yemen
+    "ZW", // Zimbabwe
+    // PayPal unavailable / restricted
+    "AF", // Afghanistan
+    "CD", // Congo (DRC)
+    "CF", // Central African Republic
+    "GN", // Guinea
+    "GN", // Guinea-Bissau
+    "HT", // Haiti
+    "IQ", // Iraq
+    "LB", // Lebanon
+    "LY", // Libya
+    "SD", // Sudan
+    "SO", // Somalia
+    "SS", // South Sudan
+  ],
+
+  // US States where cashout is restricted (internal codes, not ISO)
+  RESTRICTED_US_STATES: [
+    "WA", // Washington - strict online gambling
+    "NY", // New York - sweepstakes registration
+    "FL", // Florida - sweepstakes laws
+    "MD", // Maryland - strict gambling
+    "NJ", // New Jersey - regulated only
+    "NV", // Nevada - regulated only
+    "PA", // Pennsylvania - regulated only
+  ],
+
   
   // --- Elden Stops (Dyson Disc Beacons) ---
   ELDEN_STOP_GROWTH_MS: 30 * 60 * 1000,         // 30-minute construction phase before spin-ready
