@@ -84,12 +84,12 @@ const CONFIG = {
   WHEEL_SLICES: [
     { type: "diamond",         amount: 1,  label: "+1 ◆",  color: "#8fa3b8", weight: 110 },
     { type: "eb",              amount: 3,  label: "3 EB",  color: "#4fd6c4", weight: 240 },
-    { type: "diamond_jackpot", amount: 12, label: "+12 ◆", color: "#4fd6c4", weight: 20  }, // 💎 +12 Diamond Jackpot!
+    { type: "diamond_jackpot", amount: 12, label: "+12 ◆", color: "#4fd6c4", weight: 2  }, // rarer than 50 EB (w5)
     { type: "eb",              amount: 2,  label: "2 EB",  color: "#4f9dd6", weight: 130 },
     { type: "eb",              amount: 5,  label: "5 EB",  color: "#a86ee0", weight: 50  },
     { type: "eb",              amount: 7,  label: "7 EB",  color: "#ff4757", weight: 35  }, // 🍀 Lucky 7 EB Slice!
     { type: "eb",              amount: 25, label: "25 EB", color: "#e0a84f", weight: 15  },
-    { type: "diamond_jackpot", amount: 24, label: "+24 ◆", color: "#2ee59d", weight: 8   }, // 💎 +24 Diamond Mega Jackpot!
+    { type: "diamond_jackpot", amount: 24, label: "+24 ◆", color: "#2ee59d", weight: 1   }, // extremely rare mega jackpot
     { type: "eb",              amount: 50, label: "50 EB", color: "#d4af61", weight: 5   },
   ],
   SPIN_COST_DIAMONDS: 2,
