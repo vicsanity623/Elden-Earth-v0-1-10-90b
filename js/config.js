@@ -137,7 +137,7 @@ const CONFIG = {
     id: "wheel_marathon",
     title: "Wheel Marathon",
     subtitle: "Spin the Wheel — help the Realm hit the goal!",
-    goal: 75000,
+    goal: 120000,
     rewardPoolEB: 75000,
     durationMs: 3 * 24 * 60 * 60 * 1000, // 3 days (Mon–Wed for future weeks)
     top10: {
