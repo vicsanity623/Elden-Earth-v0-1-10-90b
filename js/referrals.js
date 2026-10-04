@@ -63,92 +63,53 @@ var Referrals;
     // ======================== APPLY REFERRAL ========================
     async function applyReferral(referralCode) {
       const id = myId();
-      const d = db();
-      if (!id || !d || !referralCode) return false;
+      if (!id || !referralCode) return false;
 
       const state = Store.get();
       if (state.player?.referredBy) return false;
 
-      const cleanCode = referralCode.trim().toUpperCase();
-      let referrerDoc;
-      try {
-        const snap = await db.collection("players")
-          .where("referralCode", "==", cleanCode)
-          .limit(1)
-          .get();
+      if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+        toast("⚠️ Server connection required.", 3500);
+        return false;
+      }
 
-        if (snap.empty) {
-          toast("❌ Invalid referral code.", 3000);
+      try {
+        const result = await ServerAntiCheat.applyReferral(referralCode.trim().toUpperCase());
+        if (!result?.ok) {
+          const msgs = {
+            invalid_code: "❌ Invalid referral code.",
+            already_referred: "You have already been referred.",
+            account_too_new: "Account must be at least 1 day old.",
+            self_referral: "⚠️ You cannot refer yourself!",
+            referrer_region_restricted: "Referrer's region does not allow referrals.",
+          };
+          toast(msgs[result?.reason] || `⚠️ ${result?.reason || "Invalid code"}`, 3000);
           return false;
         }
-        referrerDoc = snap.docs[0];
+
+        const state = Store.get();
+        state.player.referredBy = result.referrerId;
+        state.player.referredByName = result.referrerName || "Unknown";
+        Store.save(true);
+
+        const input = document.getElementById("referral-code-input");
+        if (input) {
+          input.value = "";
+          input.disabled = true;
+          const btn = document.querySelector(".referral-apply-btn");
+          if (btn) {
+            btn.textContent = "Applied";
+            btn.disabled = true;
+          }
+        }
+
+        toast(`🎉 Thanks for joining — your referral bonus has been claimed! (Referrer: ${result.referrerName})`, 4000);
+        return true;
       } catch (e) {
-        console.warn("[Referrals] Code lookup error:", e);
+        console.warn("[Referrals] Apply error:", e);
         toast("⚠️ Could not verify code.", 3000);
         return false;
       }
-
-      const referrerId = referrerDoc.id;
-      if (referrerId === myId()) {
-        toast("⚠️ You cannot refer yourself!", 3000);
-        return false;
-      }
-
-      const referrerData = referrerDoc.data();
-
-      try {
-        await db.collection("referrals").add({
-          referrerId,
-          referrerName: referrerData.name || "Unknown",
-          referredId: id,
-          referredName: myName(),
-          referredAvatar: myAvatar(),
-          timestamp: Date.now(),
-          bonusGiven: REFERRAL_BONUS_EB
-        });
-      } catch (e) {
-        console.warn("[Referrals] Record error:", e);
-        toast("⚠️ Could not record referral.", 3000);
-        return false;
-      }
-
-      try {
-        await db.collection("referral_bonuses").add({
-          toId: referrerId,
-          toName: referrerData.name || "Unknown",
-          fromId: myId(),
-          fromName: myName(),
-          amount: REFERRAL_BONUS_EB,
-          claimed: false,
-          timestamp: Date.now()
-        });
-      } catch (e) {
-        console.warn("[Referrals] Bonus create error:", e);
-      }
-
-      state = Store.get();
-      state.player.referredBy = referrerId;
-      state.player.referredByName = referrerData.name || "Unknown";
-      Store.save(true);
-      try {
-        if (typeof Store.syncSafeStateToCloud === "function") await Store.syncSafeStateToCloud();
-      } catch (e) {
-        console.warn("[Referrals] Cloud sync error:", e);
-      }
-
-      const input = document.getElementById("referral-code-input");
-      if (input) {
-        input.value = "";
-        input.disabled = true;
-        const btn = document.querySelector(".referral-apply-btn");
-        if (btn) {
-          btn.textContent = "Applied";
-          btn.disabled = true;
-        }
-      }
-
-      toast("🎉 Thanks for joining — your referral bonus has been claimed!", 4000);
-      return true;
     }
 
     // ======================== CLAIM REFERRAL BONUSES ========================
