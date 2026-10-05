@@ -1,5 +1,5 @@
 // ============================================================
-// Elden Earth — Global Event Engine (Wheel Marathon)
+// Elden Earth — Global Event Engine (Global Challenge)
 // Server-authoritative community event UI
 // ============================================================
 const GlobalEvent = (() => {
@@ -77,7 +77,7 @@ const GlobalEvent = (() => {
     const pct = Math.max(0, Math.min(100, Number(ev.pct) || 0));
 
     const title = el("ge-title");
-    if (title) title.textContent = ev.title || "Wheel Marathon";
+    if (title) title.textContent = ev.title || "Global Challenge";
     const sub = el("ge-sub");
     if (sub) sub.textContent = ev.subtitle || "Spin the Wheel — help the Realm hit the goal!";
 
@@ -313,7 +313,7 @@ const GlobalEvent = (() => {
     const state = Store.get();
     if (!db || !state?.player?.id) return;
     try {
-      snapshotUnsub = db.collection("events").doc("wheel_marathon")
+      snapshotUnsub = db.collection("events").doc("global_challenge")
         .onSnapshot((snap) => {
           if (!snap.exists) return;
           const d = snap.data() || {};
@@ -321,8 +321,8 @@ const GlobalEvent = (() => {
           const goal = Number(d.goal) || 200000;
           const expired = d.completed === true || (Number(d.deadline) > 0 && Date.now() > Number(d.deadline));
           lastEvent = {
-            id: d.id || "wheel_marathon",
-            title: d.title || "Wheel Marathon",
+            id: d.id || "global_challenge",
+            title: d.title || "Global Challenge",
             subtitle: d.subtitle || "",
             goal,
             totalEB,
@@ -436,7 +436,7 @@ const GlobalEvent = (() => {
       if (Number.isFinite(Number(result.nextEb))) state.eb = Number(result.nextEb);
       Store.save(true);
       if (typeof updateTopbar === "function") updateTopbar();
-      toast(`🎉 Claimed ${fmtEB(result.prize)} EB from the Wheel Marathon!`, 4000);
+      toast(`🎉 Claimed ${fmtEB(result.prize)} EB from the Global Challenge!`, 4000);
       await fetchEvent();
       renderModal();
     } catch (e) {
@@ -474,7 +474,7 @@ const GlobalEvent = (() => {
   /** Called from main.js after a successful wheel spin. */
   function notifySpinContributed(amount) {
     if (!amount || amount <= 0) return;
-    toast(`🌍 +${fmtEB(amount)} EB → Wheel Marathon!`, 2200);
+    toast(`🌍 +${fmtEB(amount)} EB → Global Challenge!`, 2200);
     fetchEvent();
   }
 

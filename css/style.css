@@ -5690,8 +5690,9 @@ div[aria-label="Advertisement"] {
   50% { text-shadow: 0 0 28px rgba(224, 168, 79, 0.9), 0 0 40px rgba(255, 43, 67, 0.35); }
 }
 
-/* ================= GLOBAL EVENT (WHEEL MARATHON) ================= */
+/* ================= GLOBAL EVENT (Global Challenge) ================= */
 .global-event-btn.side-hud-btn {
+  display: inline-flex;
   /* Already first in DOM after collapse — highest priority in stack */
 }
 
