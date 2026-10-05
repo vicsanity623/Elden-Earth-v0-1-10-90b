@@ -175,6 +175,7 @@ const Trade = (() => {
     trade = res.trade;
     if (trade.status === "completed" && prev.status !== "completed") {
       stopPolling();
+      applyCompletedTrade();
       renderSlots();
       playSwap();
       return;
@@ -293,13 +294,10 @@ const Trade = (() => {
       const committed = trade.mine && trade.mine.committed;
       btn.disabled = committed || !selectedInstance;
       btn.textContent = committed ? "✓ Committed — waiting" : "🔒 Commit Plot";
-    } else if (trade.status === "revealed") {
+    } else if (trade.status === "revealed" || trade.status === "confirming") {
       const confirmed = trade.selfConfirmed;
       btn.disabled = confirmed || !trade.theirs;
       btn.textContent = confirmed ? "✓ Confirmed — waiting" : "✅ Confirm Trade";
-    } else if (trade.status === "confirming") {
-      btn.disabled = true;
-      btn.textContent = "✅ Confirmed — waiting…";
     } else if (trade.status === "completed") {
       btn.disabled = true;
       btn.textContent = "✓ Complete";
@@ -332,7 +330,7 @@ const Trade = (() => {
       return;
     }
 
-    if (trade.status === "revealed") {
+    if (trade.status === "revealed" || trade.status === "confirming") {
       const res = await ServerAntiCheat.confirmTrade({ tradeId: trade.tradeId });
       if (!res || !res.ok) {
         toast("⚠️ " + failText(res && res.reason), 3000);
