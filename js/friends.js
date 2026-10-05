@@ -182,6 +182,65 @@ const Friends = (() => {
       .catch(() => {});
   }
 
+  // ======================== PENDING TRADE ALERTS ========================
+  // The server writes trade_alerts/{myId}/items/{tradeId} for BOTH sides of an
+  // open trade (no rarity/instanceId, so the commit-reveal seal stays intact).
+  // Polling it means a trade waiting on THIS player is impossible to miss.
+  let tradeAlerts = {};
+  const tradeAlertSeen = new Set();
+
+  function pendingTradeFor(friendshipId) {
+    return (friendshipId && tradeAlerts[friendshipId]) || null;
+  }
+
+  async function syncTradeAlerts() {
+    const id = myId();
+    const d = db();
+    if (!id || !d) return;
+    try {
+      const snap = await d.collection("trade_alerts").doc(id).collection("items").get();
+      const now = Date.now();
+      const map = {};
+      let waiting = 0;
+      snap.forEach(doc => {
+        const a = doc.data() || {};
+        if (Number(a.expiresAt || 0) <= now) return;
+        if (["completed", "cancelled", "expired"].includes(a.status)) return;
+        if (!a.friendshipId) return;
+        map[a.friendshipId] = a;
+        if (a.waitingOn === "me") waiting++;
+      });
+      tradeAlerts = map;
+
+      const dot = document.getElementById("trade-pending-dot");
+      if (dot) dot.classList.toggle("hidden", waiting === 0);
+
+      const due = Object.values(map)
+        .filter(a => a.waitingOn === "me")
+        .sort((x, y) => (Number(y.updatedAt) || 0) - (Number(x.updatedAt) || 0))[0];
+      if (!due) return;
+      const key = `${due.tradeId}:${due.status}`;
+      if (tradeAlertSeen.has(key)) return;
+      tradeAlertSeen.add(key);
+      const who = due.fromName || "A friend";
+      if (due.status === "selecting") {
+        toast(`🌐 ${who} opened a ${due.type === "local" ? "📍 Local" : "🌐 Remote"} trade — open Friends to pick your plot!`, 6000);
+      } else {
+        toast(`🤝 ${who} committed their plot — open the trade to confirm it!`, 6000);
+      }
+    } catch (e) {
+      console.warn("[Friends] trade alert sync failed:", e);
+    }
+  }
+
+  // Accounts younger than 14 days cannot trade (server enforces too).
+  function tradeAgeBlocked() {
+    const created = Number(Store.get()?.createdAt) || 0;
+    if (!created) return false;
+    const age = Date.now() - created;
+    return age >= 0 && age < 14 * 24 * 60 * 60 * 1000;
+  }
+
   function questFromXp(xp, toNext) {
     if (toNext <= 0) return "Max friendship! Enjoy the 🍀 lucky trade bonus with this friend.";
     const f = CONFIG.FRIENDSHIP;
@@ -249,8 +308,31 @@ const Friends = (() => {
     const localBtn = modal.querySelector("#trade-local-btn");
     const remoteBtn = modal.querySelector("#trade-remote-btn");
     if (localBtn && remoteBtn) {
-      const canTrade = Boolean(friendship.fsId);
+      const tooNew = tradeAgeBlocked();
+      const canTrade = Boolean(friendship.fsId) && !tooNew;
+      const pending = pendingTradeFor(friendship.fsId);
+      // Reset to stock labels first so a re-open never leaves stale text.
+      localBtn.innerHTML = "📍 Local Trade";
+      remoteBtn.innerHTML = '🌐 Remote Trade <span class="trade-fee-tag">25 EB</span>';
+      localBtn.title = "";
+      remoteBtn.title = "";
       [localBtn, remoteBtn].forEach(b => { b.disabled = !canTrade; b.style.opacity = canTrade ? "1" : "0.5"; });
+
+      if (tooNew) {
+        [localBtn, remoteBtn].forEach(b => {
+          b.disabled = true;
+          b.style.opacity = "0.5";
+          b.title = "Trading unlocks once your account is 14 days old.";
+        });
+        localBtn.innerHTML = "🔒 Local Trade";
+        remoteBtn.innerHTML = "🔒 Remote Trade";
+      } else if (pending) {
+        const match = pending.type === "local" ? localBtn : remoteBtn;
+        match.innerHTML = pending.waitingOn === "me"
+          ? (pending.status === "selecting" ? "🟡 Pick Your Plot →" : "🤝 Confirm Trade →")
+          : "⏳ Waiting For Friend →";
+      }
+
       localBtn.onclick = () => startTrade(friendship, "local");
       remoteBtn.onclick = () => startTrade(friendship, "remote");
     }
@@ -263,6 +345,10 @@ const Friends = (() => {
   async function startTrade(friendship, type) {
     if (!friendship || !friendship.fsId) {
       toast("⚠️ Could not start a trade.", 3000);
+      return;
+    }
+    if (tradeAgeBlocked()) {
+      toast("🔒 Trading unlocks once your account is 14 days old.", 4000);
       return;
     }
     if (typeof Trade === "undefined" || !Trade.open) {
@@ -400,6 +486,7 @@ const Friends = (() => {
       else dot.classList.add("hidden");
     }
     syncRequestBadge();
+    await syncTradeAlerts();
 
     const today = new Date().toISOString().slice(0, 10);
     const myNameVal = myName();
@@ -447,6 +534,10 @@ const Friends = (() => {
         const alreadyGifted = fs.lastGift === today;
         const fsXp = Number(fs.friendshipXp) || 0;
         const fsHearts = CONFIG.friendshipHearts(fsXp);
+        const pendingTrade = pendingTradeFor(fs.id);
+        const pendingBadge = pendingTrade
+          ? `<span class="friend-trade-badge ${pendingTrade.waitingOn === "me" ? "is-you" : "is-waiting"}">${pendingTrade.waitingOn === "me" ? "🟡 Trade waiting" : "⏳ Trade in progress"}</span>`
+          : "";
 
         const av = friendAvatar && friendAvatar.startsWith("img:")
           ? `<img src="${friendAvatar.slice(4)}">` : `<span>${friendAvatar || "🙂"}</span>`;
@@ -454,7 +545,7 @@ const Friends = (() => {
           <div class="friend-row" onclick="Friends.openFriendshipDetail({ name: '${escapeHtml(friendName).replace(/'/g, "\\'")}', fsId: '${fs.id}', friendId: '${friendId}', alreadyGifted: ${alreadyGifted}, xp: ${fsXp}, reward: '+5 EB', quest: 'Send gifts and trade plots to earn Friendship XP and level up your hearts.'}); event.stopPropagation();" style="cursor:pointer;">
             <div class="friend-avatar">${av}</div>
             <div class="friend-info">
-              <span class="friend-name">${escapeHtml(friendName)}</span>
+              <span class="friend-name">${escapeHtml(friendName)}${pendingBadge}</span>
               <span class="friend-status">Friends since ${new Date(fs.since).toLocaleDateString()}</span>
             </div>
             <div class="friend-actions" onclick="event.stopPropagation();">
@@ -491,6 +582,8 @@ const Friends = (() => {
     renderFriendsTab,
     openFriendshipDetail,
     syncRequestBadge,
+    syncTradeAlerts,
+    pendingTradeFor,
     DAILY_GIFT_EB
   };
 })();

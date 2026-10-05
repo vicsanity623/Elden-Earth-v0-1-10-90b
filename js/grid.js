@@ -338,7 +338,10 @@ const Grid = (() => {
 
     const serverResult = await ServerAntiCheat.relocatePlot(slot, tx, ty, plotItemId);
     if (!serverResult.allowed) {
-      if (typeof showToast === "function") showToast("⚠️ Couldn't place plot: " + serverResult.reason, 4000);
+      const why = serverResult.reason === "plot_in_trade"
+        ? "it is committed to an open trade."
+        : serverResult.reason;
+      if (typeof showToast === "function") showToast("⚠️ Couldn't place plot: " + why, 4000);
       return;
     }
 

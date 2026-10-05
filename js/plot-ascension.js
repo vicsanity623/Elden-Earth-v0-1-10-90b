@@ -499,6 +499,7 @@ const PlotAscension = (() => {
         invalid_sacrifice: "⚠️ Invalid sacrifice selection.",
         target_not_found: "⚠️ Target plot no longer exists.",
         sacrifice_not_found: "⚠️ A sacrifice plot no longer exists.",
+        plot_in_trade: "⚠️ A selected plot is committed to an open trade.",
         rate_limited: "⏳ Forge rate limit — try again shortly.",
         no_save_found: "⚠️ Save not found.",
       };

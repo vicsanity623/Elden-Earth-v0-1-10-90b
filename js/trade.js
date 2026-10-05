@@ -68,14 +68,33 @@ const Trade = (() => {
 
     const res = await ServerAntiCheat.createTrade({ friendshipId: current.friendshipId, type: current.type });
     if (!res || !res.ok) {
-      setStatus("error", failText(res && res.reason));
+      let msg = failText(res && res.reason);
+      const left = res && Number(res.daysLeft);
+      if (res && res.reason === "account_too_new" && left) {
+        msg = `Trading unlocks in ${left} day${left === 1 ? "" : "s"} — accounts must be 14 days old.`;
+      } else if (res && res.reason === "friend_account_too_new" && left) {
+        msg = `Your friend's account is too new — trading unlocks in ${left} day${left === 1 ? "" : "s"}.`;
+      }
+      setStatus("error", msg);
       return;
     }
     trade = res.trade;
+    // A resumed trade may have been opened with the OTHER type — adopt it so
+    // the header, fee text and bag reflect what will actually settle.
+    if (res.resumed && trade.type && trade.type !== current.type) {
+      current.type = trade.type === "local" ? "local" : "remote";
+      if (title) title.textContent = current.type === "local" ? "📍 Local Trade" : "🌐 Remote Trade";
+      if (fine) {
+        fine.textContent = current.type === "local"
+          ? "Both of you must be online within 500m. Free — no relay fee."
+          : "25 EB relay fee. Your friend has up to 48h to commit their plot.";
+      }
+    }
     setStatus(trade.status, statusText(trade.status));
     renderBag();
     renderSlots();
     updateConfirmButton();
+    if (res.resumed) toast("↻ Resumed your open trade.", 2500);
     startPolling();
   }
 
@@ -94,13 +113,18 @@ const Trade = (() => {
       case "friend_trade_limit": return "Only 3 trades per friend per day.";
       case "insufficient_eb": return "Not enough EB for the 25 EB relay fee.";
       case "not_a_friend": return "That friendship could not be found.";
+      case "friendship_not_found": return "That friendship could not be found.";
+      case "account_too_new": return "New accounts unlock trading after 14 days.";
+      case "friend_account_too_new": return "Your friend's account is under 14 days old — trading unlocks soon.";
       case "plot_busy": return "That plot is already in another trade.";
+      case "plot_in_trade": return "That plot is committed to an open trade.";
       case "not_in_bag": return "That plot is no longer in your bag.";
       case "trade_not_open": return "This trade is no longer open.";
       case "trade_expired": return "This trade expired.";
       case "plot_no_longer_in_bag": return "A committed plot left the bag — trade voided.";
       case "not_revealed": return "Both sides must commit before confirming.";
       case "server_error": return "Server error — please try again.";
+      case "rate_limited": return "Too many attempts — wait a moment and try again.";
       default: return "Could not start the trade.";
     }
   }
@@ -162,12 +186,21 @@ const Trade = (() => {
   }
 
   // ---------- BAG (stacked rarity grid) ----------
+  // The plot already committed to this trade stays in the cloud bag but is
+  // frozen by trade_locks — hide it from the pickable count so it never
+  // looks like a spare copy you could offer twice.
+  function committedInstanceId() {
+    return (trade && trade.mine && trade.mine.committed) ? trade.mine.instanceId : null;
+  }
+
   function bagGroups() {
     const s = state();
     const items = s?.plotBagItems || {};
     const lucky = s?.luckyBagItems || {};
+    const locked = committedInstanceId();
     const groups = {};
     for (const id in items) {
+      if (locked && id === locked) continue;
       const r = String(items[id] || "common").split("_")[0];
       const isL = lucky[id] === true;
       const key = isL ? `${r}~lucky` : r;
@@ -184,7 +217,9 @@ const Trade = (() => {
     if (!grid) return;
     const groups = bagGroups();
     if (!groups.length) {
-      grid.innerHTML = `<div class="trade-bag-empty">No plots in your bag — pick up plots from the map first.</div>`;
+      grid.innerHTML = committedInstanceId()
+        ? `<div class="trade-bag-empty">🔒 Your choice is sealed — waiting for your friend.</div>`
+        : `<div class="trade-bag-empty">No plots in your bag — pick up plots from the map first.</div>`;
       return;
     }
     grid.innerHTML = groups.map(g => {
@@ -210,6 +245,8 @@ const Trade = (() => {
     const s = state();
     const items = s?.plotBagItems || {};
     const lucky = s?.luckyBagItems || {};
+    const locked = committedInstanceId();
+    if (locked) return;
     for (const id in items) {
       if (String(items[id]).split("_")[0] !== rarity) continue;
       if ((lucky[id] === true) !== isLucky) continue;

@@ -4253,6 +4253,7 @@
       const id = Store.get()?.player?.id;
       const d = Store.getDb();
       if (!id || !d) return;
+      if (typeof Friends !== "undefined" && Friends.syncTradeAlerts) Friends.syncTradeAlerts();
       d.collection("friend_requests")
         .where("toId", "==", id)
         .where("status", "==", "pending")
@@ -4266,5 +4267,11 @@
         })
         .catch(() => {});
     }, 30000);
+
+    // First pending-trade poll shortly after boot (badge + toast).
+    setTimeout(() => {
+      if (!Store.get()?.player?.id || !Store.getDb()) return;
+      if (typeof Friends !== "undefined" && Friends.syncTradeAlerts) Friends.syncTradeAlerts();
+    }, 6000);
   });
 })();
