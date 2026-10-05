@@ -77,6 +77,7 @@ EE/
 │   ├── early-adopter-boost.js
 │   ├── fix-saves.js
 │   ├── restore-plots.js
+│   ├── reward-all-players.js
 │   ├── reward-showcase-players.js
 │   └── wipe-firestore.js
 │
