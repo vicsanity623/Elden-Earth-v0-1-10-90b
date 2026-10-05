@@ -17,12 +17,6 @@ const crypto = require("crypto");
 // EMPTY ARRAY = GAME OPEN TO THE WORLD (banned emails are still blocked).
 // Add emails back any time to re-enable friends-only mode.
 const ALLOWED_EMAILS = [
-  "vicsanity623@gmail.com",
-  "davinci8587@gmail.com",
-  "ja1070133@gmail.com",
-  "zeno.minsohn@gmail.com",
-  "sajc9498@gmail.com",
-  "vickywithabigass@gmail.com"
 ];
 
 // --- BANNED EMAILS ---

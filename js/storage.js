@@ -56,6 +56,7 @@ const Store = (() => {
       plots: {},
       plotBag: {},
       plotBagItems: {},
+      luckyBagItems: {},
       plotsVersion: 0,
       saveVersion: 0,
       eldenStopSeeds: 0,
@@ -329,6 +330,11 @@ const Store = (() => {
           if (result.data?.plotBagItems && typeof result.data.plotBagItems === "object") {
             // Phase 2: authoritative instance-id inventory.
             state.plotBagItems = { ...result.data.plotBagItems };
+            mirrorDirty = true;
+          }
+          if (result.data?.luckyBagItems && typeof result.data.luckyBagItems === "object") {
+            // 🍀 Read-only mirror of which bagged instances are Lucky.
+            state.luckyBagItems = { ...result.data.luckyBagItems };
             mirrorDirty = true;
           }
           if (mirrorDirty) localStorage.setItem(KEY, JSON.stringify(state));
@@ -822,15 +828,19 @@ let lastConflictCheck = {};
       return;
     }
     const currentCount = Object.keys(state.plots).length;
-    if (currentCount === lastPlotsCount) return;
+    // Include the lucky count so gaining/losing a 🍀 plot busts the cache too.
+    let luckyCount = 0;
+    for (const id in state.plots) if (state.plots[id]?.lucky) luckyCount++;
+    const cacheKey = currentCount * 1000 + luckyCount;
+    if (cacheKey === lastPlotsCount) return;
 
-    lastPlotsCount = currentCount;
+    lastPlotsCount = cacheKey;
     let sum = 0;
     for (const id in state.plots) {
       const p = state.plots[id];
       const rKey = p.rarity?.key || p.rarity || "common";
-      const rarity = CONFIG.PLOT_RARITIES.find(r => r.key === rKey);
-      sum += (rarity ? rarity.rate : (p.rate || CONFIG.PLOT_RARITIES[0].rate));
+      // 🍀 Lucky plots earn ×1.1; plotRate() handles the multiplier.
+      sum += CONFIG.plotRate(rKey, p.lucky === true);
     }
     cachedBaseRate = sum;
   }
@@ -1075,8 +1085,8 @@ let lastConflictCheck = {};
       for (const id in state.plots) {
         const p = state.plots[id];
         const rKey = p.rarity?.key || p.rarity || "common";
-        const conf = CONFIG.PLOT_RARITIES.find(r => r.key === rKey);
-        baseRate += conf ? conf.rate : CONFIG.PLOT_RARITIES[0].rate;
+        // 🍀 Lucky plots earn ×1.1 while offline too.
+        baseRate += CONFIG.plotRate(rKey, p.lucky === true);
       }
     }
 
@@ -1178,7 +1188,8 @@ let lastConflictCheck = {};
     for (const id in state.plots) {
       const p = state.plots[id];
       const rKey = p.rarity?.key || p.rarity || "common";
-      rate += getRarityRate(rKey);
+      // 🍀 Lucky plots (🍀) earn ×1.1 their rarity rate.
+      rate += CONFIG.plotRate(rKey, p.lucky === true);
     }
     // Apply 30X/50X boost if active (delegated to Multiplier module)
     if (typeof Multiplier !== "undefined") {

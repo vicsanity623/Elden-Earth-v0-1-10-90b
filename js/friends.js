@@ -120,7 +120,9 @@ const Friends = (() => {
         user2Name: req.toName,
         user2Avatar: req.toAvatar,
         since: Date.now(),
-        lastGift: null
+        lastGift: null,
+        friendshipXp: 0,
+        hearts: 1
       });
 
       await d.collection("friend_requests").doc(requestDocId).delete();
@@ -180,6 +182,13 @@ const Friends = (() => {
       .catch(() => {});
   }
 
+  function questFromXp(xp, toNext) {
+    if (toNext <= 0) return "Max friendship! Enjoy the 🍀 lucky trade bonus with this friend.";
+    const f = CONFIG.FRIENDSHIP;
+    const level = CONFIG.friendshipHearts(xp);
+    return `Send daily gifts (+${f.XP_PER_GIFT} XP each) and trade plots (+${f.XP_PER_TRADE} XP each) to reach ${level + 1} hearts — ${toNext} XP to go.`;
+  }
+
   function openFriendshipDetail(friendship) {
     if (!friendship) return;
     const modal = document.getElementById("friendship-detail-modal");
@@ -190,12 +199,31 @@ const Friends = (() => {
     const reward = modal.querySelector("#friendship-reward");
     const quest = modal.querySelector("#friendship-quest");
     const giftBtn = modal.querySelector("#friendship-detail-gift-btn");
+    const xpFill = modal.querySelector("#friendship-xp-fill");
+    const xpCaption = modal.querySelector("#friendship-xp-caption");
+
+    // Hearts / XP come from CONFIG.FRIENDSHIP (1..10, XP grows with gifts + trades).
+    const totalXp = Number(friendship.xp) || 0;
+    const level = CONFIG.friendshipHearts(totalXp);
+    const maxHearts = CONFIG.FRIENDSHIP.MAX_HEARTS;
+    const toNext = CONFIG.friendshipXpToNext(totalXp);
+    const prevThreshold = level >= maxHearts ? (CONFIG.FRIENDSHIP.LEVEL_XP[maxHearts - 1] || 0) : (CONFIG.FRIENDSHIP.LEVEL_XP[level - 1] || 0);
+    const curThreshold = level >= maxHearts ? prevThreshold : (CONFIG.FRIENDSHIP.LEVEL_XP[level] || prevThreshold);
+    const span = Math.max(1, curThreshold - prevThreshold);
+    const pct = level >= maxHearts ? 100 : Math.min(100, Math.max(0, ((totalXp - prevThreshold) / span) * 100));
 
     if (title) title.textContent = friendship.name || "Friend";
-    if (xp) xp.textContent = `${friendship.level || 10}/10`;
-    if (hearts) hearts.innerHTML = Array.from({ length: 10 }, (_, i) => `<span class="friendship-heart ${i < (friendship.level || 10) ? "filled" : "dimmed"}">♥</span>`).join("");
-    if (reward) reward.textContent = `${friendship.reward || "+5 EB"} per level`;
-    if (quest) quest.textContent = friendship.quest || "Reach 10 friendship XP by gifting, helping, and visiting each other.";
+    if (xp) xp.textContent = `${level}/${maxHearts}`;
+    if (hearts) hearts.innerHTML = Array.from({ length: maxHearts }, (_, i) => `<span class="friendship-heart ${i < level ? "filled" : "dimmed"}">♥</span>`).join("");
+    if (xpFill) xpFill.style.width = pct + "%";
+    if (xpCaption) xpCaption.textContent = level >= maxHearts
+      ? `${totalXp} XP — Max friendship ❤`
+      : `${totalXp} XP — ${toNext} XP to next heart`;
+    if (reward) reward.textContent = level >= maxHearts ? "🍀 +5% Lucky Trade Chance (active)" : "🍀 +5% Lucky Trade Chance (at 10 hearts)";
+    const rewardBox = modal.querySelector(".friendship-reward-box");
+    if (rewardBox) rewardBox.classList.toggle("active", level >= maxHearts);
+    if (hearts) hearts.classList.toggle("maxed", level >= maxHearts);
+    if (quest) quest.textContent = questFromXp(totalXp, toNext);
 
     if (giftBtn) {
       if (friendship.alreadyGifted) {
@@ -217,8 +245,32 @@ const Friends = (() => {
       }
     }
 
+    // Trade buttons — Local (≤500m, free) and Remote (25 EB relay).
+    const localBtn = modal.querySelector("#trade-local-btn");
+    const remoteBtn = modal.querySelector("#trade-remote-btn");
+    if (localBtn && remoteBtn) {
+      const canTrade = Boolean(friendship.fsId);
+      [localBtn, remoteBtn].forEach(b => { b.disabled = !canTrade; b.style.opacity = canTrade ? "1" : "0.5"; });
+      localBtn.onclick = () => startTrade(friendship, "local");
+      remoteBtn.onclick = () => startTrade(friendship, "remote");
+    }
+
     modal.classList.remove("hidden");
     modal.style.zIndex = "2147483647";
+  }
+
+  // Kick off a trade session and hand off to the Trade UI.
+  async function startTrade(friendship, type) {
+    if (!friendship || !friendship.fsId) {
+      toast("⚠️ Could not start a trade.", 3000);
+      return;
+    }
+    if (typeof Trade === "undefined" || !Trade.open) {
+      toast("⚠️ Trade UI not loaded.", 3000);
+      return;
+    }
+    document.getElementById("friendship-detail-modal")?.classList.add("hidden");
+    Trade.open({ friendshipId: friendship.fsId, friendName: friendship.name || "Friend", type });
   }
 
   // ======================== DAILY EB GIFT ========================
@@ -393,17 +445,20 @@ const Friends = (() => {
         const friendAvatar = isUser1 ? fs.user2Avatar : fs.user1Avatar;
         const friendId = isUser1 ? fs.user2Id : fs.user1Id;
         const alreadyGifted = fs.lastGift === today;
+        const fsXp = Number(fs.friendshipXp) || 0;
+        const fsHearts = CONFIG.friendshipHearts(fsXp);
 
         const av = friendAvatar && friendAvatar.startsWith("img:")
           ? `<img src="${friendAvatar.slice(4)}">` : `<span>${friendAvatar || "🙂"}</span>`;
         html += `
-          <div class="friend-row" onclick="Friends.openFriendshipDetail({ name: '${escapeHtml(friendName).replace(/'/g, "\\'")}', fsId: '${fs.id}', friendId: '${friendId}', alreadyGifted: ${alreadyGifted}, level: 10, reward: '+5 EB', quest: 'Gift + visit + help each other to level up your friendship.'}); event.stopPropagation();" style="cursor:pointer;">
+          <div class="friend-row" onclick="Friends.openFriendshipDetail({ name: '${escapeHtml(friendName).replace(/'/g, "\\'")}', fsId: '${fs.id}', friendId: '${friendId}', alreadyGifted: ${alreadyGifted}, xp: ${fsXp}, reward: '+5 EB', quest: 'Send gifts and trade plots to earn Friendship XP and level up your hearts.'}); event.stopPropagation();" style="cursor:pointer;">
             <div class="friend-avatar">${av}</div>
             <div class="friend-info">
               <span class="friend-name">${escapeHtml(friendName)}</span>
               <span class="friend-status">Friends since ${new Date(fs.since).toLocaleDateString()}</span>
             </div>
             <div class="friend-actions" onclick="event.stopPropagation();">
+              <span class="friend-hearts-mini" title="${fsXp} Friendship XP">${"♥".repeat(fsHearts)}${"♡".repeat(CONFIG.FRIENDSHIP.MAX_HEARTS - fsHearts)}</span>
               <button class="btn-gift ${alreadyGifted ? 'gifted' : ''}"
                 ${alreadyGifted ? 'disabled' : ''}
                 onclick="Friends.sendDailyGift('${fs.id}','${friendId}','${escapeHtml(friendName)}')">

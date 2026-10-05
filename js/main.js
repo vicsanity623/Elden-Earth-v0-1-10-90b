@@ -267,9 +267,11 @@
 
     // Count plots by rarity
     const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+    let luckyCount = 0;
     for (const id in state.plots) {
       const r = state.plots[id].rarity?.key || state.plots[id].rarity;
       if (counts[r] !== undefined) counts[r]++;
+      if (state.plots[id].lucky) luckyCount++;
     }
 
     if (el("count-common")) el("count-common").textContent = counts.common;
@@ -283,6 +285,13 @@
       if (el(`weight-${rarity.key}`)) el(`weight-${rarity.key}`).textContent = pct;
       if (el(`rate-${rarity.key}`)) el(`rate-${rarity.key}`).textContent = formatRate(rarity.rate * (counts[rarity.key] || 0));
     });
+
+    // 🍀 Lucky plot counter (shown only when the player owns at least one)
+    const luckyEl = el("count-lucky");
+    if (luckyEl) {
+      luckyEl.textContent = luckyCount;
+      luckyEl.parentElement?.classList.toggle("hidden", luckyCount === 0);
+    }
   }
   
   async function updatePlayerInfoModal(targetPlayerData = null) {
@@ -392,8 +401,7 @@
             for (const id in allPlots) {
               if (allPlots[id].ownerId === targetPlayerData.ownerId) {
                 const rKey = allPlots[id].rarity?.key || allPlots[id].rarity;
-                const confR = CONFIG.PLOT_RARITIES.find(r => r.key === rKey);
-                playerBaseRate += (confR ? confR.rate : CONFIG.PLOT_RARITIES[0].rate);
+                playerBaseRate += CONFIG.plotRate(rKey, allPlots[id].lucky === true);
               }
             }
 
@@ -414,11 +422,13 @@
 
     const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
     let total = 0;
+    let luckyTotal = 0;
 
     for (const id in allPlots) {
       if (allPlots[id].ownerId === targetOwnerId) {
         const r = allPlots[id].rarity?.key || allPlots[id].rarity;
         if (counts[r] !== undefined) counts[r]++;
+        if (allPlots[id].lucky) luckyTotal++;
         total++;
       }
     }
@@ -428,14 +438,19 @@
     el("info-count-rare").textContent = counts.rare;
     el("info-count-epic").textContent = counts.epic;
     el("info-count-legendary").textContent = counts.legendary;
+    // 🍀 Lucky badge — only shown when the player owns at least one.
+    const luckyBadge = document.getElementById("info-count-lucky");
+    if (luckyBadge) {
+      luckyBadge.textContent = luckyTotal;
+      luckyBadge.closest(".rarity-badge")?.classList.toggle("hidden", luckyTotal === 0);
+    }
 
     // Calculate and display income rate ($/s)
     let incomeRate = 0;
     for (const id in allPlots) {
       if (allPlots[id].ownerId === targetOwnerId) {
         const rKey = allPlots[id].rarity?.key || allPlots[id].rarity;
-        const confR = CONFIG.PLOT_RARITIES.find(r => r.key === rKey);
-        incomeRate += (confR ? confR.rate : CONFIG.PLOT_RARITIES[0].rate);
+        incomeRate += CONFIG.plotRate(rKey, allPlots[id].lucky === true);
       }
     }
     // Apply boost multiplier if viewing self (delegated to Multiplier module)
@@ -3034,7 +3049,7 @@
       const storageUpgrades = Math.floor(level / 2);
 
       // 0.0001% safe time reduction per time upgrade
-      const interval = baseInterval * Math.pow(1 - 0.000001, timeUpgrades);
+      const interval = baseInterval * Math.pow(1 - 0.025, timeUpgrades);
       const maxStored = (CONFIG.EXTRACTOR_MAX_STORED || 50) + storageUpgrades;
       const nextCost = level * 1.0; // $1.00, $2.00, $3.00...
       const nextIsCapacity = level % 2 === 1;
@@ -3071,7 +3086,7 @@
       if (el("extractor-lvl-badge")) el("extractor-lvl-badge").textContent = `Level ${lvl}`;
       if (el("extractor-next-timer")) el("extractor-next-timer").textContent = `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
       if (el("extractor-stored-count")) el("extractor-stored-count").innerHTML = `${displayStored} / ${maxStored} <span class="hud-gem-icon"></span>`;
-      if (el("extractor-next-perk")) el("extractor-next-perk").textContent = nextIsCapacity ? "Next: +1 Max Diamond Capacity" : "Next: -0.0001% Mining Time";
+      if (el("extractor-next-perk")) el("extractor-next-perk").textContent = nextIsCapacity ? "Next: +1 Max Diamond Capacity" : "Next: -2.5% Mining Time";
       
       // $1.00 Unlock Condition Check
       const upgradeBtn = el("upgrade-extractor-btn");

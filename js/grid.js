@@ -133,11 +133,15 @@ const Grid = (() => {
     selectedPlotId = tid;
     const state = Store.get();
     const rarity = rarityInfo(plot.rarity);
-    document.getElementById("plot-modal-rarity").textContent = `${rarity.label} PLOT`;
-    document.getElementById("plot-modal-rarity").style.color = rarity.color;
+    const isLucky = plot.lucky === true;
+    // 🍀 Lucky plots are titled and rated at ×1.1 their rarity rate.
+    document.getElementById("plot-modal-rarity").textContent = isLucky ? `🍀 ${rarity.label.toUpperCase()} PLOT` : `${rarity.label} PLOT`;
+    document.getElementById("plot-modal-rarity").classList.toggle("lucky-text", isLucky);
+    document.getElementById("plot-modal-rarity").style.color = isLucky ? "" : rarity.color;
     document.getElementById("plot-modal-name").textContent = `${plot.ownerName || "Traveler"}'s Plot`;
     document.getElementById("plot-modal-coords").textContent = `Coords: [${plot.tx}, ${plot.ty}]`;
-    document.getElementById("plot-modal-rate").textContent = `${rarity.rate} EB / sec`;
+    const modalRate = CONFIG.plotRate(String(plot.rarity?.key || plot.rarity || "common"), isLucky);
+    document.getElementById("plot-modal-rate").textContent = `${modalRate} EB / sec${isLucky ? " (🍀 +10%)" : ""}`;
     document.getElementById("plot-modal-location").textContent = [plot.city, plot.state, plot.country].filter(Boolean).join(", ") || "Unknown";
     // Show relocate button only for the player's own plots
     const relocateBtn = document.getElementById("plot-relocate-btn");
@@ -213,6 +217,7 @@ const Grid = (() => {
         rarity: rarityKey,
         plotBag: save.plotBag || {},
         plotBagItems: save.plotBagItems || undefined,
+        luckyBagItems: save.luckyBagItems || undefined,
         plots: save.plots || {},
         plotsVersion: Number(save.plotsVersion) || 0,
       };
@@ -229,6 +234,9 @@ const Grid = (() => {
     if (state.plots) delete state.plots[tid];
     if (result.plotBagItems && typeof result.plotBagItems === "object") {
       state.plotBagItems = { ...result.plotBagItems };
+    }
+    if (result.luckyBagItems && typeof result.luckyBagItems === "object") {
+      state.luckyBagItems = { ...result.luckyBagItems };
     }
     state.plotBag = result.plotBag || state.plotBag;
     if (result.plotsVersion !== undefined) {
@@ -250,12 +258,16 @@ const Grid = (() => {
     if (!items) return;
     items.innerHTML = "";
     // Phase 2: group instance IDs by rarity; fall back to legacy counters.
+    // 🍀 Lucky plots stack separately so a Lucky Common renders as its own
+    // rainbow "🍀 Common Plot x3" button.
     const counts = {};
     const hasItems = state.plotBagItems && typeof state.plotBagItems === "object" && Object.keys(state.plotBagItems).length > 0;
     if (hasItems) {
       for (const id in state.plotBagItems) {
         const rarity = String(state.plotBagItems[id] || "common").split("_")[0];
-        counts[rarity] = (counts[rarity] || 0) + 1;
+        const lucky = state.luckyBagItems && state.luckyBagItems[id] === true;
+        const key = lucky ? `${rarity}~lucky` : rarity;
+        counts[key] = (counts[key] || 0) + 1;
       }
     } else {
       for (const slot in (state.plotBag || {})) {
@@ -263,15 +275,17 @@ const Grid = (() => {
         counts[rarity] = (counts[rarity] || 0) + (Number(state.plotBag[slot]) || 0);
       }
     }
-    for (const rarityKey in counts) {
-      const count = counts[rarityKey];
+    for (const groupKey in counts) {
+      const count = counts[groupKey];
       if (!count) continue;
+      const lucky = groupKey.endsWith("~lucky");
+      const rarityKey = lucky ? groupKey.slice(0, -7) : groupKey;
       const rarity = rarityInfo(rarityKey);
       const button = document.createElement("button");
-      button.className = "btn btn-primary";
-      button.textContent = `${rarity.label} Plot x${count}`;
-      button.style.borderColor = rarity.color;
-      button.addEventListener("click", () => placeBagPlot(rarityKey));
+      button.className = lucky ? "btn btn-primary bag-btn-lucky" : "btn btn-primary";
+      button.textContent = lucky ? `🍀 ${rarity.label} Plot x${count}` : `${rarity.label} Plot x${count}`;
+      button.style.borderColor = lucky ? "" : rarity.color;
+      button.addEventListener("click", () => placeBagPlot(lucky ? `${rarityKey}~lucky` : rarityKey));
       items.appendChild(button);
     }
     document.getElementById("buy-modal")?.classList.add("hidden");
@@ -283,7 +297,8 @@ const Grid = (() => {
     const state = Store.get();
     const { tx, ty } = pendingTile;
     const tid = tileId(tx, ty);
-    const rarityKey = slot.split("_")[0];
+    const wantLucky = String(slot).endsWith("~lucky");
+    const rarityKey = String(slot).split("~")[0].split("_")[0];
     if (getAllPlots()[tid]) return;
     // Phase 2: resolve WHICH instance id leaves the bag (items preferred).
     const itemsMap = (state.plotBagItems && typeof state.plotBagItems === "object" && Object.keys(state.plotBagItems).length > 0)
@@ -291,7 +306,12 @@ const Grid = (() => {
       : null;
     let plotItemId = null;
     if (itemsMap) {
-      plotItemId = Object.keys(itemsMap).find((id) => itemsMap[id] === rarityKey) || null;
+      // 🍀 Match rarity AND lucky flag so the right instance is consumed.
+      plotItemId = Object.keys(itemsMap).find((id) => {
+        if (String(itemsMap[id] || "common").split("_")[0] !== rarityKey) return false;
+        const isLucky = !!(state.luckyBagItems && state.luckyBagItems[id] === true);
+        return isLucky === wantLucky;
+      }) || null;
       if (!plotItemId) {
         if (typeof showToast === "function") showToast("⚠️ That plot is no longer in your bag.", 3500);
         return;
@@ -328,6 +348,9 @@ const Grid = (() => {
     // Authoritative inventory from the server (same instance id moved out).
     if (serverResult.plotBagItems && typeof serverResult.plotBagItems === "object") {
       state.plotBagItems = { ...serverResult.plotBagItems };
+    }
+    if (serverResult.luckyBagItems && typeof serverResult.luckyBagItems === "object") {
+      state.luckyBagItems = { ...serverResult.luckyBagItems };
     }
     state.plots[serverTid] = serverPlotData;
     globalPlots[serverTid] = serverPlotData;
@@ -670,6 +693,8 @@ const Grid = (() => {
           rarity: plot.rarity,
           ownerId: plot.ownerId,
           isSelf: isSelf,
+          // 🍀 Lucky plots get an animated rainbow outline on the map.
+          lucky: plot.lucky === true,
         },
         geometry: { type: "Polygon", coordinates: [coords] },
       });
@@ -724,6 +749,20 @@ const Grid = (() => {
             16, ["case", ["==", ["get", "isSelf"], true], 2.5, 1.2]
           ],
           "line-opacity": ["case", ["==", ["get", "isSelf"], true], 0.95, 0.45],
+        },
+      });
+
+      // 4. 🍀 LUCKY outline — dashed glowing border on Lucky plots only.
+      map.addLayer({
+        id: "plots-lucky-line",
+        type: "line",
+        source: "plots-source",
+        filter: ["==", ["get", "lucky"], true],
+        paint: {
+          "line-color": "#8dffb0",
+          "line-width": 4,
+          "line-dasharray": [2, 1.4],
+          "line-opacity": 0.95,
         },
       });
     }

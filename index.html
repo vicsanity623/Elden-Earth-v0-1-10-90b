@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.27b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.28b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 30X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -519,6 +519,7 @@
       <div><i class="swatch rare"></i>Rare (<span id="count-rare">-</span>) — <span id="weight-rare">0</span>% — $<span id="rate-rare">0</span>/s</div>
       <div><i class="swatch epic"></i>Epic (<span id="count-epic">-</span>) — <span id="weight-epic">0</span>% — $<span id="rate-epic">0</span>/s</div>
       <div><i class="swatch legendary"></i>Legendary (<span id="count-legendary">-</span>) — <span id="weight-legendary">0</span>% — $<span id="rate-legendary">0</span>/s</div>
+      <div class="hidden" id="lucky-stat-row"><i class="swatch lucky"></i>🍀 Lucky (<span id="count-lucky">0</span>) — earn ×1.1</div>
     </div>
     <button id="ascension-forge-btn" class="btn btn-primary" style="margin-bottom:12px;">⚒ Ascension Forge</button>
     <p class="fine-print">Tap any unclaimed tile on the map (zoom in close) to buy it for 100 EB. Rarity is random — % shown is your personal breakdown of owned plots by rarity.</p>
@@ -635,6 +636,10 @@
               <span id="info-count-legendary" class="badge-num">0</span>
               <span class="badge-label">LEGENDARY</span>
             </div>
+            <div class="rarity-badge lucky hidden">
+              <span id="info-count-lucky" class="badge-num">0</span>
+              <span class="badge-label">🍀 LUCKY</span>
+            </div>
           </div>
         </div>
       </div>
@@ -720,7 +725,7 @@
     <div id="extractor-active-view" class="extractor-view hidden">
       <div class="extractor-level-header">
         <span class="extractor-level-pill" id="extractor-lvl-badge">Level 1</span>
-        <span class="extractor-next-perk" id="extractor-next-perk">Next: -0.0001% Mining Time</span>
+        <span class="extractor-next-perk" id="extractor-next-perk">Next: -2.5% Mining Time</span>
       </div>
 
       <div class="extractor-status-box">
@@ -1259,22 +1264,76 @@
       <div>
         <h3 id="friendship-detail-name">Friend</h3>
         <div class="friendship-level-row">
-          <span>XP</span>
-          <strong id="friendship-xp-value">10/10</strong>
+          <span>❤ HEARTS</span>
+          <strong id="friendship-xp-value">1/10</strong>
         </div>
+        <div class="friendship-xp-bar"><div class="friendship-xp-fill" id="friendship-xp-fill"></div></div>
+        <div class="friendship-xp-caption" id="friendship-xp-caption">0 XP</div>
       </div>
     </div>
     <div class="friendship-hearts" id="friendship-hearts"></div>
     <div class="friendship-quest-box">
       <div class="friendship-quest-label">Friendship Quest</div>
-      <div id="friendship-quest">Reach 10 friendship XP by gifting, helping, and visiting each other.</div>
+      <div id="friendship-quest">Send gifts and trade plots to earn Friendship XP and level up your hearts.</div>
     </div>
     <div class="friendship-reward-box">
-      <span>Reward</span>
-      <strong id="friendship-reward">+5 EB per level</strong>
+      <span>Max Heart Bonus</span>
+      <strong id="friendship-reward">🍀 +5% Lucky Trade Chance</strong>
     </div>
     <button id="friendship-detail-gift-btn" class="btn btn-primary" style="margin-top:16px;">🎁 Send Gift</button>
+    <div class="friendship-trade-actions">
+      <button id="trade-local-btn" class="btn btn-ghost trade-btn">📍 Local Trade</button>
+      <button id="trade-remote-btn" class="btn btn-ghost trade-btn">🌐 Remote Trade <span class="trade-fee-tag">25 EB</span></button>
+    </div>
   </div>
+</div>
+
+<!-- ===================== PLOT TRADE MODAL ===================== -->
+<div id="trade-modal" class="modal hidden">
+  <div class="modal-card trade-card">
+    <button class="close-btn" data-close="trade-modal">✕</button>
+    <div class="trade-head">
+      <h2 id="trade-title">Trade</h2>
+      <span class="trade-status-chip" id="trade-status-chip">Selecting…</span>
+    </div>
+    <p class="trade-fine" id="trade-fine">Both sides pick a plot. Choices stay sealed until both have committed.</p>
+
+    <!-- Pokémon-GO style two-sided face-off -->
+    <div class="trade-stage">
+      <div class="trade-side">
+        <div class="trade-side-label">YOU</div>
+        <div class="trade-slot" id="trade-slot-me"><span class="trade-slot-empty">Tap a plot below</span></div>
+      </div>
+      <div class="trade-arrows" id="trade-arrows">
+        <span class="trade-arrow left">➜</span>
+        <span class="trade-arrow right">➜</span>
+      </div>
+      <div class="trade-side">
+        <div class="trade-side-label" id="trade-friend-name">FRIEND</div>
+        <div class="trade-slot" id="trade-slot-them"><span class="trade-slot-empty">Waiting…</span></div>
+      </div>
+    </div>
+
+    <!-- Stacked rarity grid: your bag -->
+    <div class="trade-bag">
+      <div class="trade-bag-title">YOUR BAG — tap to offer</div>
+      <div class="trade-bag-grid" id="trade-bag-grid"></div>
+    </div>
+
+    <div class="trade-confirm-row">
+      <button id="trade-cancel-btn" class="btn btn-ghost">Cancel</button>
+      <button id="trade-confirm-btn" class="btn btn-primary trade-confirm" disabled>🔒 Commit Plot</button>
+    </div>
+    <div class="trade-progress" id="trade-progress"></div>
+  </div>
+</div>
+
+<!-- ===================== TRADE EXCHANGE ANIMATION ===================== -->
+<div id="trade-swap-overlay" class="trade-swap-overlay hidden">
+  <div class="trade-swap-ring"></div>
+  <div class="trade-swap-card me"><div class="trade-swap-rarity" id="swap-rarity-me"></div><div class="trade-swap-lucky" id="swap-lucky-me"></div></div>
+  <div class="trade-swap-card them"><div class="trade-swap-rarity" id="swap-rarity-them"></div><div class="trade-swap-lucky" id="swap-lucky-them"></div></div>
+  <div class="trade-swap-title" id="swap-title">TRADE COMPLETE!</div>
 </div>
 
 <!-- ===================== CAPSULE DISCOVERY MODAL ===================== -->
@@ -1648,6 +1707,7 @@
 <script src="js/pool.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/friends.js"></script>
+<script src="js/trade.js"></script>
 <script src="js/referrals.js"></script>
 <script src="js/server-anticheat.js"></script>
 <script src="js/plot-ascension.js"></script>

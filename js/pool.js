@@ -63,7 +63,8 @@ const WeeklyPool = (() => {
         for (const tid in p.plots) {
           const plot = p.plots[tid];
           const rKey = plot.rarity?.key || plot.rarity || "common";
-          const rate = RATE_MAP[rKey] || 0.000000007365;
+          // 🍀 Lucky plots accrue ×1.1 into the global rent pool.
+          const rate = CONFIG.plotRate(rKey, plot.lucky === true);
 
           // Safe timestamp check
           let plotClaimedTime = Number(plot.claimedAt) || periodStartTime;

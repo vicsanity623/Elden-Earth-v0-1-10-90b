@@ -856,6 +856,9 @@ const EldenStops = (() => {
     if (result.plotBagItems && typeof result.plotBagItems === "object") {
       state.plotBagItems = { ...result.plotBagItems };
     }
+    if (result.luckyBagItems && typeof result.luckyBagItems === "object") {
+      state.luckyBagItems = { ...result.luckyBagItems };
+    }
     if (result.plotBag && typeof result.plotBag === "object") {
       state.plotBag = { ...result.plotBag };
     }

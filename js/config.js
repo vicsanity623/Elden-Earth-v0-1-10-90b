@@ -4,7 +4,7 @@
 // ============================================================
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.27b",
+  GAME_VERSION: "0.1.11.28b",
 
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -129,6 +129,54 @@ const CONFIG = {
     common:    { next: "rare",      count: 3, eb: 50,  cashRequired: 0.25 },
     rare:      { next: "epic",      count: 3, eb: 100, cashRequired: 0.75 },
     epic:      { next: "legendary", count: 3, eb: 150, cashRequired: 1.25 },
+  },
+
+  // --- Lucky Plots (🍀 rainbow holo variant; +10% earn rate) ---
+  // Rolled on Buy Land and on trade re-roll. A lucky plot's rate is its
+  // rarity rate × LUCKY_RATE_MULT. The flag survives Ascension Forge.
+  LUCKY: {
+    RATE_MULT: 1.1,        // +10% earn rate vs a normal plot of the same rarity
+    BUY_CHANCE: 0.005,     // 0.5% chance when purchasing land
+    TRADE_CHANCE: 0.005,   // 0.5% base chance on a trade re-roll
+    MAX_FRIEND_BONUS: 0.05,// +5% only at max friendship (10 hearts) → 5.5% cap
+  },
+
+  // Helper: authoritative rate for one plot (rarity key + lucky flag).
+  // Lucky = rarity rate × 1.1, so a Lucky Common beats a normal Common, etc.
+  plotRate(rKey, lucky) {
+    const r = this.PLOT_RARITIES.find(x => x.key === rKey) || this.PLOT_RARITIES[0];
+    return lucky ? r.rate * this.LUCKY.RATE_MULT : r.rate;
+  },
+
+  // --- Friendship (❤ hearts / XP) ---
+  // Hearts start at 1 and one heart is added per level up, to a max of 10.
+  // XP is earned by gifting and trading; thresholds scale so higher levels
+  // take progressively longer. Max level grants +5% lucky trade chance.
+  FRIENDSHIP: {
+    MAX_HEARTS: 10,
+    XP_PER_GIFT: 10,
+    XP_PER_TRADE: 40,
+    // Cumulative XP required to REACH each heart count (index = hearts-1).
+    // Level 1 = 0 XP; each step needs more XP than the last.
+    LEVEL_XP: [0, 60, 180, 400, 750, 1250, 1950, 2900, 4150, 5750],
+  },
+
+  // Helper: current hearts (level) from total friendship XP.
+  friendshipHearts(xp) {
+    const t = this.FRIENDSHIP.LEVEL_XP;
+    let hearts = 1;
+    for (let i = 0; i < t.length; i++) {
+      if (Number(xp) >= t[i]) hearts = i + 1;
+    }
+    return Math.min(hearts, this.FRIENDSHIP.MAX_HEARTS);
+  },
+
+  // Helper: XP still needed for the next heart (0 at max).
+  friendshipXpToNext(xp) {
+    const f = this.FRIENDSHIP;
+    const hearts = this.friendshipHearts(xp);
+    if (hearts >= f.MAX_HEARTS) return 0;
+    return Math.max(0, f.LEVEL_XP[hearts] - Number(xp || 0));
   },
 
   // --- Global Event Engine (Global Challenge) ---

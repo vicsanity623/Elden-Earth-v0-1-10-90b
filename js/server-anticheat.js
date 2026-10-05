@@ -475,5 +475,61 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout };
+  // ---- Plot trading (Local ≤500m / Remote 25 EB relay) ----
+  async function createTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("createTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] createTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function selectTradePlot(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("selectTradePlot");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] selectTradePlot failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function confirmTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("confirmTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] confirmTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function cancelTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("cancelTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] cancelTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function getTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("getTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
 })();
