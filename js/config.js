@@ -137,8 +137,8 @@ const CONFIG = {
     id: "global_challenge",
     title: "Global Challenge",
     subtitle: "Spin the Wheel — help the Realm hit the goal!",
-    goal: 120000,
-    rewardPoolEB: 75000,
+    goal: 20000,
+    rewardPoolEB: 20000,
     durationMs: 3 * 24 * 60 * 60 * 1000, // 3 days (Mon–Wed for future weeks)
     top10: {
       rank1:  { legendary: 2, epic: 3, rare: 10 },

@@ -109,7 +109,7 @@ const GlobalEvent = (() => {
     const totalPoolEl = el("ge-total-pool");
     const participants = Number(ev.participantCount) || 0;
     const totalPool = Number(ev.totalPrizePool) || 0;
-    const basePool = Number(ev.rewardPoolEB) || 75000;
+    const basePool = Number(ev.rewardPoolEB) || 20000;
     if (participantsEl) participantsEl.textContent = String(participants);
     if (totalPoolEl) totalPoolEl.textContent = fmtEB(totalPool);
     const poolNote = el("ge-pool-note");
@@ -318,7 +318,7 @@ const GlobalEvent = (() => {
           if (!snap.exists) return;
           const d = snap.data() || {};
           const totalEB = Number(d.totalEB) || 0;
-          const goal = Number(d.goal) || 200000;
+          const goal = Number(d.goal) || 20000;
           const expired = d.completed === true || (Number(d.deadline) > 0 && Date.now() > Number(d.deadline));
           lastEvent = {
             id: d.id || "global_challenge",
@@ -331,7 +331,7 @@ const GlobalEvent = (() => {
             startedAt: Number(d.startedAt) || 0,
             completed: d.completed === true || expired,
             payoutsProcessed: d.payoutsProcessed === true,
-            rewardPoolEB: Number(d.rewardPoolEB) || 75000,
+            rewardPoolEB: Number(d.rewardPoolEB) || 20000,
             participantCount: Number(d.participantCount) || lastEvent?.participantCount || 0,
             totalPrizePool: Number(d.totalPrizePool) || lastEvent?.totalPrizePool || 0,
           };
