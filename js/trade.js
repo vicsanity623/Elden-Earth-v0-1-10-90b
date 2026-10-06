@@ -29,6 +29,17 @@ const Trade = (() => {
 
   function rarityClass(key) { return `trade-rarity-${key}`; }
 
+  function rarityConf(key) {
+    const list = (typeof CONFIG !== "undefined" && CONFIG.PLOT_RARITIES) || [];
+    return list.find(r => r.key === key) || list[0] || { key: key || "common", label: "Common", rate: 0, color: "#8fa3b8" };
+  }
+
+  function formatIncome(val) {
+    if (!Number.isFinite(val) || val === 0) return "0";
+    const s = val.toFixed(12).replace(/\.?0+$/, "");
+    return s || "0";
+  }
+
   // ---------- OPEN / CLOSE ----------
   async function open(opts) {
     current = {
@@ -38,6 +49,9 @@ const Trade = (() => {
     };
     selectedInstance = null;
     trade = null;
+    // A leftover result screen from a previous trade must never sit on top of
+    // the new one.
+    el("trade-result-modal")?.classList.add("hidden");
 
     const modal = el("trade-modal");
     if (!modal) return;
@@ -389,6 +403,60 @@ const Trade = (() => {
     renderBag();
   }
 
+  // ---------- FINAL RESULT SCREEN ----------
+  // The swap animation only flashes both rarities for 2.6s. This is the
+  // lingering screen afterwards: the plot the server re-rolled for THIS
+  // player, styled like the Ascension "COMPLETE" screen.
+  function showTradeResult(res) {
+    const got = res && res.received;
+    if (!got || !got.rarity) return;
+    const gotConf = rarityConf(got.rarity);
+    const sentConf = res.sentRarity ? rarityConf(res.sentRarity) : null;
+    const lucky = got.lucky === true;
+    // Mirror the server's plotRateFor(): base rarity rate × 1.1 when Lucky.
+    const rate = gotConf.rate * (lucky ? 1.1 : 1);
+
+    const setTxt = (id, val) => { const n = el(id); if (n) n.textContent = val; };
+
+    const badge = el("trade-result-rarity");
+    if (badge) {
+      badge.textContent = String(gotConf.label || "Plot").toUpperCase();
+      badge.style.color = gotConf.color;
+      badge.style.textShadow = `0 0 22px ${gotConf.color}`;
+    }
+    setTxt("trade-result-rate", `$${formatIncome(rate)} /s per plot`);
+    setTxt("trade-result-sub", `A ${gotConf.label} plot has arrived in your bag.`);
+
+    const sentEl = el("trade-result-sent");
+    if (sentEl) {
+      sentEl.textContent = sentConf ? sentConf.label : "???";
+      sentEl.style.color = sentConf ? sentConf.color : "";
+    }
+    const gotEl = el("trade-result-got");
+    if (gotEl) {
+      gotEl.textContent = gotConf.label;
+      gotEl.style.color = gotConf.color;
+    }
+
+    const note = el("trade-result-note");
+    if (note) {
+      note.classList.remove("up", "down", "flat");
+      if (lucky) {
+        note.classList.add("up");
+        note.textContent = "🍀 LUCKY TRADE! +10% earn rate on your new plot.";
+      } else {
+        note.classList.add("flat");
+        note.textContent = "◆ New plot added to your bag.";
+      }
+    }
+
+    const remote = res.type === "remote";
+    setTxt("trade-result-cost-label", remote ? "Relay Fee Paid" : "Trade");
+    setTxt("trade-result-cost", remote ? `${res.feeEb || 25} EB` : "📍 Local — Free");
+
+    el("trade-result-modal")?.classList.remove("hidden");
+  }
+
   // ---------- SWAP ANIMATION ----------
   function playSwap() {
     const ov = el("trade-swap-overlay");
@@ -396,6 +464,14 @@ const Trade = (() => {
 
     const mine = trade.result.mine || {};
     const theirs = trade.result.theirs || {};
+    // close() below nulls `trade`, so snapshot everything the result screen
+    // needs while the trade object is still live.
+    const resultScreen = {
+      received: mine,
+      sentRarity: (trade.mine && trade.mine.rarity) || null,
+      type: trade.type,
+      feeEb: trade.feeEb || 0,
+    };
     const set = (id, data) => {
       const node = el(id);
       if (node) {
@@ -419,6 +495,7 @@ const Trade = (() => {
       close();
       const s = state();
       if (s && typeof Store !== "undefined" && Store.save) Store.save(true);
+      showTradeResult(resultScreen);
     }, 2600);
   }
 
@@ -438,8 +515,13 @@ if (typeof document !== "undefined") {
   const bindTradeButtons = () => {
     const confirmBtn = document.getElementById("trade-confirm-btn");
     const cancelBtn = document.getElementById("trade-cancel-btn");
-    if (confirmBtn) confirmBtn.addEventListener("click", () => Trade.onConfirm());
-    if (cancelBtn) cancelBtn.addEventListener("click", () => Trade.onCancel());
+      if (confirmBtn) confirmBtn.addEventListener("click", () => Trade.onConfirm());
+      if (cancelBtn) cancelBtn.addEventListener("click", () => Trade.onCancel());
+      const resultCloseBtn = document.getElementById("trade-result-close-btn");
+      if (resultCloseBtn) resultCloseBtn.addEventListener("click", () => {
+        document.getElementById("trade-result-modal")?.classList.add("hidden");
+        if (typeof window.updateLandModal === "function") window.updateLandModal();
+      });
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bindTradeButtons);

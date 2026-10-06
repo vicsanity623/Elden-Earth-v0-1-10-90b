@@ -1337,6 +1337,48 @@
   <div class="trade-swap-title" id="swap-title">TRADE COMPLETE!</div>
 </div>
 
+<!-- ===================== TRADE RESULT SCREEN (after the swap animation) ===================== -->
+<div id="trade-result-modal" class="modal hidden">
+  <div class="modal-card ascension-complete-card">
+    <button class="close-btn" data-close="trade-result-modal">✕</button>
+    <div id="trade-result-burst" class="asc-complete-burst"></div>
+    <div class="forge-icon asc-complete-icon">🤝</div>
+    <h2 class="asc-complete-title">TRADE COMPLETE</h2>
+    <p class="modal-sub" id="trade-result-sub">Your new plot has arrived in your bag.</p>
+
+    <div class="asc-complete-rarity-box">
+      <span class="asc-complete-rarity-label">New Plot Rarity</span>
+      <strong id="trade-result-rarity" class="asc-complete-rarity-badge">RARE</strong>
+      <span id="trade-result-rate" class="asc-complete-rate">$0 /s per plot</span>
+    </div>
+
+    <div class="asc-complete-stats">
+      <div class="asc-stat-col">
+        <span class="asc-stat-label">You Sent</span>
+        <strong id="trade-result-sent" class="asc-stat-val-sm">—</strong>
+        <span class="asc-stat-sub">plot given</span>
+      </div>
+      <div class="asc-stat-arrow">➔</div>
+      <div class="asc-stat-col">
+        <span class="asc-stat-label">You Received</span>
+        <strong id="trade-result-got" class="asc-stat-val-sm">—</strong>
+        <span class="asc-stat-sub">new plot in bag</span>
+      </div>
+    </div>
+
+    <div id="trade-result-note" class="asc-income-delta flat"></div>
+
+    <div class="asc-complete-cost">
+      <span id="trade-result-cost-label">Trade</span>
+      <strong id="trade-result-cost">📍 Local — Free</strong>
+    </div>
+
+    <div class="modal-actions">
+      <button id="trade-result-close-btn" class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== CAPSULE DISCOVERY MODAL ===================== -->
 <div id="capsule-reward-modal" class="modal hidden">
   <div class="modal-card capsule-reward-card">
