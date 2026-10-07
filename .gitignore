@@ -21,6 +21,7 @@ storage.rules
 functions/
 *.service-account.json
 server/access-control.log
+server/access-control.js
 
 # IDE
 *.iml
