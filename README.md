@@ -256,6 +256,7 @@ All gameplay tuning is in **`js/config.js`**:
 - **Pine Tree & Autumn Foliage:** Quaternius [CC0]
 - **Mushrooms:** Jarlan Perez [CC-BY] via Poly Pizza
 - **Twisted Tree & Bushes:** Quaternius [CC0]
+- **RedMushroom:** arudira [CGTrader](https://www.cgtrader.com/designers/arudira?utm_source=credit)
 
 ---
 

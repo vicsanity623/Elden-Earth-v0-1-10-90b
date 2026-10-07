@@ -177,14 +177,12 @@ const Foliage = (() => {
       data: { type: "FeatureCollection", features: [] },
     });
 
-    const layers = mapInstance.getStyle().layers || [];
-    const labelLayerId = layers.find(l => l.type === "symbol" && l.layout && l.layout["text-field"])?.id;
-
+    // Add layer WITHOUT a beforeId so it renders on TOP of plot fills and building floors
     mapInstance.addLayer({
       id: "foliage-layer",
       type: "symbol",
       source: "foliage-source",
-      minzoom: 16.5,
+      minzoom: 16.0,
       layout: {
         "icon-image": "foliage-grass",
         "icon-anchor": "bottom",
@@ -194,9 +192,9 @@ const Foliage = (() => {
           "interpolate",
           ["linear"],
           ["zoom"],
-          16.5, ["*", 0.11, ["get", "scale"]],
-          18.5, ["*", 0.22, ["get", "scale"]],
-          20,   ["*", 0.36, ["get", "scale"]]
+          16.0, ["*", 0.12, ["get", "scale"]],
+          18.0, ["*", 0.24, ["get", "scale"]],
+          20.0, ["*", 0.38, ["get", "scale"]]
         ],
         "icon-allow-overlap": true,
         "icon-ignore-placement": true,
@@ -206,11 +204,11 @@ const Foliage = (() => {
           "interpolate",
           ["linear"],
           ["zoom"],
-          16.5, 0,
-          17.2, 0.95
+          16.0, 0.2,
+          17.0, 1.0
         ],
       },
-    }, labelLayerId);
+    });
   }
 
   function seededRandom(seed) {
@@ -316,15 +314,16 @@ const Foliage = (() => {
       const rarityKey = p.rarity?.key || p.rarity || "common";
       let seed = Math.abs(px * 374761393 + py * 668265263);
 
-      // 1. Lush 3D Grass: ONLY for Epic and Legendary plots!
+      // 1. Lush 3D Grass: Dense on Legendary (4 tufts), clean on Epic (2 tufts)
       const hasGrass = (rarityKey === "epic" || rarityKey === "legendary");
       if (hasGrass) {
-        const tuftCount = rarityKey === "legendary" ? 3 : 2;
+        const tuftCount = rarityKey === "legendary" ? 4 : 2;
 
         for (let i = 0; i < tuftCount; i++) {
-          const offsetX = (seededRandom(seed++) - 0.5) * 0.000032;
-          const offsetY = (seededRandom(seed++) - 0.5) * 0.000032;
-          const randomScale = 0.85 + seededRandom(seed++) * 0.4;
+          const offsetX = (seededRandom(seed++) - 0.5) * 0.000038;
+          const offsetY = (seededRandom(seed++) - 0.5) * 0.000038;
+          const scaleBase = rarityKey === "legendary" ? 1.15 : 0.85;
+          const randomScale = scaleBase + seededRandom(seed++) * 0.35;
 
           grassFeatures.push({
             type: "Feature",
