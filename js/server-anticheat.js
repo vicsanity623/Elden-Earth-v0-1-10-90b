@@ -339,6 +339,17 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  async function getWeeklyPoolInfo() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("getWeeklyPoolInfo");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getWeeklyPoolInfo failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
   async function claimReferralBonuses() {
     if (!functions) return { claimed: false, reason: "not_ready" };
     try {
@@ -531,5 +542,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
+  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
 })();

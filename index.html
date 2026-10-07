@@ -8,12 +8,12 @@
 
 <!-- Free Open-Source MapLibre Engine (100% Drop-In Replacement for Mapbox, No Token Lock) -->
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous" referrerpolicy="no-referrer" />
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script>window.mapboxgl = maplibregl;</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js" integrity="sha384-fljlqkjWlmSFjkESkQvm77heIZpoWmXEOzlCA7kOpGUH+95Zk0yGfQieWM2q136E" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js" defer integrity="sha384-fljlqkjWlmSFjkESkQvm77heIZpoWmXEOzlCA7kOpGUH+95Zk0yGfQieWM2q136E" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css" />
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -58,7 +58,7 @@
         <p>Information we collect is used solely to operate, maintain, and improve Elden Earth, including to authenticate your account, save and sync your progress, display leaderboards, prevent cheating and abuse, and provide customer support.</p>
 
         <h2>4. Advertising</h2>
-        <p>Elden Earth displays advertisements served through Google AdSense to help fund the game's treasury and community rewards. Google may use cookies or device identifiers to serve ads. You can learn more about how Google uses this information at Google's <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Partner Sites policy</a>. We do not harvest, farm, or independently sell your personal data to advertisers or data brokers.</p>
+        <p>Elden Earth displays advertisements served through Google AdSense to help fund the game's treasury and community rewards. Google may use cookies or device identifiers to serve ads. You can learn more about how Google uses this information at Google's <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">Partner Sites policy</a>. We do not harvest, farm, or independently sell your personal data to advertisers or data brokers.</p>
 
         <h2>5. Data Sharing & Disclosure</h2>
         <p>We do not sell your personal information. We may share limited data with service providers (such as Firebase/Google Cloud) strictly for the purpose of hosting, authentication, and database storage required to run the game. We may disclose information if required by law or to protect the rights, safety, and integrity of our players and platform.</p>
@@ -82,9 +82,9 @@
         <p>We may update this Privacy Policy from time to time. We will notify players of material changes by posting the updated policy on this page with a revised "Last updated" date.</p>
 
         <h2>12. Contact Us</h2>
-        <p>If you have any questions about this Privacy Policy or our data practices, please reach out via our <a href="https://discord.gg/mfNPrHpsaq" target="_blank" rel="noopener">Discord community</a>.</p>
+        <p>If you have any questions about this Privacy Policy or our data practices, please reach out via our <a href="https://discord.gg/mfNPrHpsaq" target="_blank" rel="noopener noreferrer">Discord community</a>.</p>
 
-        <button class="lp-cta" style="margin-top:24px;" onclick="document.getElementById('policy-page').classList.add('hidden');document.getElementById('signin-screen').classList.remove('hidden');window.scrollTo(0,0);return false;">
+        <button class="lp-cta" id="policy-back-btn" style="margin-top:24px;">
           ← Back to Sign In
         </button>
       </div>
@@ -113,7 +113,7 @@
       Not sure yet? Join our Discord
     </a>
     <p class="fine-print" style="margin-top:8px;">See what others think before you commit.</p>
-    <p class="fine-print" style="margin-top:10px;"><a href="#" onclick="document.getElementById('signin-screen').classList.add('hidden');document.getElementById('policy-page').classList.remove('hidden');window.scrollTo(0,0);return false;" style="color:var(--text-dim);text-decoration:underline;">Privacy Policy &amp; Terms</a></p>
+    <p class="fine-print" style="margin-top:10px;"><a href="#" id="signin-policy-link" style="color:var(--text-dim);text-decoration:underline;">Privacy Policy &amp; Terms</a></p>
   </div>
 </div>
 
@@ -1189,7 +1189,17 @@
       </div>
     </div>
 
-    <p class="fine-print">Rankings are determined by Total Land Plots & Accrued Rent on the Global Leaderboard at Monday 12:00 AM UTC. Realm Economy Velocity and Weekly Pool ignores temporary 30X/50X personal boost multipliers.</p>
+    <!-- Live Top 10 Landlords + exact prize each rank will receive -->
+    <div class="pool-top10-card">
+      <div class="pool-top10-title">👑 Top 10 Landlords This Week</div>
+      <div class="pool-top10-my" id="modal-pool-my-standing">Your standing: —</div>
+      <ol class="pool-top10-list" id="modal-top10-list">
+        <li class="pool-top10-empty">Loading rankings…</li>
+      </ol>
+      <div class="pool-top10-note" id="modal-top10-note">Top 10 claim their share during Monday 00:00–23:59 UTC.</div>
+    </div>
+
+    <p class="fine-print">Rankings are computed from Total Land Plots &amp; Accrued Rent at the moment each Monday claim is processed (00:00–23:59 UTC). Realm Economy Velocity and Weekly Pool ignore temporary 30X/50X personal boost multipliers.</p>
   </div>
 </div>
 
@@ -1702,9 +1712,6 @@
   </div>
 </div>
 
-</div>
-</div>
-
 <!-- ===================== REGION BLOCKED MODAL ===================== -->
 <div id="region-blocked-modal" class="modal hidden">
   <div class="modal-card region-blocked-card">
@@ -1715,7 +1722,7 @@
       <p>This game involves real-money transactions and virtual economies that are regulated differently worldwide.</p>
       <p>If you believe this is an error, please contact support with your region details.</p>
     </div>
-    <button class="btn btn-secondary" onclick="window.location.reload()">Reload</button>
+    <button class="btn btn-secondary" id="error-reload-btn">Reload</button>
   </div>
 </div>
 
@@ -1724,41 +1731,41 @@
 </div>
 
 <!-- Firebase SDKs (Global Compat) -->
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js" integrity="sha384-4wjwRVXHcU7+m4SEQz7OtKOi21milB7+BDIWtIr6w7UlffPQ6Qf9X8Xu2IgqIjDC" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js" integrity="sha384-hZn4DJoHPbuD7TxE6V6AFzbwbIYN72v84GTuwZM1gbgVxKFkGlaapi/rwsPY7D80" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js" integrity="sha384-V+JDBdDUVJZg+P+FfMHPBpwRwZ/naAJin/v9bip69lHtHGBcZWXLCLA7SyOBX3QF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-functions-compat.js" integrity="sha384-Ucb3YOESY5OZ6iOy6tdveLanBeTESs1sGVrHkLWpAP+zRYbBnOgsk2eQ9u8eWDDx" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-storage-compat.js" integrity="sha384-nTT69180wF6j2ZwBDbXzByFz0TFsSjMChXkzK9o1gUzu9o6WopS8RN0utzpRIcj9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js" integrity="sha384-4wjwRVXHcU7+m4SEQz7OtKOi21milB7+BDIWtIr6w7UlffPQ6Qf9X8Xu2IgqIjDC" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js" integrity="sha384-hZn4DJoHPbuD7TxE6V6AFzbwbIYN72v84GTuwZM1gbgVxKFkGlaapi/rwsPY7D80" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js" integrity="sha384-V+JDBdDUVJZg+P+FfMHPBpwRwZ/naAJin/v9bip69lHtHGBcZWXLCLA7SyOBX3QF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-functions-compat.js" integrity="sha384-Ucb3YOESY5OZ6iOy6tdveLanBeTESs1sGVrHkLWpAP+zRYbBnOgsk2eQ9u8eWDDx" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-storage-compat.js" integrity="sha384-nTT69180wF6j2ZwBDbXzByFz0TFsSjMChXkzK9o1gUzu9o6WopS8RN0utzpRIcj9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script src="js/config.js"></script>
-<script src="js/native-bridge.js"></script>
-<script src="js/geo.js"></script>
-<script src="js/anticheat.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/multiplier.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/diamonds.js"></script>
-<script src="js/grid.js"></script>
-<script src="js/loading.js"></script>
-<script src="js/character.js"></script>
-<script src="js/wheel.js"></script>
-<script src="js/feed.js"></script>
-<script src="js/leaderboard.js"></script>
-<script src="js/foliage.js"></script>
-<script src="js/citadels.js"></script>
-<script src="js/elden-stops.js"></script>
-<script src="js/pool.js"></script>
-<script src="js/chat.js"></script>
-<script src="js/friends.js"></script>
-<script src="js/trade.js"></script>
-<script src="js/referrals.js"></script>
-<script src="js/server-anticheat.js"></script>
-<script src="js/plot-ascension.js"></script>
-<script src="js/global-event.js"></script>
-<script src="js/cashout.js"></script>
-<script src="js/profanity-filter.js"></script>
-<script src="js/pet.js"></script>
-<script src="js/main.js"></script>
+<script defer src="js/config.js"></script>
+<script defer src="js/native-bridge.js"></script>
+<script defer src="js/geo.js"></script>
+<script defer src="js/anticheat.js"></script>
+<script defer src="js/storage.js"></script>
+<script defer src="js/multiplier.js"></script>
+<script defer src="js/auth.js"></script>
+<script defer src="js/diamonds.js"></script>
+<script defer src="js/grid.js"></script>
+<script defer src="js/loading.js"></script>
+<script defer src="js/character.js"></script>
+<script defer src="js/wheel.js"></script>
+<script defer src="js/feed.js"></script>
+<script defer src="js/leaderboard.js"></script>
+<script defer src="js/foliage.js"></script>
+<script defer src="js/citadels.js"></script>
+<script defer src="js/elden-stops.js"></script>
+<script defer src="js/pool.js"></script>
+<script defer src="js/chat.js"></script>
+<script defer src="js/friends.js"></script>
+<script defer src="js/trade.js"></script>
+<script defer src="js/referrals.js"></script>
+<script defer src="js/server-anticheat.js"></script>
+<script defer src="js/plot-ascension.js"></script>
+<script defer src="js/global-event.js"></script>
+<script defer src="js/cashout.js"></script>
+<script defer src="js/profanity-filter.js"></script>
+<script defer src="js/pet.js"></script>
+<script defer src="js/main.js"></script>
 
 <!-- ===================== COMPANION PET MODAL ===================== -->
 <div id="pet-modal" class="modal hidden">
@@ -1820,7 +1827,7 @@
     <div class="session-conflict-info">
       <p>Please wait a moment before trying again.</p>
     </div>
-    <button class="btn btn-primary" style="margin-top:14px;" onclick="this.closest('.modal').classList.add('hidden');window.location.href='/';">
+    <button class="btn btn-primary" id="modal-home-btn" style="margin-top:14px;">
       🔄 Go to Home
     </button>
   </div>
@@ -1968,10 +1975,12 @@
             </div>
             <p class="cashout-withdraw-hint" id="cashout-withdraw-hint">Available: <strong id="cashout-available">$0.00</strong> · Minimum $5.00</p>
           <p class="cashout-weekly-limit" id="cashout-weekly-limit">Weekly: $15.00 / $15.00 available</p>
-          <p class="cashout-cooldown" id="cashout-cooldown">Weekly: $15.00 / $15.00 available</p>
+          <p class="cashout-cooldown" id="cashout-cooldown">No payout cooldown.</p>
           <button id="cashout-submit-withdrawal" class="cashout-submit-btn" disabled>Submit Withdrawal Request</button>
           <p class="cashout-warning">⚠️ Requests are reviewed manually. Cash is locked upon submission. Approval may take up to 7 business days. Weekly limit: $15.00. 48h cooldown after payout.</p>
         </div>
+        </div>
+        <!-- Sits OUTSIDE the form: hiding the form must never hide its own trigger -->
         <button id="cashout-open-withdraw-btn" class="cashout-redeem-btn" disabled>Request Withdrawal</button>
       </div>
     </div>
@@ -1980,24 +1989,56 @@
 
 <!-- Service Worker Registration with Instant Auto-Update -->
 <script>
+// Former inline onclick handlers are bound here instead, so the markup carries
+// no executable attributes (required before a script-src CSP can be enforced).
+(function bindFormerInlineHandlers() {
+  const $ = id => document.getElementById(id);
+  $("policy-back-btn")?.addEventListener("click", e => {
+    e.preventDefault();
+    $("policy-page")?.classList.add("hidden");
+    $("signin-screen")?.classList.remove("hidden");
+    window.scrollTo(0, 0);
+  });
+  $("signin-policy-link")?.addEventListener("click", e => {
+    e.preventDefault();
+    $("signin-screen")?.classList.add("hidden");
+    $("policy-page")?.classList.remove("hidden");
+    window.scrollTo(0, 0);
+  });
+  $("error-reload-btn")?.addEventListener("click", () => window.location.reload());
+  $("modal-home-btn")?.addEventListener("click", e => {
+    e.currentTarget.closest(".modal")?.classList.add("hidden");
+    window.location.href = "/";
+  });
+})();
 if ('serviceWorker' in navigator) {
   let refreshing = false;
+  // A first-time install claims the page and fires controllerchange + SW_UPDATED.
+  // Only reload when the page was ALREADY controlled by an earlier worker, so
+  // first-time visitors are not yanked mid-load / mid-login.
+  let hadController = !!navigator.serviceWorker.controller;
 
   // 1. Reload the page as soon as the active service worker changes
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true;
-      window.location.reload();
+    if (refreshing) return;
+    if (!hadController) {
+      hadController = true;
+      return;
     }
+    refreshing = true;
+    window.location.reload();
   });
 
   // 2. Listen for the direct update broadcast from the SW
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SW_UPDATED') {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
+      if (refreshing) return;
+      if (!hadController) {
+        hadController = true;
+        return;
       }
+      refreshing = true;
+      window.location.reload();
     }
   });
 
@@ -2005,12 +2046,12 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
       // Check for updates on page load
-      reg.update();
+      reg.update().catch(err => console.debug('[SW] Update check failed/offline:', err));
 
-      // Check for updates when user tabs back into the game
+      // Check for updates whenever the user tabs back into the game
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          reg.update();
+          reg.update().catch(err => console.debug('[SW] Update check failed/offline:', err));
         }
       });
     }).catch(err => console.warn('[SW] Registration error:', err));

@@ -2,6 +2,12 @@
 // Elden Earth — configuration
 // Edit these values to tune the game or enable Google sign-in.
 // ============================================================
+
+// MapLibre exposes `maplibregl`; the game code uses the `mapboxgl` alias.
+// maplibre-gl.js is loaded with defer, so it is guaranteed to have run first
+// (deferred scripts execute in document order, before this file).
+if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
+
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
   GAME_VERSION: "0.1.11.34b",

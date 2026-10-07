@@ -6304,6 +6304,132 @@ div[aria-label="Advertisement"] {
   color: var(--teal);
 }
 
+/* ---------- Live Top 10 Landlords (Treasury Modal) ---------- */
+.pool-top10-card {
+  background: rgba(13, 20, 32, 0.85);
+  border: 1px solid rgba(240, 211, 138, 0.35);
+  border-radius: 10px;
+  padding: 10px 8px 8px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.pool-top10-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gold-hi);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.pool-top10-my {
+  font-size: 11px;
+  color: var(--parchment);
+  text-align: center;
+  background: rgba(79, 214, 196, 0.1);
+  border: 1px solid rgba(79, 214, 196, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.pool-top10-my strong {
+  color: var(--gold-hi);
+}
+
+.pool-top10-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-top10-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(10, 16, 26, 0.75);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--parchment);
+}
+
+.pool-top10-row.is-me {
+  border-color: var(--gold-hi);
+  background: linear-gradient(135deg, rgba(34, 48, 68, 0.75), rgba(20, 28, 42, 0.95));
+  box-shadow: 0 0 8px rgba(240, 211, 138, 0.25);
+}
+
+.pool-top10-rank {
+  width: 30px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--gold-hi);
+}
+
+.pool-top10-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.pool-top10-name em {
+  font-style: normal;
+  color: var(--teal);
+  font-size: 10px;
+}
+
+.pool-top10-meta {
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.pool-top10-share {
+  width: 48px;
+  text-align: right;
+  color: var(--teal);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pool-top10-prize {
+  width: 64px;
+  text-align: right;
+  color: var(--gold-hi);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pool-top10-empty {
+  list-style: none;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 8px 0;
+}
+
+.pool-top10-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 8px;
+}
+
+@media (max-width: 380px) {
+  .pool-top10-meta {
+    display: none;
+  }
+}
+
 /* ---------- 50X Super Boost Countdown Card in Treasury Modal ---------- */
 .pool-countdown-card.event-50x-countdown-card {
   background: rgba(255, 71, 87, 0.12);

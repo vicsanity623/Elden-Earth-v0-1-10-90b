@@ -115,6 +115,17 @@ const Cashout = (() => {
       }
     }
 
+    // Weekly limit & cooldown readouts (values were computed above but the two
+    // elements were never written to, so they showed stale placeholder copy)
+    if (weeklyLimitEl) {
+      weeklyLimitEl.textContent = `Weekly: $${weeklyPaid.toFixed(2)} / $${weeklyLimit.toFixed(2)} · $${weeklyRemaining.toFixed(2)} available`;
+    }
+    if (cooldownEl) {
+      cooldownEl.textContent = cooldownActive
+        ? `⏳ Payout cooldown active — ${cooldownHoursLeft}h remaining.`
+        : "No payout cooldown.";
+    }
+
     // Enable/disable submit button
     if (submitBtn) {
       submitBtn.disabled = !allOk || isSubmitting;

@@ -9,12 +9,30 @@ const WeeklyPool = (() => {
 
   // Calculates ISO Week ID: "2025-W36" (Ensures exactly 1 claim per week)
   function getISOWeekId(date = new Date()) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // Must match the server's isoWeekId() exactly. This used to build the date
+    // from the LOCAL year/month/day, so anyone behind UTC got the previous
+    // week's id during Monday 00:00-08:00 UTC — precisely the claim window —
+    // and the 1-claim lock disagreed with the server.
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  }
+
+  // Same table as the server's weeklyPoolSharePct() — display-only fallback.
+  function sharePctForRank(rank) {
+    if (rank === 1) return 0.25;
+    if (rank === 2) return 0.15;
+    if (rank === 3) return 0.10;
+    return 0.0714;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, c => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
   }
 
   // Next Monday 00:00:00 UTC timestamp
@@ -109,7 +127,7 @@ const WeeklyPool = (() => {
   async function checkMondayDistribution() {
     const now = new Date();
     const isMonday = now.getUTCDay() === 1; // 1 = Monday in UTC
-    
+
     // STRICT GUARD: ONLY triggers on Mondays!
     if (!isMonday) return;
 
@@ -120,24 +138,45 @@ const WeeklyPool = (() => {
     // Strict 1-Claim Per Week Lock
     if (state.lastWeeklyPoolClaim === currentWeekId) return;
 
-    const { weeklyPool, sortedTop10 } = await calculateGlobalPool();
-    const myRankIdx = sortedTop10.findIndex(p => p.id === state.player.id);
+    let myRank = null;
+    let prize = 0;
+
+    // Server-authoritative standing: the reward modal must promise exactly what
+    // claimWeeklyPool() will credit (same pool formula + same share table).
+    let serverAnswered = false;
+    if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
+      try {
+        const info = await ServerAntiCheat.getWeeklyPoolInfo();
+        if (info && info.ok) {
+          serverAnswered = true;
+          if (info.myClaimed) return; // already paid for this week
+          if (info.myRank) {
+            myRank = info.myRank;
+            prize = Number(info.myPrize) || 0;
+          }
+        }
+      } catch (e) {
+        console.warn("[Pool] Server standing check failed, using local estimate:", e);
+      }
+    }
+
+    // Local estimate only when the server could not answer (offline / cold start)
+    if (!serverAnswered) {
+      const { weeklyPool, sortedTop10 } = await calculateGlobalPool();
+      const myRankIdx = sortedTop10.findIndex(p => p.id === state.player.id);
+      if (myRankIdx >= 0 && myRankIdx < 10) {
+        myRank = myRankIdx + 1;
+        prize = weeklyPool * sharePctForRank(myRank);
+      }
+    }
 
     // Only Top 10 Players qualify!
-    if (myRankIdx >= 0 && myRankIdx < 10) {
-      const myRank = myRankIdx + 1;
-      let sharePct = 0.0714; // Default ~7.14% for 4th-10th
-
-      if (myRank === 1) sharePct = 0.25;      // 1st gets 25%
-      else if (myRank === 2) sharePct = 0.15; // 2nd gets 15%
-      else if (myRank === 3) sharePct = 0.10; // 3rd gets 10%
-
-      // Calculate share from weekly pool
-      pendingRewardAmount = weeklyPool * sharePct;
+    if (myRank != null) {
+      pendingRewardAmount = prize;
 
       // Minimum floor check
       if (pendingRewardAmount < 0.001) {
-        pendingRewardAmount = Math.max(0.005, 0.05 * sharePct);
+        pendingRewardAmount = Math.max(0.005, 0.05 * sharePctForRank(myRank));
       }
 
       // Grab the modal DOM elements
@@ -161,6 +200,7 @@ const WeeklyPool = (() => {
     const currentWeekId = getISOWeekId();
 
     // Server-authoritative claim — prevents client-side cash forging
+    let serverReward = null;
     if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
       try {
         const result = await ServerAntiCheat.claimWeeklyPool();
@@ -170,6 +210,8 @@ const WeeklyPool = (() => {
         }
         if (typeof result.newCash === "number") state.cash = result.newCash;
         if (typeof result.newLifetimeRent === "number") state.lifetimeRent = result.newLifetimeRent;
+        // Credit the amount the SERVER paid — the local estimate may differ.
+        if (typeof result.reward === "number") serverReward = result.reward;
       } catch (e) {
         console.warn("[Pool] Server claim failed:", e);
         if (typeof showToast === "function") showToast("⚠️ Pool claim failed. Try again.", 3000);
@@ -184,9 +226,12 @@ const WeeklyPool = (() => {
     state.lastWeeklyPoolClaim = currentWeekId;
     Store.save(true);
 
+    // Report what was actually credited, not the pre-claim estimate.
+    const paidAmount = typeof serverReward === "number" ? serverReward : pendingRewardAmount;
+
     document.getElementById("weekly-reward-modal")?.classList.add("hidden");
     if (typeof showToast === "function") {
-      showToast(`👑 Claimed +$${pendingRewardAmount.toFixed(6)} from the Weekly Dividend Pool!`, 4000);
+      showToast(`👑 Claimed +$${paidAmount.toFixed(6)} from the Weekly Dividend Pool!`, 4000);
     }
     pendingRewardAmount = 0;
   }
@@ -241,18 +286,122 @@ const WeeklyPool = (() => {
     }
   }
 
+  function fmtCash(value) {
+    const n = Number(value) || 0;
+    const abs = Math.abs(n);
+    if (abs >= 1) return n.toFixed(2);
+    if (abs >= 0.01) return n.toFixed(4);
+    return n.toFixed(6);
+  }
+
+  function renderStats({ totalGlobalRent, weeklyPool, globalRateSec }) {
+    const rentEl = document.getElementById("modal-global-rent-val");
+    const poolEl = document.getElementById("modal-weekly-pool-val");
+    const rateEl = document.getElementById("modal-global-rate-val");
+    if (rentEl) rentEl.textContent = `$${fmtCash(totalGlobalRent)}`;
+    if (poolEl) poolEl.textContent = `$${fmtCash(weeklyPool)}`;
+    if (rateEl) rateEl.textContent = `+$${Number(globalRateSec || 0).toFixed(10)} / sec`;
+  }
+
+  // Renders the ranked Top 10 with each rank's exact share of the pool.
+  function renderTop10(top10, myUid) {
+    const listEl = document.getElementById("modal-top10-list");
+    if (!listEl) return;
+
+    if (!Array.isArray(top10) || top10.length === 0) {
+      listEl.innerHTML = `<li class="pool-top10-empty">Rankings are unavailable right now.</li>`;
+      return;
+    }
+
+    const icons = ["🥇", "🥈", "🥉"];
+    listEl.innerHTML = top10.map(p => {
+      const rank = Number(p.rank) || 0;
+      const share = (Number(p.sharePct || 0) * 100).toFixed(2).replace(/\.00$/, "");
+      const prize = fmtCash(p.prize);
+      const isMe = !!myUid && (p.uid === myUid || p.id === myUid);
+      return `<li class="pool-top10-row${isMe ? " is-me" : ""}">
+        <span class="pool-top10-rank">${icons[rank - 1] || "👑"}${rank}</span>
+        <span class="pool-top10-name">${escapeHtml(String(p.name || "Traveler"))}${isMe ? " <em>(you)</em>" : ""}</span>
+        <span class="pool-top10-meta">${Number(p.plotCount) || 0} plots</span>
+        <span class="pool-top10-share">${share}%</span>
+        <span class="pool-top10-prize">$${prize}</span>
+      </li>`;
+    }).join("");
+  }
+
+  // "Your standing" line + honest claim-window copy.
+  function renderStanding(info, myUid) {
+    const el = document.getElementById("modal-pool-my-standing");
+    const note = document.getElementById("modal-top10-note");
+    if (!el) return;
+    if (!info || info.myRank == null) {
+      el.textContent = myUid ? "Your standing: outside the Top 10" : "Your standing: sign in to see";
+      if (note) note.textContent = "Top 10 claim their share during Monday 00:00–23:59 UTC.";
+      return;
+    }
+    const icon = info.myRank === 1 ? "🥇" : info.myRank === 2 ? "🥈" : info.myRank === 3 ? "🥉" : "🏅";
+    el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · prize <strong>$${fmtCash(info.myPrize)}</strong>`;
+    if (note) {
+      if (info.myClaimed) note.textContent = "✓ You already claimed this week's prize.";
+      else if (info.isMonday) note.textContent = "Claim your prize from the Monday reward popup.";
+      else note.textContent = "Claim window: Monday 00:00–23:59 UTC.";
+    }
+  }
+
   async function open() {
     if (!modal) modal = document.getElementById("weekly-pool-modal");
     if (modal) modal.classList.remove("hidden");
 
     updateCountdownTicker();
-    const { totalGlobalRent, weeklyPool, globalRateSec } = await calculateGlobalPool();
-    
-    document.getElementById("modal-global-rent-val").textContent = `$${totalGlobalRent.toFixed(6)}`;
-    document.getElementById("modal-weekly-pool-val").textContent = `$${weeklyPool.toFixed(6)}`;
-    
-    const rateEl = document.getElementById("modal-global-rate-val");
-    if (rateEl) rateEl.textContent = `+$${globalRateSec.toFixed(10)} / sec`;
+
+    const state = Store.get();
+    const myUid = state?.player?.id;
+
+    // Server-authoritative first: the modal shows exactly the numbers the
+    // Monday payout uses (same computeWeeklyPool + same share table), so the
+    // displayed prize is the amount that will actually be credited.
+    if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
+      try {
+        const info = await ServerAntiCheat.getWeeklyPoolInfo();
+        if (info && info.ok) {
+          renderStats({
+            totalGlobalRent: info.totalGlobalRent,
+            weeklyPool: info.weeklyPool,
+            globalRateSec: info.globalRateSec,
+          });
+          renderTop10(info.top10, myUid);
+          renderStanding(info, myUid);
+          return;
+        }
+      } catch (e) {
+        console.warn("[Pool] Server pool info failed, using local estimate:", e);
+      }
+    }
+
+    // Offline / pre-auth fallback: local estimate from the leaderboard.
+    const { totalGlobalRent, weeklyPool, globalRateSec, sortedTop10 } = await calculateGlobalPool();
+    renderStats({ totalGlobalRent, weeklyPool, globalRateSec });
+    renderTop10(
+      (sortedTop10 || []).slice(0, 10).map((p, i) => {
+        const sharePct = sharePctForRank(i + 1);
+        return {
+          rank: i + 1,
+          uid: p.id,
+          name: p.name || "Traveler",
+          plotCount: p.plotsCount || 0,
+          sharePct,
+          prize: weeklyPool * sharePct,
+        };
+      }),
+      myUid
+    );
+    const myIdx = (sortedTop10 || []).findIndex(p => p.id === myUid);
+    renderStanding(
+      myIdx >= 0
+        ? { myRank: myIdx + 1, myPrize: weeklyPool * sharePctForRank(myIdx + 1), myClaimed: false, isMonday: new Date().getUTCDay() === 1 }
+        : {},
+      myUid
+    );
   }
 
   function init() {
