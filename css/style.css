@@ -6187,9 +6187,15 @@ div[aria-label="Advertisement"] {
 }
 
 /* Modal Styling */
-.weekly-pool-card {
+.modal-card.weekly-pool-card {
   max-width: 420px;
   text-align: center;
+  /* The card itself is the scroll container, and dvh keeps it inside the
+     visible area when mobile browser chrome shrinks the viewport. */
+  max-height: min(88vh, calc(100dvh - 12px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pool-glow-crown {
@@ -6341,10 +6347,40 @@ div[aria-label="Advertisement"] {
 .pool-top10-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 0 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Scroll inside the modal instead of pushing rows past the frame */
+  max-height: min(44vh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-hi) rgba(13, 20, 32, 0.6);
+}
+
+.pool-top10-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pool-top10-list::-webkit-scrollbar-track {
+  background: rgba(13, 20, 32, 0.6);
+  border-radius: 3px;
+}
+
+.pool-top10-list::-webkit-scrollbar-thumb {
+  background: var(--gold-hi);
+  border-radius: 3px;
+}
+
+.pool-basis {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  background: rgba(13, 20, 32, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 16px 8px;
 }
 
 .pool-top10-row {

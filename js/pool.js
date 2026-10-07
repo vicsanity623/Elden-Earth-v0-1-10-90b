@@ -298,9 +298,17 @@ const WeeklyPool = (() => {
     const rentEl = document.getElementById("modal-global-rent-val");
     const poolEl = document.getElementById("modal-weekly-pool-val");
     const rateEl = document.getElementById("modal-global-rate-val");
+    const basisEl = document.getElementById("modal-pool-basis");
     if (rentEl) rentEl.textContent = `$${fmtCash(totalGlobalRent)}`;
     if (poolEl) poolEl.textContent = `$${fmtCash(weeklyPool)}`;
     if (rateEl) rateEl.textContent = `+$${Number(globalRateSec || 0).toFixed(10)} / sec`;
+    if (basisEl) {
+      // Make the $0.05 floor visible instead of silently reporting "1%".
+      const onePercent = (Number(totalGlobalRent) || 0) * 0.01;
+      basisEl.textContent = onePercent < 0.05
+        ? `1% of weekly rent = $${fmtCash(onePercent)} → minimum floor $0.05 is paying instead.`
+        : `1% of weekly rent = $${fmtCash(onePercent)}.`;
+    }
   }
 
   // Renders the ranked Top 10 with each rank's exact share of the pool.
