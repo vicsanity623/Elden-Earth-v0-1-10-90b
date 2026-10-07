@@ -210,6 +210,7 @@ const Foliage = (() => {
     // --- CONNECTED LEGENDARY TERRITORY SCANNER (Flood-Fill Clustering) ---
     const visitedLegendary = new Set();
     const legendaryClusterSizeMap = {};
+    const legendaryClusters = []; // 👈 Tracks full clusters for center calculation
 
     for (const tid in allPlots) {
       const p = allPlots[tid];
@@ -247,6 +248,8 @@ const Foliage = (() => {
         }
       }
 
+      legendaryClusters.push(cluster);
+
       // Record exact cluster size for all plots in this connected territory
       const clusterCount = cluster.length;
       for (const item of cluster) {
@@ -260,7 +263,7 @@ const Foliage = (() => {
     const zoom = mapInstance.getZoom();
 
     let mushroomCount = 0;
-    const MAX_VISIBLE_MUSHROOMS = 15; // Caps DOM markers to keep 60fps smooth
+    const MAX_VISIBLE_MUSHROOMS = 150; // 👈 Raised from 15 to 150 so full farms render!
 
     // User's active 5-mile (8,000m) horizon center
     const mapCenter = mapInstance.getCenter();
@@ -280,7 +283,7 @@ const Foliage = (() => {
       // 5-MILE HORIZON CULLING: Never render grass or mushrooms for other states/cities!
       const distToPlayer = Geo.haversine(userLat, userLon, c.lat, c.lon);
       if (distToPlayer > 8000) {
-        continue; // Skip! Eliminates floating sky mushrooms and saves 85% GPU power!
+        continue;
       }
 
       const rarityKey = p.rarity?.key || p.rarity || "common";
@@ -307,17 +310,14 @@ const Foliage = (() => {
         }
       }
 
-      // 2. Magical 3D Mushrooms: ONLY for Legendary plots (Evolves with territory size!)
+      // 2. Small 3D Mushrooms on ALL Legendary Plots!
       if (rarityKey === "legendary" && zoom >= 16.5 && mushroomCount < MAX_VISIBLE_MUSHROOMS) {
         mushroomCount++;
         const mushOffsetX = (seededRandom(seed++) - 0.5) * 0.000015;
         const mushOffsetY = (seededRandom(seed++) - 0.5) * 0.000015;
 
-        const clusterSize = legendaryClusterSizeMap[`${px}_${py}`] || 1;
-        // 1 Tile = 1.0X | 2-3 Tiles = 1.4X | 4+ Connected Tiles = 2.0X Giant Colossal!
-        const territoryScale = clusterSize >= 4 ? 2.0 : (clusterSize >= 2 ? 1.4 : 1.0);
-
-        const mushEl = create3DMushroomElement(territoryScale);
+        // Keep standard small scale on individual tiles so they don't awkwardly clump
+        const mushEl = create3DMushroomElement(1.0);
         const m = new mapboxgl.Marker({
           element: mushEl,
           anchor: "bottom",
@@ -328,6 +328,42 @@ const Foliage = (() => {
           .addTo(mapInstance);
 
         activeMarkers.push(m);
+      }
+    }
+
+    // 3. 🌟 GIANT MOTHER MUSHROOM: Spawn in the center of 10+ connected legendaries!
+    if (zoom >= 15.5) {
+      for (const cluster of legendaryClusters) {
+        if (cluster.length >= 10) {
+          let sumTx = 0, sumTy = 0;
+          for (const item of cluster) {
+            sumTx += parseInt(item.tx, 10);
+            sumTy += parseInt(item.ty, 10);
+          }
+          const avgTx = sumTx / cluster.length;
+          const avgTy = sumTy / cluster.length;
+
+          const centerCoord = Geo.fromMercator(
+            avgTx * tileSize + tileSize / 2,
+            avgTy * tileSize + tileSize / 2
+          );
+
+          // Giant scale (2.8x - 3.8x) based on cluster size, triggers the golden glowing aura
+          const megaScale = Math.min(3.8, 2.8 + (cluster.length - 10) * 0.04);
+          const megaEl = create3DMushroomElement(megaScale);
+          megaEl.style.zIndex = "10"; // Ensures it towers over the smaller mushrooms
+
+          const megaMarker = new mapboxgl.Marker({
+            element: megaEl,
+            anchor: "bottom",
+            pitchAlignment: "viewport",
+            rotationAlignment: "viewport",
+          })
+            .setLngLat([centerCoord.lon, centerCoord.lat])
+            .addTo(mapInstance);
+
+          activeMarkers.push(megaMarker);
+        }
       }
     }
 
