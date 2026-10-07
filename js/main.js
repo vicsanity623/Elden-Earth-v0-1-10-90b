@@ -3690,9 +3690,6 @@
         return;
       }
 
-      // Start the server spin AND the wheel animation at the same time. The
-      // wheel used to sit completely idle for a whole round trip before it
-      // began turning, so every spin paid the network latency twice.
       el("spin-btn").disabled = true;
       el("wheel-result").textContent = "Spinning...";
 
@@ -3703,33 +3700,23 @@
         server_error: "⚠️ Wheel spin could not be verified.",
       };
 
-      let serverResult = null;
-      let serverSettled = false;
-      const spinPromise = ServerAntiCheat.spinWheel(currentMult)
-        .then((res) => {
-          serverResult = res || { spun: false, reason: "server_error" };
-          serverSettled = true;
-          // If the wheel is still turning, re-aim it at the authoritative slice.
-          if (serverResult.spun && typeof Wheel.retarget === "function") {
-            Wheel.retarget(serverResult.slice);
-          }
-          return serverResult;
-        })
-        .catch(() => {
-          serverResult = { spun: false, reason: "server_error" };
-          serverSettled = true;
-          return serverResult;
-        });
+      let spinResult = null;
+      try {
+        spinResult = await ServerAntiCheat.spinWheel(currentMult);
+      } catch (err) {
+        spinResult = { spun: false, reason: "server_error" };
+      }
 
-      Wheel.spin(async (slice) => {
-        const spinResult = serverSettled ? serverResult : await spinPromise;
-        if (!spinResult || !spinResult.spun) {
-          el("wheel-result").textContent = "Spin not verified.";
-          showToast(spinMsgs[spinResult && spinResult.reason] || "⚠️ Wheel spin could not be verified.", 3500);
-          el("spin-btn").disabled = false;
-          updateSpinButtonState();
-          return;
-        }
+      if (!spinResult || !spinResult.spun) {
+        el("wheel-result").textContent = "Spin not verified.";
+        showToast(spinMsgs[spinResult && spinResult.reason] || "⚠️ Wheel spin could not be verified.", 3500);
+        el("spin-btn").disabled = false;
+        updateSpinButtonState();
+        return;
+      }
+
+      // Spin directly to the server's authoritative slice — eliminates double spins & mismatches
+      Wheel.spin((slice) => {
         // Update currency AFTER animation completes, not before
         state.diamonds = spinResult.nextDiamonds;
         state.eb = spinResult.nextEb;
@@ -3737,9 +3724,6 @@
         state.player.freeSpinsNoDiamondCost = spinResult.nextFreeSpins > 0;
         Store.save(true);
         updateTopbar();
-
-        const s = Store.get();
-        if (!slice) return;
 
         if (typeof window.completeDailyQuest === "function") {
           window.completeDailyQuest("wheel");
@@ -3752,16 +3736,17 @@
         const originY = wRect.top + wRect.height / 2;
 
         const multAward = currentMult; // 1 or 10
+        const winningSlice = spinResult.slice || slice;
 
-        if (slice.type === "diamond") {
+        if (winningSlice.type === "diamond") {
           const winDiamonds = 1 * multAward;
           el("wheel-result").textContent = `Your diamond found its way back to you. (◆ +${winDiamonds})`;
           showToast(`💎 +${winDiamonds} Diamond${winDiamonds > 1 ? 's' : ''} Refunded!`);
           launchFlyingGemStream(originX, originY, winDiamonds);
 
-        } else if (slice.type === "diamond_jackpot") {
+        } else if (winningSlice.type === "diamond_jackpot") {
           // 💎 +12 or +24 Diamond Jackpot!
-          const winDiamonds = (Number(slice.amount) || 12) * multAward;
+          const winDiamonds = (Number(winningSlice.amount) || 12) * multAward;
           el("wheel-result").textContent = `🎉 MEGA JACKPOT! +${winDiamonds} Diamonds!`;
           showToast(`💎 MEGA JACKPOT! Won +${winDiamonds} Diamonds!`);
 
@@ -3772,7 +3757,7 @@
 
           launchFlyingGemStream(originX, originY, winDiamonds);
 
-        } else if (slice.type === "miss") {
+        } else if (winningSlice.type === "miss") {
           el("wheel-result").textContent = "Better luck next time! (No reward)";
           showToast("🚫 Nothing this time — keep searching!");
           if (spinResult.eventContributed > 0 && typeof GlobalEvent !== "undefined") {
@@ -3781,7 +3766,7 @@
 
         } else {
           // 🪙 Elden Bucks Winner
-          const winAmount = (Number(slice.amount) || 0) * multAward;
+          const winAmount = (Number(winningSlice.amount) || 0) * multAward;
           el("wheel-result").textContent = `🎉 You won ${winAmount} EB!`;
           showToast(`🎉 Won +${winAmount} Elden Bucks!`);
 
@@ -3801,7 +3786,7 @@
         updateTopbar();
         el("spin-btn").disabled = false;
         updateSpinButtonState();
-      });
+      }, spinResult.slice);
     });
 
     // --- LOG OUT BUTTON ---

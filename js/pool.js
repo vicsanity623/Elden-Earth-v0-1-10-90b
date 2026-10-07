@@ -123,6 +123,35 @@ const WeeklyPool = (() => {
     return { totalGlobalRent, weeklyPool, globalRateSec, sortedTop10 };
   }
 
+  // "YYYY-MM-DD HH:MM UTC" for freeze/settlement timestamps.
+  function fmtUTC(ms) {
+    const d = new Date(Number(ms) || 0);
+    if (isNaN(d.getTime())) return "";
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  }
+
+  // The Monday scheduler credits the Top 10 automatically, so most players never
+  // click "claim". Tell them once per week (localStorage marker, because the
+  // server-side lastWeeklyPoolClaim is already set by the time we see it).
+  function announceAutoPayout(state, weekId, info) {
+    try {
+      const key = `eldenEarth.poolPayoutShown.${weekId}`;
+      if (window.localStorage.getItem(key)) return;
+      window.localStorage.setItem(key, String(Date.now()));
+    } catch (e) { /* private mode: worst case the toast repeats */ }
+
+    if (state.lastWeeklyPoolClaim !== weekId) {
+      state.lastWeeklyPoolClaim = weekId;
+      Store.save(true);
+    }
+
+    const prize = Number(info?.myPrize) || 0;
+    if (prize > 0 && info?.myRank && typeof showToast === "function") {
+      showToast(`👑 Weekly pool paid automatically: +$${fmtCash(prize)} (Rank #${info.myRank})`, 6000);
+    }
+  }
+
   // Check if today is Monday & user is in Top 10 for claim
   async function checkMondayDistribution() {
     const now = new Date();
@@ -135,21 +164,22 @@ const WeeklyPool = (() => {
     const state = Store.get();
     if (!state || !state.player?.id) return;
 
-    // Strict 1-Claim Per Week Lock
-    if (state.lastWeeklyPoolClaim === currentWeekId) return;
-
     let myRank = null;
     let prize = 0;
 
     // Server-authoritative standing: the reward modal must promise exactly what
-    // claimWeeklyPool() will credit (same pool formula + same share table).
+    // claimWeeklyPool() will credit (same frozen snapshot, same share table).
     let serverAnswered = false;
     if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
       try {
         const info = await ServerAntiCheat.getWeeklyPoolInfo();
         if (info && info.ok) {
           serverAnswered = true;
-          if (info.myClaimed) return; // already paid for this week
+          // Already credited by the Monday auto-payout — just tell the player.
+          if (info.myClaimed) {
+            announceAutoPayout(state, currentWeekId, info);
+            return;
+          }
           if (info.myRank) {
             myRank = info.myRank;
             prize = Number(info.myPrize) || 0;
@@ -162,6 +192,8 @@ const WeeklyPool = (() => {
 
     // Local estimate only when the server could not answer (offline / cold start)
     if (!serverAnswered) {
+      // Offline keeps the local 1-claim lock: there is no server guard to rely on.
+      if (state.lastWeeklyPoolClaim === currentWeekId) return;
       const { weeklyPool, sortedTop10 } = await calculateGlobalPool();
       const myRankIdx = sortedTop10.findIndex(p => p.id === state.player.id);
       if (myRankIdx >= 0 && myRankIdx < 10) {
@@ -294,7 +326,7 @@ const WeeklyPool = (() => {
     return n.toFixed(6);
   }
 
-  function renderStats({ totalGlobalRent, weeklyPool, globalRateSec }) {
+  function renderStats({ totalGlobalRent, weeklyPool, globalRateSec, frozenAt, settled }) {
     const rentEl = document.getElementById("modal-global-rent-val");
     const poolEl = document.getElementById("modal-weekly-pool-val");
     const rateEl = document.getElementById("modal-global-rate-val");
@@ -305,9 +337,11 @@ const WeeklyPool = (() => {
     if (basisEl) {
       // Make the $0.05 floor visible instead of silently reporting "1%".
       const onePercent = (Number(totalGlobalRent) || 0) * 0.01;
-      basisEl.textContent = onePercent < 0.05
+      let text = onePercent < 0.05
         ? `1% of weekly rent = $${fmtCash(onePercent)} → minimum floor $0.05 is paying instead.`
         : `1% of weekly rent = $${fmtCash(onePercent)}.`;
+      if (frozenAt) text += ` Frozen ${fmtUTC(frozenAt)}${settled ? " · paid automatically." : "."}`;
+      basisEl.textContent = text;
     }
   }
 
@@ -344,15 +378,19 @@ const WeeklyPool = (() => {
     if (!el) return;
     if (!info || info.myRank == null) {
       el.textContent = myUid ? "Your standing: outside the Top 10" : "Your standing: sign in to see";
-      if (note) note.textContent = "Top 10 claim their share during Monday 00:00–23:59 UTC.";
+      if (note) note.textContent = "Rankings freeze at Monday 00:00 UTC; the Top 10 are paid automatically.";
       return;
     }
     const icon = info.myRank === 1 ? "🥇" : info.myRank === 2 ? "🥈" : info.myRank === 3 ? "🥉" : "🏅";
     el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · prize <strong>$${fmtCash(info.myPrize)}</strong>`;
     if (note) {
-      if (info.myClaimed) note.textContent = "✓ You already claimed this week's prize.";
-      else if (info.isMonday) note.textContent = "Claim your prize from the Monday reward popup.";
-      else note.textContent = "Claim window: Monday 00:00–23:59 UTC.";
+      if (info.myClaimed) {
+        note.textContent = `✓ Paid automatically${info.settledAt ? " " + fmtUTC(info.settledAt) : ""}. This week's standings are frozen.`;
+      } else if (info.isMonday) {
+        note.textContent = "Rankings are frozen — automatic payout runs at 00:00 UTC. Claim now if you would rather not wait.";
+      } else {
+        note.textContent = "Payout lands automatically at the next Monday 00:00 UTC.";
+      }
     }
   }
 
@@ -376,6 +414,8 @@ const WeeklyPool = (() => {
             totalGlobalRent: info.totalGlobalRent,
             weeklyPool: info.weeklyPool,
             globalRateSec: info.globalRateSec,
+            frozenAt: info.frozenAt,
+            settled: info.settled,
           });
           renderTop10(info.top10, myUid);
           renderStanding(info, myUid);

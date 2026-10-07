@@ -252,7 +252,7 @@ const SPIN_DURATION_MS = 4200;
     spinFinish = finishSpin;
 
     // Primary listener: CSS transition finishes
-    canvas.addEventListener("transitionend", finishSpin, { once: true });
+    canvas.addEventListener("transitionend", finishSpin);
 
     // Failsafe backup timer: Resolves spin even if browser backgrounded or interrupted
     spinTimeoutId = setTimeout(finishSpin, SPIN_DURATION_MS + 100);
@@ -279,8 +279,8 @@ const SPIN_DURATION_MS = 4200;
     const neededRotation = (360 - targetCenter) % 360;
 
     // Aim strictly forward from where the wheel is already heading.
-    let newFinal = Math.ceil(rotation / 360) * 360 + neededRotation;
-    if (newFinal <= rotation) newFinal += 360;
+    const currentBase = Math.floor(rotation / 360) * 360;
+    const newFinal = currentBase + neededRotation;
 
     const elapsed = Math.min(SPIN_DURATION_MS, Date.now() - spinStartedAt);
     const remaining = Math.max(700, SPIN_DURATION_MS - elapsed);
@@ -291,7 +291,7 @@ const SPIN_DURATION_MS = 4200;
     spinTargetIndex = idx;
 
     if (spinTimeoutId !== null) clearTimeout(spinTimeoutId);
-    spinTimeoutId = setTimeout(spinFinish, remaining + 400);
+    spinTimeoutId = setTimeout(spinFinish, remaining + 100);
     return true;
   }
 
