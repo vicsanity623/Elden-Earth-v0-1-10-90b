@@ -215,13 +215,23 @@ const Geo = (() => {
     }
 
     async function fetchIPInfo() {
+      // This call sits on the launch critical path — launchGame does not reveal
+      // the game screen until it resolves — so it must never be allowed to hang.
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 3000) : null;
       try {
-        const res = await fetch(IP_API_URL, { cache: "no-store" });
+        const res = await fetch(IP_API_URL, {
+          cache: "no-store",
+          signal: controller ? controller.signal : undefined,
+        });
         const data = await res.json();
         if (data.status === "success") return data;
       } catch (e) {
         console.warn("[NetworkVerifier] IP lookup failed:", e.message);
+      } finally {
+        if (timer) clearTimeout(timer);
       }
+      // null => verification reports ip_lookup_failed and the game launches anyway
       return null;
     }
 

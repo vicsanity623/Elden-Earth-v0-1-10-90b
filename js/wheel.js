@@ -196,6 +196,10 @@ const Wheel = (() => {
 
 let isCurrentlySpinning = false;
 let spinTimeoutId = null;
+let spinTargetIndex = 0;      // slice the landing needle will point at
+let spinStartedAt = 0;        // epoch ms the current spin began
+let spinFinish = null;        // finishSpin of the in-flight spin (re-schedulable)
+const SPIN_DURATION_MS = 4200;
 
 // Spins to weighted slice with realistic landing animation & failsafe recovery
   function spin(callback, forcedSlice = null) {
@@ -228,7 +232,9 @@ let spinTimeoutId = null;
     const finalRotation = base + extraSpins * 360 + neededRotation;
 
     // Silky Smooth 60fps Hardware-Accelerated Spin
-    canvas.style.transition = "transform 4.2s cubic-bezier(0.16, 0.85, 0.2, 1)";
+    spinTargetIndex = targetIndex;
+    spinStartedAt = Date.now();
+    canvas.style.transition = `transform ${SPIN_DURATION_MS}ms cubic-bezier(0.16, 0.85, 0.2, 1)`;
     canvas.style.transform = `rotate(${finalRotation}deg) translateZ(0)`;
     rotation = finalRotation;
 
@@ -237,21 +243,61 @@ let spinTimeoutId = null;
       if (finished) return;
       finished = true;
       isCurrentlySpinning = false;
+      spinFinish = null;
       canvas.removeEventListener("transitionend", finishSpin);
       if (spinTimeoutId !== null) clearTimeout(spinTimeoutId);
       spinTimeoutId = null;
-      callback(CONFIG.WHEEL_SLICES[targetIndex]);
+      callback(CONFIG.WHEEL_SLICES[spinTargetIndex]);
     };
+    spinFinish = finishSpin;
 
     // Primary listener: CSS transition finishes
     canvas.addEventListener("transitionend", finishSpin, { once: true });
 
     // Failsafe backup timer: Resolves spin even if browser backgrounded or interrupted
-    spinTimeoutId = setTimeout(finishSpin, 4300);
+    spinTimeoutId = setTimeout(finishSpin, SPIN_DURATION_MS + 100);
+  }
+
+  /**
+   * Re-aim an in-flight spin at a different slice — the server's authoritative
+   * answer arriving after the wheel already started turning. The landing keeps
+   * its original end time (so the spin never gets longer) and always travels
+   * forward, never backwards.
+   */
+  function retarget(slice) {
+    if (!isCurrentlySpinning || !slice || !canvas || typeof spinFinish !== "function") return false;
+
+    const n = CONFIG.WHEEL_SLICES.length;
+    const sliceDeg = 360 / n;
+    const idx = CONFIG.WHEEL_SLICES.findIndex(
+      (s) => s.type === slice.type && s.amount === slice.amount
+    );
+    if (idx < 0) return false;
+
+    const jitter = (cryptoRandom() - 0.5) * (sliceDeg * 0.35);
+    const targetCenter = idx * sliceDeg + sliceDeg / 2 + jitter;
+    const neededRotation = (360 - targetCenter) % 360;
+
+    // Aim strictly forward from where the wheel is already heading.
+    let newFinal = Math.ceil(rotation / 360) * 360 + neededRotation;
+    if (newFinal <= rotation) newFinal += 360;
+
+    const elapsed = Math.min(SPIN_DURATION_MS, Date.now() - spinStartedAt);
+    const remaining = Math.max(700, SPIN_DURATION_MS - elapsed);
+
+    canvas.style.transition = `transform ${remaining}ms cubic-bezier(0.16, 0.85, 0.2, 1)`;
+    canvas.style.transform = `rotate(${newFinal}deg) translateZ(0)`;
+    rotation = newFinal;
+    spinTargetIndex = idx;
+
+    if (spinTimeoutId !== null) clearTimeout(spinTimeoutId);
+    spinTimeoutId = setTimeout(spinFinish, remaining + 400);
+    return true;
   }
 
   function resetSpinningState() {
     isCurrentlySpinning = false;
+    spinFinish = null;
     if (spinTimeoutId !== null) {
       clearTimeout(spinTimeoutId);
       spinTimeoutId = null;
@@ -272,5 +318,5 @@ let spinTimeoutId = null;
     }
   }
 
-  return { init, spin, resetSpinningState, setMultiplier, getMultiplier, redraw };
+  return { init, spin, retarget, resetSpinningState, setMultiplier, getMultiplier, redraw };
 })();

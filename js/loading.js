@@ -178,10 +178,10 @@ const Bootloader = (() => {
 
     try {
       // 2. Cloud Save (35%) is restored by Auth before the boot pipeline starts.
-      await step(120, 35, `Synchronizing cloud profile: ${player.name || "Traveler"}...`);
+      await step(60, 35, `Synchronizing cloud profile: ${player.name || "Traveler"}...`);
 
       // 3. Location (60%)
-      await step(120, 60, "Acquiring high-accuracy GPS coordinates...");
+      await step(60, 60, "Acquiring high-accuracy GPS coordinates...");
       const coords = await new Promise((resolve) => {
         if (!("geolocation" in navigator)) {
           resolve({ latitude: 33.4484, longitude: -112.0740 });
@@ -198,10 +198,10 @@ const Bootloader = (() => {
       });
 
       // 4. Map Engine (75%)
-      await step(100, 75, "Mounting 3D Vector engine & WebGL layers...");
+      await step(50, 75, "Mounting 3D Vector engine & WebGL layers...");
 
       // 5. Global Plots Sync (Handled seamlessly by Grid live listener — zero duplicate reads!)
-      await step(80, 90, "Preparing world parcels & player territory...");
+      await step(40, 90, "Preparing world parcels & player territory...");
       const state = Store.get();
       if (state && state.plots) {
         for (const pid in state.plots) {
@@ -214,8 +214,8 @@ const Bootloader = (() => {
       }
 
       // 6. Complete (100%)
-      await step(100, 100, "Realm synchronized. Entering Elden Earth...");
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await step(50, 100, "Realm synchronized. Entering Elden Earth...");
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Cleanly destroy loader WebGL context so the main map gets 100% GPU power
       dispose3DLoader();

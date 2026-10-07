@@ -15,6 +15,8 @@ const EldenStops = (() => {
   let cinematicOpen = false;
   let spinning = false;
   let spinTimeout = null;
+  let spinStartedAt = 0;      // epoch ms the current disc twirl began
+  const MIN_DISC_SPIN_MS = 1900; // keep a visible twirl even on a fast response
   let lastRenderPos = null;
   let lastPosUpdate = 0;
   let announcedBuilds = {};
@@ -326,11 +328,11 @@ const EldenStops = (() => {
       subEl.textContent = `⚓ ${kind.replace(/_/g, " ")}${by}`;
     }
 
-    // Wait for the fly-in to land before revealing the disc
+    // Reveal the disc with the fly-in instead of a fixed extra beat after it
     setTimeout(() => {
       if (selectedStopId === stopId && overlay) overlay.classList.remove("hidden");
       syncOverlayCooldown();
-    }, 1100);
+    }, 850);
   }
 
   function closeStopSession() {
@@ -479,6 +481,7 @@ const EldenStops = (() => {
     }
 
     spinning = true;
+    spinStartedAt = Date.now();
     const discEl = document.getElementById("elden-spin-disc");
     if (discEl) {
       discEl.classList.add("spinning");
@@ -489,10 +492,10 @@ const EldenStops = (() => {
     const tapBtn = document.getElementById("elden-tap-spin-btn");
     if (tapBtn) tapBtn.classList.add("hidden");
 
-    // 2.5s cinematic rotation, server validated while the disc twirls
-    setTimeout(() => {
-      resolveSpin();
-    }, 2500);
+    // Fire the server work immediately: the disc used to twirl for a fixed
+    // 2.5s BEFORE the request was even sent, so the network round trips stacked
+    // on top of the cinematic instead of overlapping with it.
+    resolveSpin();
   }
 
   async function resolveSpin() {
@@ -547,6 +550,12 @@ const EldenStops = (() => {
 
       // Success! Cache the 15-minute recharge window locally
       setReadyAt(stopId, Number(result.readyAt) || Date.now() + COOLDOWN_MS());
+      // If the server answered faster than the twirl, let the twirl finish —
+      // but never hold the reward back beyond it.
+      const elapsed = Date.now() - spinStartedAt;
+      if (elapsed < MIN_DISC_SPIN_MS) {
+        await new Promise((r) => setTimeout(r, MIN_DISC_SPIN_MS - elapsed));
+      }
       celebrateRewards(result);
     } catch (e) {
       console.warn("[EldenStops] Spin failed:", e);

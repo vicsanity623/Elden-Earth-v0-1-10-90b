@@ -19,6 +19,9 @@ const CompanionPet = (() => {
   let scanInterval = null;
   let lastAnimChange = 0;
   let currentAnimState = "idle";
+  let resumePetLoop = null;   // restarts the rAF loop after a background tab
+  let fetchStartedAt = 0;
+  let returnStartedAt = 0;
 
   const FOLLOW_OFFSET_METERS = 4.5;
   const FETCH_RADIUS_METERS = 500;
@@ -176,6 +179,9 @@ const CompanionPet = (() => {
       updateIdleRoaming();
     }
     animate();
+    resumePetLoop = () => {
+      if (animFrameId === null && !document.hidden) animate();
+    };
 
     startMoodDecay();
     startDiamondScan();
@@ -626,6 +632,7 @@ const CompanionPet = (() => {
     fetchTarget = diamond;
     fetchReturnPhase = false;
     fetchState = "turning_to_target";
+    fetchStartedAt = Date.now();
 
     console.log("[CompanionPet] Starting fetch to:", diamond);
     playAnimation("idle");
@@ -633,6 +640,14 @@ const CompanionPet = (() => {
     const fetchInterval = setInterval(() => {
       if (!isFetching || !fetchTarget) {
         clearInterval(fetchInterval);
+        return;
+      }
+
+      // Watchdog: never let the pet stay locked in a fetch that cannot end.
+      if (Date.now() - fetchStartedAt > 45000) {
+        clearInterval(fetchInterval);
+        console.warn("[CompanionPet] Fetch timed out — returning to player");
+        returnToPlayer();
         return;
       }
 
@@ -767,8 +782,16 @@ const CompanionPet = (() => {
     fetchReturnPhase = true;
     fetchState = "turning_to_player";
     playAnimation("idle");
-    
+    returnStartedAt = Date.now();
+
     const returnInterval = setInterval(() => {
+      if (Date.now() - returnStartedAt > 45000) {
+        clearInterval(returnInterval);
+        console.warn("[CompanionPet] Return trip timed out — releasing pet");
+        finishFetch();
+        return;
+      }
+
       const targetLng = playerCoords.lng + PET_FOLLOW_OFFSET_LNG;
       const targetLat = playerCoords.lat + PET_FOLLOW_OFFSET_LAT;
 
@@ -1245,6 +1268,13 @@ const CompanionPet = (() => {
     updatePetModal();
     if (typeof showToast === "function") showToast(`Pet renamed to "${cleanName}"!`);
   }
+
+  // The render loop parks itself while the tab is hidden (see animate()) and
+  // nothing else ever restarted it — the pet froze permanently after any
+  // background/foreground switch until the page was reloaded.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && typeof resumePetLoop === "function") resumePetLoop();
+  });
 
   return {
     init,

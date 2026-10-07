@@ -437,7 +437,12 @@ const Store = (() => {
 
     // SESSION LOCK with PRESENCE HEARTBEAT: Check if another session is actively running
     try {
-      const saveDoc = await firestore.collection("saves").doc(playerId).get();
+      // Both reads are independent — fired together they cost one round trip
+      // instead of two, and this runs before the boot pipeline every session.
+      const [saveDoc, presenceDoc] = await Promise.all([
+        firestore.collection("saves").doc(playerId).get(),
+        firestore.collection("presence").doc(playerId).get(),
+      ]);
       if (saveDoc.exists) {
         const saveData = saveDoc.data();
         const existingLock = saveData.sessionLock;
@@ -447,7 +452,6 @@ const Store = (() => {
         // Also check presence collection for heartbeat (more real-time than sessionLock)
         let presenceAge = Infinity;
         try {
-          const presenceDoc = await firestore.collection("presence").doc(playerId).get();
           if (presenceDoc.exists) {
             const presenceData = presenceDoc.data() || {};
             const heartbeat = Number(presenceData.lastHeartbeat || 0);

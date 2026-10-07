@@ -7898,9 +7898,9 @@ body.birds-eye-mode .top-hud-row {
 #elden-spin-disc .cooldown-timer-overlay { display: none; }
 #elden-spin-disc.cooldown .cooldown-timer-overlay { display: flex; font-size: 26px; }
 
-/* 2.5s PokéStop-style rapid twirl */
+/* PokéStop-style rapid twirl (1.9s — matched by MIN_DISC_SPIN_MS in elden-stops.js) */
 #elden-spin-disc.spinning {
-  animation: eldenDiscTwirl 2.5s cubic-bezier(0.16, 0.84, 0.28, 0.99) both;
+  animation: eldenDiscTwirl 1.9s cubic-bezier(0.16, 0.84, 0.28, 0.99) both;
   pointer-events: none;
 }
 @keyframes eldenDiscTwirl {

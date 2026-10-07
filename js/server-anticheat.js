@@ -20,6 +20,50 @@ const ServerAntiCheat = (() => {
     // functions.useEmulator("localhost", 5019);
   }
 
+  // ======================== KEEP-ALIVE (cold-start suppression) ========================
+  // Cloud Functions scale to zero: after ~10 idle minutes GCP reclaims the
+  // container and the next real call pays a 3-15s boot. Every function is its
+  // OWN container, so warming has to address each hot one individually. The
+  // server answers { __warm: 1 } before touching Firestore, so a ping costs a
+  // single round trip, zero reads, and effectively nothing in billing.
+  const KEEPALIVE_FNS = [
+    "validatePosition",
+    "validateCollect",
+    "spinWheel",
+    "spinEldenStop",
+    "plantEldenStop",
+    "spawnDiamonds",
+  ];
+  const KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000;
+  let keepAliveTimer = null;
+  let keepAliveHooked = false;
+
+  function pingHotFunctions() {
+    if (!functions) return;
+    // Nobody is playing while the tab is hidden — don't burn invocations.
+    if (typeof document !== "undefined" && document.hidden) return;
+    KEEPALIVE_FNS.forEach((name) => {
+      try {
+        functions.httpsCallable(name)({ __warm: 1 }).catch(() => {});
+      } catch (e) {
+        // A failed ping must never surface to the player.
+      }
+    });
+  }
+
+  function startKeepAlive() {
+    if (typeof document === "undefined" || keepAliveTimer !== null) return;
+    pingHotFunctions();
+    keepAliveTimer = setInterval(pingHotFunctions, KEEPALIVE_INTERVAL_MS);
+    if (!keepAliveHooked) {
+      keepAliveHooked = true;
+      // Coming back to the tab: warm everything before the first real action.
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) pingHotFunctions();
+      });
+    }
+  }
+
   /**
    * Send current GPS position to server for velocity validation.
    * Returns { valid, speed, reason, strikes } or null on failure.
@@ -542,5 +586,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
 })();

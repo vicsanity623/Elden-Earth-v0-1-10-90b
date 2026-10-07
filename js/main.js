@@ -646,21 +646,39 @@
     const locationScreen = document.getElementById("location-required-screen");
     if (locationScreen) locationScreen.classList.add("hidden");
 
-    // REGIONAL COMPLIANCE: Check if player's country/state is allowed
+    // REGIONAL COMPLIANCE: kicked off FIRST so its network round trip overlaps
+    // the whole boot pipeline instead of stalling its start. The gate itself is
+    // still enforced — the game screen is only revealed after it answers.
+    let regionPromise = Promise.resolve({ allowed: true });
     if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
-      try {
-        const countryCode = String(navigator?.language?.split("-")[1] || "").toUpperCase();
-        const usStateCode = ""; // Will be filled by server via geolocation
-        const regionResult = await ServerAntiCheat.checkCountryAccess(countryCode, "");
-        if (!regionResult?.allowed) {
-          console.warn("[Compliance] Region restricted:", regionResult);
-          document.getElementById("region-blocked-modal")?.classList.remove("hidden");
-          return;
-        }
-      } catch (e) {
+      const countryCode = String(navigator?.language?.split("-")[1] || "").toUpperCase();
+      const usStateCode = ""; // Will be filled by server via geolocation
+      // Bounded: a hung compliance call must never hold the whole game back.
+      regionPromise = Promise.race([
+        ServerAntiCheat.checkCountryAccess(countryCode, usStateCode),
+        new Promise((resolve) => setTimeout(() => resolve({ allowed: true, reason: "region_timeout" }), 6000)),
+      ]).catch((e) => {
         console.warn("[Compliance] Region check failed (allowing for now):", e);
-      }
+        return { allowed: true };
+      });
     }
+
+    const enforceRegionThenLaunch = async (coords) => {
+      const regionResult = await regionPromise;
+      if (!regionResult?.allowed) {
+        console.warn("[Compliance] Region restricted:", regionResult);
+        document.getElementById("region-blocked-modal")?.classList.remove("hidden");
+        return;
+      }
+      // Keep the hot Cloud Functions' containers alive while this player is in
+      // the game — otherwise the first spin/collect after a quiet spell pays a
+      // full cold start (3-15s).
+      if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.startKeepAlive) {
+        ServerAntiCheat.startKeepAlive();
+      }
+      if (coords) launchGame(coords);
+      beginWatch();
+    };
 
     // REFERRAL INVITE: Auto-apply referral code from URL if present
     if (typeof window.Referrals !== "undefined" && window.Referrals?.applyInviteFromUrl) {
@@ -673,12 +691,9 @@
 
     // Execute the professional 3D load pipeline
     if (typeof Bootloader !== "undefined" && Bootloader.run) {
-      Bootloader.run(player, (coords) => {
-        launchGame(coords);
-        beginWatch();
-      });
+      Bootloader.run(player, (coords) => enforceRegionThenLaunch(coords));
     } else {
-      launchGame();
+      enforceRegionThenLaunch(null);
     }
 
     // Global Event: (re)start now that Auth + session are ready
@@ -3675,22 +3690,46 @@
         return;
       }
 
-      // Pass the multiplier (1 or 10) to the server
-      const spinResult = await ServerAntiCheat.spinWheel(currentMult);
-      if (!spinResult.spun) {
-        const msgs = {
-          insufficient_diamonds: `Not enough diamonds — you need ${spinCost} diamonds!`,
-          no_save_found: "⚠️ Account not found. Please restart the game.",
-          functions_not_initialized: "⚠️ Server connection required to spin the wheel.",
-        };
-        showToast(msgs[spinResult.reason] || "⚠️ Wheel spin could not be verified.", 3500);
-        return;
-      }
-
+      // Start the server spin AND the wheel animation at the same time. The
+      // wheel used to sit completely idle for a whole round trip before it
+      // began turning, so every spin paid the network latency twice.
       el("spin-btn").disabled = true;
       el("wheel-result").textContent = "Spinning...";
 
-      Wheel.spin((slice) => {
+      const spinMsgs = {
+        insufficient_diamonds: `Not enough diamonds — you need ${spinCost} diamonds!`,
+        no_save_found: "⚠️ Account not found. Please restart the game.",
+        functions_not_initialized: "⚠️ Server connection required to spin the wheel.",
+        server_error: "⚠️ Wheel spin could not be verified.",
+      };
+
+      let serverResult = null;
+      let serverSettled = false;
+      const spinPromise = ServerAntiCheat.spinWheel(currentMult)
+        .then((res) => {
+          serverResult = res || { spun: false, reason: "server_error" };
+          serverSettled = true;
+          // If the wheel is still turning, re-aim it at the authoritative slice.
+          if (serverResult.spun && typeof Wheel.retarget === "function") {
+            Wheel.retarget(serverResult.slice);
+          }
+          return serverResult;
+        })
+        .catch(() => {
+          serverResult = { spun: false, reason: "server_error" };
+          serverSettled = true;
+          return serverResult;
+        });
+
+      Wheel.spin(async (slice) => {
+        const spinResult = serverSettled ? serverResult : await spinPromise;
+        if (!spinResult || !spinResult.spun) {
+          el("wheel-result").textContent = "Spin not verified.";
+          showToast(spinMsgs[spinResult && spinResult.reason] || "⚠️ Wheel spin could not be verified.", 3500);
+          el("spin-btn").disabled = false;
+          updateSpinButtonState();
+          return;
+        }
         // Update currency AFTER animation completes, not before
         state.diamonds = spinResult.nextDiamonds;
         state.eb = spinResult.nextEb;
@@ -3762,7 +3801,7 @@
         updateTopbar();
         el("spin-btn").disabled = false;
         updateSpinButtonState();
-      }, spinResult.slice);
+      });
     });
 
     // --- LOG OUT BUTTON ---

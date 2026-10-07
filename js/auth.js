@@ -426,6 +426,14 @@ const Auth = (() => {
       completedUid = uid;
 
       const email = firebase.auth().currentUser?.email || "";
+
+      // The canonical record write and the ban check are independent — running
+      // them together removes a whole round trip from every sign-in.
+      const canonicalPromise = ensureCanonicalPlayerRecord(firebase.auth().currentUser).catch((e) => {
+        console.warn("[Auth] Canonical record sync failed:", e);
+        return null;
+      });
+
       const banned = await checkBan(uid, email);
       if (banned) {
         const firestore = Store.getDb();
@@ -443,8 +451,12 @@ const Auth = (() => {
         return;
       }
 
-      await ensureCanonicalPlayerRecord(firebase.auth().currentUser);
-      await migrateLegacyDuplicateAccounts(firebase.auth().currentUser || { uid, email });
+      await canonicalPromise;
+      // Duplicate-account scan runs in the background: it queries the whole
+      // players collection and must never delay entering the game.
+      migrateLegacyDuplicateAccounts(firebase.auth().currentUser || { uid, email }).catch((e) => {
+        console.warn("[Auth] Duplicate migration failed:", e);
+      });
       logPlayerIP(uid, email);
       onSignedIn(player);
     }
