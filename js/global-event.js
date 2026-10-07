@@ -109,9 +109,13 @@ const GlobalEvent = (() => {
     const totalPoolEl = el("ge-total-pool");
     const participants = Number(ev.participantCount) || 0;
     const totalPool = Number(ev.totalPrizePool) || 0;
-    const basePool = Number(ev.rewardPoolEB) || 20000;
+    // Pool is 1:1 with the EB the realm actually raised — never fall back to a
+    // hardcoded 20000 or a legit "0 raised yet" pool would display as 20k.
+    const basePool = Number(ev.rewardPoolEB) || 0;
     if (participantsEl) participantsEl.textContent = String(participants);
     if (totalPoolEl) totalPoolEl.textContent = fmtEB(totalPool);
+    const sharePoolEl = el("ge-share-pool");
+    if (sharePoolEl) sharePoolEl.textContent = fmtEB(basePool);
     const poolNote = el("ge-pool-note");
     if (poolNote) {
       poolNote.innerHTML = `Prize pool = ${fmtEB(basePool)} EB ÷ <strong id="ge-participants">${participants}</strong> players = <strong id="ge-total-pool">${fmtEB(totalPool)}</strong> EB, split by contribution share.`;
@@ -331,7 +335,9 @@ const GlobalEvent = (() => {
             startedAt: Number(d.startedAt) || 0,
             completed: d.completed === true || expired,
             payoutsProcessed: d.payoutsProcessed === true,
-            rewardPoolEB: Number(d.rewardPoolEB) || 20000,
+            // Prize pool mirrors what the realm raised — derived here from the
+            // same snapshot doc so it stays live without an extra server write.
+            rewardPoolEB: totalEB,
             participantCount: Number(d.participantCount) || lastEvent?.participantCount || 0,
             totalPrizePool: Number(d.totalPrizePool) || lastEvent?.totalPrizePool || 0,
           };
