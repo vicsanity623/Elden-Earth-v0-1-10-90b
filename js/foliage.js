@@ -6,6 +6,7 @@ const Foliage = (() => {
   let isImageLoaded = false;
   let activeMarkers = [];
   let cachedMushroomImgSrc = null;
+  let cachedRedMushroomImgSrc = null;
 
   // Realistic stylized grass blade sprite
   function createGrassImage(callback) {
@@ -48,75 +49,100 @@ const Foliage = (() => {
     img.onload = () => callback(img);
   }
 
-  // Pre-render 3D Mushroom GLB ONCE into a lightweight image sprite
+  // Helper to render a GLTF scene into an image data URL
+  function renderGLBToDataURL(gltf) {
+    const offCanvas = document.createElement("canvas");
+    offCanvas.width = 128;
+    offCanvas.height = 128;
+
+    const renderer = new THREE.WebGLRenderer({ canvas: offCanvas, alpha: true, antialias: true });
+    
+    // 1. Photographic tone mapping (prevents pure-white burnout)
+    if (THREE.ACESFilmicToneMapping) {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.9;
+    }
+    if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+    else if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    camera.position.set(0, 1.3, 2.7);
+    camera.lookAt(0, 0.35, 0);
+
+    // 2. Soft, calibrated ambient light + keylight
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.45);
+    scene.add(ambLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff5ea, 0.75);
+    dirLight.position.set(2.5, 4, 3);
+    scene.add(dirLight);
+
+    const clone = gltf.scene.clone();
+
+    // 3. Tame materials: remove blinding white reflection/emissive
+    clone.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if (child.material.emissive) {
+          child.material.emissive.setHex(0x000000); // Kills self-illumination
+        }
+        if (child.material.metalness !== undefined) child.material.metalness = 0.0;
+        if (child.material.roughness !== undefined) child.material.roughness = 0.7;
+        child.material.needsUpdate = true;
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const scale = 1.2 / maxDim;
+    clone.scale.set(scale, scale, scale);
+
+    box.setFromObject(clone);
+    clone.position.y = -box.min.y;
+    scene.add(clone);
+
+    renderer.render(scene, camera);
+    const dataUrl = offCanvas.toDataURL();
+
+    renderer.dispose();
+    renderer.forceContextLoss();
+    return dataUrl;
+  }
+
+  // Pre-render both GLB models
   function preloadMushroom() {
     if (typeof THREE === "undefined" || !THREE.GLTFLoader) return;
     const loader = new THREE.GLTFLoader();
+
     loader.load(
-      "models/mush_common.glb",
+      "assets/models/RedMushroom.glb",
       (gltf) => {
         try {
-          const offCanvas = document.createElement("canvas");
-          offCanvas.width = 128;
-          offCanvas.height = 128;
-
-          const renderer = new THREE.WebGLRenderer({ canvas: offCanvas, alpha: true, antialias: true });
-          const scene = new THREE.Scene();
-          const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-          camera.position.set(0, 1.2, 2.5);
-          camera.lookAt(0, 0.4, 0);
-
-          const ambLight = new THREE.AmbientLight(0xffffff, 1.8);
-          scene.add(ambLight);
-
-          const dirLight = new THREE.DirectionalLight(0xf0d38a, 2.4);
-          dirLight.position.set(3, 5, 4);
-          scene.add(dirLight);
-
-          const clone = gltf.scene.clone();
-          const box = new THREE.Box3().setFromObject(clone);
-          const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          const scale = 1.15 / maxDim;
-          clone.scale.set(scale, scale, scale);
-
-          box.setFromObject(clone);
-          clone.position.y = -box.min.y;
-          scene.add(clone);
-
-          renderer.render(scene, camera);
-          cachedMushroomImgSrc = offCanvas.toDataURL();
-
-          // DISPOSE RENDERER IMMEDIATELY: Releases WebGL context so it never leaks!
-          renderer.dispose();
-          renderer.forceContextLoss();
+          cachedRedMushroomImgSrc = renderGLBToDataURL(gltf);
+          cachedMushroomImgSrc = cachedRedMushroomImgSrc;
           update();
         } catch (e) {
-          console.warn("[Foliage] Pre-render notice:", e);
+          console.warn("[Foliage] Red mushroom render notice:", e);
         }
       },
       undefined,
-      (err) => {
-        // Fallback mushroom emoji if GLB is missing
-        cachedMushroomImgSrc = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><text y="50" font-size="48">🍄</text></svg>`
-        );
-        update();
-      }
+      (err) => console.warn("[Foliage] Could not load RedMushroom.glb:", err)
     );
   }
 
-  // Dynamic Growth 3D Mushroom Billboard (Scales with connected territory!)
-  function create3DMushroomElement(scaleMultiplier = 1.0) {
+  // Dynamic Growth 3D Mushroom Billboard (Supports default & custom RedMushroom.glb)
+  function create3DMushroomElement(scaleMultiplier = 1.0, isRedVariant = false) {
     const wrap = document.createElement("div");
     wrap.className = "parcel-prop-wrap";
     wrap.style.cssText = "will-change: transform; transform: translateZ(0); pointer-events: none;";
 
     const pxSize = Math.round(18 * scaleMultiplier);
     const fontPx = Math.round(13 * scaleMultiplier);
+    const imgSrc = (isRedVariant && cachedRedMushroomImgSrc) ? cachedRedMushroomImgSrc : cachedMushroomImgSrc;
 
-    if (cachedMushroomImgSrc) {
-      wrap.innerHTML = `<img src="${cachedMushroomImgSrc}" style="width:${pxSize}px;height:${pxSize}px;object-fit:contain;display:block;">`;
+    if (imgSrc) {
+      wrap.innerHTML = `<img src="${imgSrc}" style="width:${pxSize}px;height:${pxSize}px;object-fit:contain;display:block;">`;
     } else {
       wrap.innerHTML = `<span style="font-size:${fontPx}px;line-height:1;display:block;">🍄</span>`;
     }
@@ -265,10 +291,11 @@ const Foliage = (() => {
     let mushroomCount = 0;
     const MAX_VISIBLE_MUSHROOMS = 150; // 👈 Raised from 15 to 150 so full farms render!
 
-    // User's active 5-mile (8,000m) horizon center
+    // User's active view center (Tightly culled to 650m so distant horizon markers never bleed into top HUD)
     const mapCenter = mapInstance.getCenter();
     const userLat = mapCenter ? mapCenter.lat : 33.585;
     const userLon = mapCenter ? mapCenter.lng : -112.015;
+    const MAX_FOLIAGE_DIST_METERS = 650;
 
     for (const tid in allPlots) {
       const p = allPlots[tid];
@@ -280,9 +307,9 @@ const Foliage = (() => {
         py * tileSize + tileSize / 2
       );
 
-      // 5-MILE HORIZON CULLING: Never render grass or mushrooms for other states/cities!
+      // TIGHT HORIZON CULLING: Only render flora near player's active view
       const distToPlayer = Geo.haversine(userLat, userLon, c.lat, c.lon);
-      if (distToPlayer > 8000) {
+      if (distToPlayer > MAX_FOLIAGE_DIST_METERS) {
         continue;
       }
 
@@ -310,16 +337,22 @@ const Foliage = (() => {
         }
       }
 
-      // 2. Small 3D Mushrooms on ALL Legendary Plots!
-      if (rarityKey === "legendary" && zoom >= 16.5 && mushroomCount < MAX_VISIBLE_MUSHROOMS) {
+      // 2. 3D Mushrooms on Legendary Plots (Natural ~45% cluster spawn & bigger scale)
+      const spawnRoll = seededRandom(seed++);
+      if (rarityKey === "legendary" && zoom >= 16.5 && spawnRoll < 0.50 && mushroomCount < MAX_VISIBLE_MUSHROOMS) {
         mushroomCount++;
-        const mushOffsetX = (seededRandom(seed++) - 0.5) * 0.000015;
-        const mushOffsetY = (seededRandom(seed++) - 0.5) * 0.000015;
+        
+        // Organic size variation (1.3x to 2.2x)
+        const scaleVal = 1.3 + seededRandom(seed++) * 0.9;
+        const mushOffsetX = (seededRandom(seed++) - 0.5) * 0.000024;
+        const mushOffsetY = (seededRandom(seed++) - 0.5) * 0.000024;
 
-        // Keep standard small scale on individual tiles so they don't awkwardly clump
-        const mushEl = create3DMushroomElement(1.0);
+        // Perspective fade/scale for distance: Shrinks mushrooms that are further away
+        const distanceFactor = Math.max(0.4, 1.0 - (distToPlayer / MAX_FOLIAGE_DIST_METERS) * 0.5);
+        const finalScale = scaleVal * distanceFactor;
+
         const m = new mapboxgl.Marker({
-          element: mushEl,
+          element: create3DMushroomElement(finalScale, true),
           anchor: "bottom",
           pitchAlignment: "viewport",
           rotationAlignment: "viewport",

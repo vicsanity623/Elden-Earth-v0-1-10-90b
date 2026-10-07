@@ -716,29 +716,28 @@ const Grid = (() => {
         type: "fill",
         source: "plots-source",
         paint: {
-          "fill-color": "#27ae60",
+          "fill-color": "#2ecc71",
           "fill-opacity": [
             "case",
             ["in", ["get", "rarity"], ["literal", ["epic", "legendary"]]],
-            ["case", ["==", ["get", "isSelf"], true], 0.35, 0.12],
-            0
+            ["case", ["==", ["get", "isSelf"], true], 0.40, 0.18],
+            0.08
           ],
         },
       });
 
-      // 2. Rarity Tint (Bright on your plots, dimmed on rivals)
+      // 2. High-Saturation Radiant Rarity Fill
       map.addLayer({
         id: "plots-fill",
         type: "fill",
         source: "plots-source",
         paint: {
           "fill-color": ["get", "color"],
-          "fill-opacity": ["case", ["==", ["get", "isSelf"], true], 0.55, 0.20],
+          "fill-opacity": ["case", ["==", ["get", "isSelf"], true], 0.82, 0.45],
         },
       });
 
-      // 3. Neon Rarity Borders (Thick on your plots, thin on rivals)
-      // Slightly wider lines at low zoom so parcels stay readable when tiny
+      // 3. Glowing Outer Neon Halo & Borders
       map.addLayer({
         id: "plots-line",
         type: "line",
@@ -747,11 +746,11 @@ const Grid = (() => {
           "line-color": ["get", "color"],
           "line-width": [
             "interpolate", ["linear"], ["zoom"],
-            3, ["case", ["==", ["get", "isSelf"], true], 3.5, 2],
-            10, ["case", ["==", ["get", "isSelf"], true], 2.5, 1.2],
-            16, ["case", ["==", ["get", "isSelf"], true], 2.5, 1.2]
+            3, ["case", ["==", ["get", "isSelf"], true], 4.0, 2.2],
+            10, ["case", ["==", ["get", "isSelf"], true], 3.0, 1.6],
+            16, ["case", ["==", ["get", "isSelf"], true], 2.8, 1.5]
           ],
-          "line-opacity": ["case", ["==", ["get", "isSelf"], true], 0.95, 0.45],
+          "line-opacity": ["case", ["==", ["get", "isSelf"], true], 1.0, 0.65],
         },
       });
 
@@ -1015,7 +1014,7 @@ const Grid = (() => {
         const refLon = (playerCoords && playerCoords.lon) ? playerCoords.lon : (map ? map.getCenter().lng : null);
         if (refLat && refLon) {
           const dist = Geo.haversine(refLat, refLon, centroidLat, centroidLon);
-          if (dist > 40000) continue; // 25-mile bird's-eye city view; keep city billboard density readable
+          if (dist > 1200) continue; // bird's-eye city view; keep city billboard density readable
         }
 
         const isSelf = clusterOwnerId === state.player.id;

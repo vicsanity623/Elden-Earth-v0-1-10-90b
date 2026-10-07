@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.39b",
+  GAME_VERSION: "0.1.11.40b",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -123,10 +123,10 @@ const CONFIG = {
   // --- Land plots (Exact Rates & Odds) ---
   PLOT_COST_EB: 100,
   PLOT_RARITIES: [
-    { key: "common",    label: "Common",    rate: 0.0000000008, weight: 50, color: "#8fa3b8" }, // 50%
-    { key: "rare",      label: "Rare",      rate: 0.000000002428, weight: 30, color: "#4f9dd6" }, // 30% — 3C→1R ≈ +1.17%
-    { key: "epic",      label: "Epic",      rate: 0.000000007365, weight: 15, color: "#a86ee0" }, // 15% — 3R→1E ≈ +1.11%
-    { key: "legendary", label: "Legendary", rate: 0.000000022330, weight: 5,  color: "#e0a84f" }, // 5%  — 3E→1L ≈ +1.06%
+    { key: "common",    label: "Common",    rate: 0.0000000008, weight: 50, color: "#64748b" }, // 50%
+    { key: "rare",      label: "Rare",      rate: 0.000000002428, weight: 30, color: "#00d2ff" }, // 30% — 3C→1R ≈ +1.17%
+    { key: "epic",      label: "Epic",      rate: 0.000000007365, weight: 15, color: "#b537f2" }, // 15% — 3R→1E ≈ +1.11%
+    { key: "legendary", label: "Legendary", rate: 0.000000022330, weight: 5,  color: "#ffb703" }, // 5%  — 3E→1L ≈ +1.06%
   ],
 
   // --- Plot Ascension Forge (3 same-rarity plots → 1 next-rarity plot) ---
