@@ -10,14 +10,20 @@ const Wheel = (() => {
 
   // 1. Create and preload the coin image
   const ebCoinImg = new Image();
-  ebCoinImg.src = "assets/eb-coin.png"; // <-- double check if your filename is 'eb--coin.png' or 'eb-coin.png'
+  ebCoinImg.src = "assets/eb-coin.png";
   
-  // 2. Redraw the wheel automatically as soon as the image finishes downloading
-  ebCoinImg.onload = () => {
+  const diamondImg = new Image();
+  diamondImg.src = "assets/diamond-spawn.png";
+
+  let imagesLoaded = 0;
+  const onImageLoad = () => {
+    imagesLoaded++;
     if (canvas && ctx) {
       draw();
     }
   };
+  ebCoinImg.onload = onImageLoad;
+  diamondImg.onload = onImageLoad;
 
   function draw() {
     const slices = CONFIG.WHEEL_SLICES;
@@ -107,8 +113,13 @@ const Wheel = (() => {
 
       if (slices[i].type === "diamond" || slices[i].type === "diamond_jackpot") {
         ctx.textAlign = "right";
-        ctx.fillText("+" + displayAmount, radius - 26, 5);
-        renderCanvas3DGem(radius - 14, 0, 18);
+        if (diamondImg.complete && diamondImg.naturalWidth > 0) {
+          ctx.fillText("+" + displayAmount, radius - 28, 5);
+          ctx.drawImage(diamondImg, radius - 24, -9, 18, 18);
+        } else {
+          ctx.fillText("+" + displayAmount, radius - 26, 5);
+          renderCanvas3DGem(radius - 14, 0, 18);
+        }
       } else {
         ctx.textAlign = "right";
 

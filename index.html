@@ -236,7 +236,7 @@
 
       <div class="sub-stat">
         <span class="stat-label"></span>
-        <span class="stat-value" id="stat-diamonds">-- <span style="color:#ff1744; text-shadow: 0 0 6px #ff002b;">◆</span></span>
+        <span class="stat-value" id="stat-diamonds">-- <span class="hud-gem-icon"></span></span>
       </div>
 
       <div class="sub-stat">
@@ -727,6 +727,12 @@
       <div class="extractor-level-header">
         <span class="extractor-level-pill" id="extractor-lvl-badge">Level 1</span>
         <span class="extractor-next-perk" id="extractor-next-perk">Next: -2.5% Mining Time</span>
+        <!-- Small, Safe Top Upgrade Button -->
+        <button id="upgrade-extractor-btn" class="btn-extractor-upgrade">⚡ Upgrade ($1.00)</button>
+      </div>
+
+      <div id="extractor-locked-notice" class="extractor-locked-notice hidden">
+        🔒 Reach $1.00 Cash Balance to unlock Extractor Upgrades!
       </div>
 
       <div class="extractor-status-box">
@@ -746,14 +752,6 @@
           <span>Ready to Collect:</span>
           <strong id="extractor-stored-count" class="diamond-ready-val">0 / 50 <span class="hud-gem-icon"></span></strong>
         </div>
-      </div>
-
-      <!-- $1.00 Unlockable Upgrade Button -->
-      <button id="upgrade-extractor-btn" class="btn btn-primary btn-extractor-upgrade" style="margin-bottom: 10px;">
-        ⚡ Upgrade ($1.00)
-      </button>
-      <div id="extractor-locked-notice" class="extractor-locked-notice hidden">
-        🔒 Reach $1.00 Cash Balance to unlock Extractor Upgrades!
       </div>
 
       <button id="collect-extractor-btn" class="btn btn-primary">Collect All (0 <span class="hud-gem-icon"></span>)</button>
@@ -1201,7 +1199,7 @@
       <div class="pool-top10-note" id="modal-top10-note">Rankings freeze at Monday 00:00 UTC; the Top 10 are paid automatically.</div>
     </div>
 
-    <p class="fine-print">Standings and the prize pool are frozen once, at Monday 00:00 UTC, from each player's Total Land Plots &amp; Accrued Rent at that instant — they never move afterwards, and the Top 10 are credited automatically at the same moment. Realm Economy Velocity and Weekly Pool ignore temporary 30X/50X personal boost multipliers.</p>
+    <p class="fine-print">Top 10 standings and prizes freeze Mondays at 00:00 UTC and pay out automatically.</p>
   </div>
 </div>
 
