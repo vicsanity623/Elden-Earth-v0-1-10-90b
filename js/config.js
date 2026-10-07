@@ -46,13 +46,13 @@ const CONFIG = {
 
   // --- Diamonds ---
   DIAMOND_SPAWN_RADIUS_METERS: 1000,     // ~.75 mile maximum
-  DIAMOND_COLLECT_RADIUS_METERS: 75,    // Exact player collection radius
+  DIAMOND_COLLECT_RADIUS_METERS: 75,     // Exact player collection radius
   DIAMOND_MAX_ACTIVE: 11,
-  DIAMOND_SPAWN_CHECK_MS: 1 * 60 * 1000, // One diamond every 2 minutes
-  DIAMOND_INNER_COOLDOWN_MS: 5 * 60 * 1000, // 8-Minute cooldown between inner circle waves
-  DIAMOND_IDLE_TIMEOUT_MS: 120 * 60 * 1000, // Pause spawning after 2 hour still
-  DIAMOND_MOVEMENT_THRESHOLD_METERS: 50, // Ignore GPS drift smaller than 10m
-  DIAMOND_LIFETIME_MS: 30 * 60 * 1000,  // 25 minutes
+  DIAMOND_SPAWN_CHECK_MS: 5 * 60 * 1000, // Check for respawns every 5 minutes
+  DIAMOND_INNER_COOLDOWN_MS: 60 * 60 * 1000, // 1-Hour inner cooldown (stops pet infinite farm)
+  DIAMOND_IDLE_TIMEOUT_MS: 120 * 60 * 1000,  // Pause spawning after 2 hours idle
+  DIAMOND_MOVEMENT_THRESHOLD_METERS: 50,     // Ignore GPS drift smaller than 50m
+  DIAMOND_LIFETIME_MS: 90 * 60 * 1000,       // 90 minutes lifetime before despawn
 
   // --- Diamond Extractor ---
   EXTRACTOR_MIN_TILES: 5,               // Requires 5+ connected plots
