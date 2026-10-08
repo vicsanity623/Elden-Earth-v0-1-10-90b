@@ -279,7 +279,12 @@ const Grid = (() => {
       const count = counts[groupKey];
       if (!count) continue;
       const lucky = groupKey.endsWith("~lucky");
-      const rarityKey = lucky ? groupKey.slice(0, -7) : groupKey;
+      // "~lucky" is 6 chars, so strip exactly 6 — an off-by-one here mangles the
+      // rarity ("common~lucky" -> "commo"), rarityInfo() then falls back to
+      // PLOT_RARITIES[0] so every button reads "Common Plot", and the click
+      // looks up an instance of a rarity that can never exist -> false
+      // "That plot is no longer in your bag."
+      const rarityKey = lucky ? groupKey.slice(0, -6) : groupKey;
       const rarity = rarityInfo(rarityKey);
       const button = document.createElement("button");
       button.className = lucky ? "btn btn-primary bag-btn-lucky" : "btn btn-primary";
