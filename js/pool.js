@@ -49,7 +49,7 @@ const WeeklyPool = (() => {
   // Calculate Total Global Lifetime Rent & Global $/Sec Across All Players
   async function calculateGlobalPool() {
     if (typeof Leaderboard === "undefined" || !Leaderboard.fetchRankings) {
-      return { totalGlobalRent: 1.0, weeklyPool: 0.01, globalRateSec: 0, sortedTop10: [] };
+      return { totalGlobalRent: 1.0, weeklyPool: 0.05, globalRateSec: 0, sortedTop10: [] };
     }
 
     const data = await Leaderboard.fetchRankings();

@@ -292,6 +292,27 @@ const Grid = (() => {
     document.getElementById("plot-bag-modal")?.classList.remove("hidden");
   }
 
+  // Resolve the bag instance a button was rendered for — same rarity AND the
+  // same 🍀 flag. openPlotBag() groups with the identical predicate, so render
+  // and click can never disagree on a fresh snapshot.
+  function findBagInstance(state, rarityKey, wantLucky) {
+    const items = state && state.plotBagItems;
+    if (!items || typeof items !== "object") return null;
+    return Object.keys(items).find((id) => {
+      if (String(items[id] || "common").split("_")[0] !== rarityKey) return false;
+      const isLucky = !!(state.luckyBagItems && state.luckyBagItems[id] === true);
+      return isLucky === wantLucky;
+    }) || null;
+  }
+
+  // Rarity-only match — used when the clicked button outlived its snapshot.
+  function findBagInstanceAnyLucky(state, rarityKey) {
+    const items = state && state.plotBagItems;
+    if (!items || typeof items !== "object") return null;
+    return Object.keys(items).find((id) =>
+      String(items[id] || "common").split("_")[0] === rarityKey) || null;
+  }
+
   async function placeBagPlot(slot) {
     if (!pendingTile) return;
     const state = Store.get();
@@ -307,17 +328,24 @@ const Grid = (() => {
     let plotItemId = null;
     if (itemsMap) {
       // 🍀 Match rarity AND lucky flag so the right instance is consumed.
-      plotItemId = Object.keys(itemsMap).find((id) => {
-        if (String(itemsMap[id] || "common").split("_")[0] !== rarityKey) return false;
-        const isLucky = !!(state.luckyBagItems && state.luckyBagItems[id] === true);
-        return isLucky === wantLucky;
-      }) || null;
+      plotItemId = findBagInstance(state, rarityKey, wantLucky)
+        || findBagInstance(Store.get(), rarityKey, wantLucky);
       if (!plotItemId) {
-        if (typeof showToast === "function") showToast("⚠️ That plot is no longer in your bag.", 3500);
-        return;
+        // A cloud sync swaps plotBagItems/luckyBagItems between render and
+        // click — e.g. a plain "COMMON PLOT x1" button rendered from legacy
+        // counters, once the real 🍀 instance loads. If that rarity is still
+        // in the bag, place what is actually there instead of reporting a
+        // loss; only a genuinely empty rarity gets the error toast.
+        plotItemId = findBagInstanceAnyLucky(state, rarityKey)
+          || findBagInstanceAnyLucky(Store.get(), rarityKey);
+        if (!plotItemId) {
+          openPlotBag();
+          if (typeof showToast === "function") showToast("⚠️ That plot is no longer in your bag.", 3500);
+          return;
+        }
       }
     } else {
-      const count = Number(state.plotBag?.[slot]) || 0;
+      const count = Number(state.plotBag?.[rarityKey]) || Number(state.plotBag?.[slot]) || 0;
       if (!count) return;
     }
 
@@ -336,11 +364,16 @@ const Grid = (() => {
       return;
     }
 
-    const serverResult = await ServerAntiCheat.relocatePlot(slot, tx, ty, plotItemId);
+    // Send the bare rarity as `slot`. Lucky stacks are tagged `~lucky` only in
+    // the local bag UI — shipping that marker used to make the server's
+    // rarity-only validator reject EVERY Lucky placement.
+    const serverResult = await ServerAntiCheat.relocatePlot(rarityKey, tx, ty, plotItemId);
     if (!serverResult.allowed) {
       const why = serverResult.reason === "plot_in_trade"
         ? "it is committed to an open trade."
-        : serverResult.reason;
+        : serverResult.reason === "plot_not_in_bag"
+          ? "it is no longer in your bag."
+          : serverResult.reason;
       if (typeof showToast === "function") showToast("⚠️ Couldn't place plot: " + why, 4000);
       return;
     }

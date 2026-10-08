@@ -442,6 +442,22 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  // Admin-only gift into your own (or a target's) bag.
+  // Default: 2 of each rarity, all 🍀 Lucky = 8 plots.
+  //   ServerAntiCheat.giftPlots()
+  //   ServerAntiCheat.giftPlots({ targetUid: "<uid>", perRarity: 3 })
+  //   ServerAntiCheat.giftPlots({ plots: [{ rarity: "epic" }] })
+  async function giftPlots(opts) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("giftPlots");
+      return (await fn(opts || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] giftPlots failed:", e.message);
+      return { ok: false, reason: e.message };
+    }
+  }
+
   async function claimMailbox() {
     if (!functions) return { claimed: 0, dividendsEb: 0, giftsEb: 0 };
     try {
@@ -586,5 +602,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
 })();

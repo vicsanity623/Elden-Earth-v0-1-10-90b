@@ -337,6 +337,14 @@ const Store = (() => {
             state.luckyBagItems = { ...result.data.luckyBagItems };
             mirrorDirty = true;
           }
+          if (Array.isArray(result.data?.plotDroppedTids) && result.data.plotDroppedTids.length) {
+            // Server just evicted tiles whose instanceId already sits in the
+            // bag (bag↔map invariant). Drop them locally too, otherwise the
+            // ghost keeps rendering and keeps being re-sent on the next sync.
+            if (!state.plots || typeof state.plots !== "object") state.plots = {};
+            for (const t of result.data.plotDroppedTids) delete state.plots[t];
+            mirrorDirty = true;
+          }
           if (mirrorDirty) localStorage.setItem(KEY, JSON.stringify(state));
         }
         if (result.data?.betaSeedsGranted) {
