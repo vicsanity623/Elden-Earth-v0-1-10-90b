@@ -41,6 +41,20 @@ const GlobalEvent = (() => {
     return Number(event.deadline) > 0 && Date.now() > Number(event.deadline);
   }
 
+  /**
+   * The challenge is finished *for this viewer* — nothing left to show or claim.
+   * Deliberately conservative: while `lastMe` is still unknown (getGlobalEvent
+   * has not returned yet) we keep the button up rather than hide the only way
+   * to reach an unclaimed prize.
+   */
+  function isSettled(ev, me) {
+    if (!ev || !isExpired(ev)) return false;
+    if (ev.payoutsProcessed !== true) return false;
+    if (!me) return false;
+    if (Number(me.amount) > 0 && !me.claimed) return false;
+    return true;
+  }
+
   // ---------------- Render ----------------
 
   function renderHud() {
@@ -48,7 +62,7 @@ const GlobalEvent = (() => {
     const chip = el("global-event-hud-chip");
     const bar = el("global-event-hud-bar");
     const btn = el("global-event-hud-btn");
-    if (!ev) {
+    if (!ev || isSettled(ev, lastMe)) {
       if (btn) btn.classList.add("hidden");
       return;
     }
@@ -137,11 +151,9 @@ const GlobalEvent = (() => {
         claimBtn.classList.remove("hidden");
         claimBtn.disabled = false;
         claimBtn.textContent = `Claim ${fmtEB(me.prize)} EB`;
-      } else if (me?.claimed) {
-        claimBtn.classList.remove("hidden");
-        claimBtn.disabled = true;
-        claimBtn.textContent = "✓ Reward Claimed";
       } else {
+        // Claimed, or nothing to claim — remove it instead of parking a
+        // permanently disabled "✓ Reward Claimed" button at the bottom.
         claimBtn.classList.add("hidden");
       }
     }
@@ -243,6 +255,9 @@ const GlobalEvent = (() => {
     const modal = el("global-event-modal");
     if (modal && !modal.classList.contains("hidden")) {
       renderModal();
+      // Everything is done for this viewer (claimed + payouts processed) —
+      // there is nothing left in here but a Close button.
+      if (isSettled(lastEvent, lastMe)) closeModal();
     }
   }
 
