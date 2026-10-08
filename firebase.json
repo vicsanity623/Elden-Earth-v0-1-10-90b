@@ -14,7 +14,17 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "functions/**",
+      "**/*.service-account.json",
+      "**/*.md",
+      "firestore.rules",
+      "storage.rules",
+      "package.json",
+      "package-lock.json",
+      "android/**",
+      "docs/**",
+      "server/**"
     ],
     "rewrites": [],
     "headers": [
