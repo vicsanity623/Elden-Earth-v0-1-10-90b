@@ -10,6 +10,11 @@ const Cashout = (() => {
   let paypalEmail = "";
   let isSubmitting = false;
 
+  // Weekly cap lives in CONFIG.WITHDRAWAL — no hardcoded $15 anywhere, so the
+  // UI can never drift from functions/index.js WITHDRAWAL_WEEKLY_LIMIT_USD.
+  const WITHDRAWAL_CFG = (typeof CONFIG !== "undefined" && CONFIG.WITHDRAWAL) ? CONFIG.WITHDRAWAL : {};
+  const WEEKLY_LIMIT_USD = Number(WITHDRAWAL_CFG.weeklyLimitUsd) || 5.00;
+
   const toast = (msg, ms = 3000) => {
     if (typeof window !== "undefined" && typeof window.showToast === "function") window.showToast(msg, ms);
     else console.log("[Cashout]", msg);
@@ -67,8 +72,8 @@ const Cashout = (() => {
 
     // Weekly limit & cooldown info
     const weeklyPaid = weeklyData?.paid || 0;
-    const weeklyLimit = 15.00;
-    const weeklyRemaining = Math.max(0, 15.00 - weeklyData?.paid || 0);
+    const weeklyLimit = WEEKLY_LIMIT_USD;
+    const weeklyRemaining = Math.max(0, weeklyLimit - weeklyPaid);
     const lastPaidAt = weeklyData?.lastPaidAt || 0;
     const cooldownMs = 48 * 60 * 60 * 1000;
     const cooldownActive = lastPaidAt && (Date.now() - lastPaidAt) < 48 * 60 * 60 * 1000;
@@ -208,7 +213,7 @@ const Cashout = (() => {
           already_pending: "You already have a pending request.",
           invalid_email: "Invalid PayPal email.",
           rate_limited: "Too many requests. Try again later.",
-          weekly_limit_exceeded: `Weekly limit reached ($${result.weeklyPaid?.toFixed(2) || 0}/$15.00). Try next week.`,
+          weekly_limit_exceeded: `Weekly limit reached ($${result.weeklyPaid?.toFixed(2) || 0}/$${WEEKLY_LIMIT_USD.toFixed(2)}). Try next week.`,
           cooldown_active: `Cooldown active: ${result.hoursLeft}h until next withdrawal.`,
           region_restricted: "Withdrawals not available in your region.",
         };

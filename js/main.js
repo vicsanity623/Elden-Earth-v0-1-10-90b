@@ -228,7 +228,7 @@
       if (el("stat-rate")) el("stat-rate").textContent = currentRate;
     }
 
-    // 3. Global 50X/30X Multiplier UI (Delegated to Multiplier module)
+    // 3. Global 20X/50X Multiplier UI (Delegated to Multiplier module)
     if (typeof Multiplier !== "undefined") {
       Multiplier.updateUI(state);
     }

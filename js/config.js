@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.44b",
+  GAME_VERSION: "0.1.11.45b",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -62,9 +62,13 @@ const CONFIG = {
 
   // --- 50X Super Boost Event Engine ---
   // SINGLE SOURCE OF TRUTH — must match eventAnchor in functions/index.js (activateBoost).
+  // REBALANCE 2026-10-08: 50X is now far rarer — 12h live every 12 days
+  // (was 24h live every 4 days: 25% duty cycle -> 4.2% duty cycle).
+  // duration + cooldown MUST sum to exactly 12 days or the client countdown
+  // and the server's activateBoost multiplier disagree about what is live.
   EVENT_50X_ANCHOR_MS: 1788912000000,          // Server-locked cycle anchor (ms)
-  EVENT_50X_DURATION_MS: 24 * 3600 * 1000,     // 24 Hours of 50X Active
-  EVENT_50X_COOLDOWN_MS: 3 * 24 * 3600 * 1000, // 3 Days (72 Hours) 30X Cooldown
+  EVENT_50X_DURATION_MS: 12 * 3600 * 1000,     // 12 Hours of 50X Active
+  EVENT_50X_COOLDOWN_MS: 12 * 24 * 3600 * 1000 - 12 * 3600 * 1000, // 11.5 days -> 12-day cycle
 
   is50XActive: function() {
     const totalCycle = this.EVENT_50X_DURATION_MS + this.EVENT_50X_COOLDOWN_MS;
@@ -77,13 +81,15 @@ const CONFIG = {
   // Multiplier scales down as plot count increases to prevent runaway liabilities.
   // Based on the Atlas Earth model: base multiplier * tier factor = effective multiplier.
   BOOST_TIERS: [
-    { minPlots: 0,   maxPlots: 150,  tierFactor: 1.00 }, // 1-150:   full 30X/50X
-    { minPlots: 151, maxPlots: 220,  tierFactor: 0.67 }, // 151-220: 20X effective (30X * 0.67)
-    { minPlots: 221, maxPlots: 290,  tierFactor: 0.50 }, // 221-290: 15X effective
-    { minPlots: 291, maxPlots: 365,  tierFactor: 0.40 }, // 291-365: 12X effective
-    { minPlots: 366, maxPlots: 730,  tierFactor: 0.30 }, // 366-730: 9X effective
-    { minPlots: 731, maxPlots: 1500, tierFactor: 0.20 }, // 731-1500: 6X effective
-    { minPlots: 1501, maxPlots: Infinity, tierFactor: 0.067 }, // 1501+: 2X effective
+    // UNCHANGED by the 2026-10-08 rebalance — this curve stays as-is by design.
+    // tierFactor is relative to the base, so 20X * 0.67 = 13.4X effective now.
+    { minPlots: 0,   maxPlots: 150,  tierFactor: 1.00 }, // 1-150:   full 20X/50X
+    { minPlots: 151, maxPlots: 220,  tierFactor: 0.67 }, // 151-220: 13X effective (20X * 0.67)
+    { minPlots: 221, maxPlots: 290,  tierFactor: 0.50 }, // 221-290: 10X effective
+    { minPlots: 291, maxPlots: 365,  tierFactor: 0.40 }, // 291-365: 8X effective
+    { minPlots: 366, maxPlots: 730,  tierFactor: 0.30 }, // 366-730: 6X effective
+    { minPlots: 731, maxPlots: 1500, tierFactor: 0.20 }, // 731-1500: 4X effective
+    { minPlots: 1501, maxPlots: Infinity, tierFactor: 0.067 }, // 1501+: 1.3X effective
   ],
   
   // --- Spin wheel --- (+12 & +24 Diamond Jackpots, 1 Miss Slice)
@@ -123,10 +129,14 @@ const CONFIG = {
   // --- Land plots (Exact Rates & Odds) ---
   PLOT_COST_EB: 100,
   PLOT_RARITIES: [
-    { key: "common",    label: "Common",    rate: 0.0000000008, weight: 50, color: "#64748b" }, // 50%
-    { key: "rare",      label: "Rare",      rate: 0.000000002428, weight: 30, color: "#00d2ff" }, // 30% — 3C→1R ≈ +1.17%
-    { key: "epic",      label: "Epic",      rate: 0.000000007365, weight: 15, color: "#b537f2" }, // 15% — 3R→1E ≈ +1.11%
-    { key: "legendary", label: "Legendary", rate: 0.000000022330, weight: 5,  color: "#ffb703" }, // 5%  — 3E→1L ≈ +1.06%
+    // REBALANCE 2026-10-08: all rates cut 50% (x0.50) to bring max payout
+    // liability under ad ARPU. Server mirror: functions/index.js
+    // PLOT_RARITY_RATE_MAP — the two MUST stay identical or the client's
+    // displayed rate diverges from what the server credits.
+    { key: "common",    label: "Common",    rate: 0.0000000004, weight: 50, color: "#64748b" }, // 50%
+    { key: "rare",      label: "Rare",      rate: 0.000000001214, weight: 30, color: "#00d2ff" }, // 30% — 3C→1R ≈ +1.17%
+    { key: "epic",      label: "Epic",      rate: 0.0000000036825, weight: 15, color: "#b537f2" }, // 15% — 3R→1E ≈ +1.11%
+    { key: "legendary", label: "Legendary", rate: 0.000000011165, weight: 5,  color: "#ffb703" }, // 5%  — 3E→1L ≈ +1.06%
   ],
 
   // --- Plot Ascension Forge (3 same-rarity plots → 1 next-rarity plot) ---
@@ -204,7 +214,7 @@ const CONFIG = {
   WITHDRAWAL: {
     minUsd: 5.00,
     maxUsd: 1000.00,
-    weeklyLimitUsd: 15.00,
+    weeklyLimitUsd: 5.00,
     minAccountAgeDays: 30,
     cooldownHours: 48,
   },

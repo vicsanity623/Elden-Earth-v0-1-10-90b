@@ -1,13 +1,13 @@
 // ============================================================
 // Elden Earth — Multiplier Module
-// Handles all 30X/50X boost multiplier logic and +2EB boost
+// Handles all 20X/50X boost multiplier logic and +2EB boost
 // ============================================================
 const Multiplier = (() => {
   const el = (id) => document.getElementById(id);
   // --- Constants ---
   const BOOST_DURATION_MS = 3600 * 1000;          // 1 Hour per activation
   const BOOST_MAX_BANK_MS = 6 * 3600 * 1000;     // Max 6 Hours banked
-  const BOOST_COOLDOWN_MS = 20 * 60 * 1000;      // 20 Minutes for +2EB
+  const BOOST_COOLDOWN_MS = 30 * 60 * 1000;      // 30 Minutes for +2EB (was 20 — rebalanced)
   // 50X event schedule now lives in CONFIG (single source of truth, matches
   // the eventAnchor baked into functions/index.js activateBoost).
 
@@ -45,11 +45,12 @@ const Multiplier = (() => {
   }
 
   /**
-   * Get the currently active base multiplier value (30 or 50)
+   * Get the currently active base multiplier value (50 during the event, else 20)
+   * REBALANCE 2026-10-08: base dropped 30X -> 20X.
    * @returns {number}
    */
   function getActiveMultiplier() {
-    return is50XActive() ? 50 : 30;
+    return is50XActive() ? 50 : 20;
   }
 
   /**
@@ -58,7 +59,7 @@ const Multiplier = (() => {
    * @returns {number} Effective multiplier (base * tierFactor)
    */
   function getEffectiveMultiplier(state) {
-    const base = state.boostMultiplier || getActiveMultiplier();
+    const base = Number(state.boostMultiplier) === 50 ? 50 : 20;
     const plotCount = state.plots ? Object.keys(state.plots).length : 0;
     const tierFactor = getTierFactor(plotCount);
     return Math.round(base * tierFactor);
@@ -74,7 +75,10 @@ const Multiplier = (() => {
   function applyMultiplier(rate, state, isOtherPlayer = false) {
     if (isOtherPlayer) return rate;
     if (state.boostExpiry && Date.now() < state.boostExpiry) {
-      const base = state.boostMultiplier || 30;
+      // REBALANCE 2026-10-08: 30X is no longer a valid value. Legacy saves can
+      // still carry boostMultiplier: 30, so normalise anything that is not the
+      // 50X event down to 20 — otherwise old boosts keep paying at the old rate.
+      const base = Number(state.boostMultiplier) === 50 ? 50 : 20;
       const plotCount = state.plots ? Object.keys(state.plots).length : 0;
       const tierFactor = getTierFactor(plotCount);
       return rate * base * tierFactor;
@@ -83,17 +87,25 @@ const Multiplier = (() => {
   }
 
   /**
-   * Activate boost for 1 hour, stacking up to 6 hours max
+   * Activate boost for 1 hour, stacking up to 6 hours max.
+   * Costs BOOST_ACTIVATION_COST_EB (2 EB) — the server debits it inside the
+   * transaction, so we mirror the debit locally rather than trusting a client
+   * side check.
    * @param {object} state - Game state object
+   * @returns {Promise<{ok:boolean, mult?:number, costEb?:number, reason?:string}>}
    */
   async function activateBoost(state) {
-    if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) return null;
+    if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+      return { ok: false, reason: "offline" };
+    }
     const result = await ServerAntiCheat.activateBoost();
-    if (!result.activated) return null;
+    if (!result.activated) return { ok: false, reason: result.reason || "server_error" };
     state.boostExpiry = result.boostExpiry;
     state.boostMultiplier = result.boostMultiplier;
+    const cost = Number(result.costEb) || 0;
+    if (cost > 0) state.eb = Math.max(0, (Number(state.eb) || 0) - cost);
     Store.save(true);
-    return result.boostMultiplier;
+    return { ok: true, mult: result.boostMultiplier, costEb: cost };
   }
 
   /**
@@ -153,7 +165,7 @@ const Multiplier = (() => {
     }
     const serverResult = await ServerAntiCheat.claimBoost();
     if (!serverResult.claimed) {
-      return { success: false, message: serverResult.reason === "cooldown" ? "⏳ Cooldown active — boost available every 20 minutes." : "⚠️ Boost could not be verified." };
+      return { success: false, message: serverResult.reason === "cooldown" ? "⏳ Cooldown active — boost available every 30 minutes." : "⚠️ Boost could not be verified." };
     }
     state.lastBoostClaim = serverResult.lastBoostClaim;
     state.eb = serverResult.nextEb;
@@ -218,18 +230,18 @@ const Multiplier = (() => {
     const is50XEvent = is50XActive();
     const isBoosted = state.boostExpiry && state.boostExpiry > now;
 
-    // Swap the multiplier button image between 30x.png and 50x.png
-    // Always show the BASE multiplier on the side hub (30X or 50X), not the
+    // Swap the multiplier button image between 20x.png and 50x.png
+    // Always show the BASE multiplier on the side hub (20X or 50X), not the
     // tier-collapsed effective value — whales see the real number in the top bar.
     const multImg = el("mult-img");
     if (multImg) {
-      multImg.src = is50XEvent ? "assets/50x.png" : "assets/30x.png";
-      multImg.alt = is50XEvent ? "50X Boost" : "30X Boost";
+      multImg.src = is50XEvent ? "assets/50x.png" : "assets/20x.png";
+      multImg.alt = is50XEvent ? "50X Boost" : "20X Boost";
     }
     // Keep hidden mult-label in sync for accessibility / fallback
     const multLabel = el("mult-label");
     if (multLabel) {
-      multLabel.textContent = is50XEvent ? "50X" : "30X";
+      multLabel.textContent = is50XEvent ? "50X" : "20X";
     }
 
     if (multBtn) {
@@ -246,7 +258,7 @@ const Multiplier = (() => {
     if (isBoosted) {
       const remainingMs = state.boostExpiry - now;
       // AUTOMATIC UPGRADE: If event is active, force active multiplier to 50X!
-      const baseMult = is50XEvent ? 50 : (state.boostMultiplier || 30);
+      const baseMult = is50XEvent ? 50 : (Number(state.boostMultiplier) === 50 ? 50 : 20);
       const plotCount = state.plots ? Object.keys(state.plots).length : 0;
       const tierFactor = getTierFactor(plotCount);
       const effectiveMult = Math.round(baseMult * tierFactor);
@@ -270,7 +282,7 @@ const Multiplier = (() => {
 
       if (timerBadge) {
         const icon = baseMult === 50 ? "🔥" : "⚡";
-        const tierLabel = tierFactor < 1.0 ? ` (${tierFactor === 0.67 ? '20' : tierFactor === 0.5 ? '15' : tierFactor === 0.4 ? '12' : tierFactor === 0.3 ? '9' : tierFactor === 0.2 ? '6' : '2'}X)` : '';
+        const tierLabel = tierFactor < 1.0 ? ` (${Math.round(20 * tierFactor)}X)` : '';
         timerBadge.innerHTML = `${icon} ${effectiveMult}X BOOST${tierLabel} <span id="boost-countdown">${timerStr}</span>`;
       }
     } else {
@@ -317,13 +329,13 @@ const Multiplier = (() => {
     if (multBtn) {
       multBtn.addEventListener("click", () => {
         const is50X = is50XActive();
-        const baseMult = is50X ? 50 : 30;
+        const baseMult = is50X ? 50 : 20;
         const state = Store.get();
         const plotCount = state.plots ? Object.keys(state.plots).length : 0;
         const tierFactor = getTierFactor(plotCount);
         const effectiveMult = Math.round(baseMult * tierFactor);
         // Modal shows the REAL effective multiplier (with whale tier collapse)
-        el("booster-modal-title").textContent = is50X ? "🔥 Activate 50X Super Boost" : "Activate 30X Boost";
+        el("booster-modal-title").textContent = is50X ? "🔥 Activate 50X Super Boost" : "Activate 20X Boost";
         el("modal-mult-rate").textContent = `${effectiveMult}X Income`;
         document.getElementById("booster-modal")?.classList.remove("hidden");
       });
@@ -332,18 +344,26 @@ const Multiplier = (() => {
     if (activateBoostBtn) {
       activateBoostBtn.addEventListener("click", () => {
         const state = Store.get();
-        activateBoost(state).then((activeMult) => {
-          if (!activeMult) {
-            showToast("⚠️ Boost could not be verified by the server.", 3500);
+        activateBoost(state).then((res) => {
+          if (!res || !res.ok) {
+            const why = res && res.reason;
+            showToast(
+              why === "insufficient_eb"
+                ? "⚠️ Not enough EB — activating a boost costs 2 EB."
+                : why === "offline"
+                  ? "⚠️ Server connection required to activate a boost."
+                  : "⚠️ Boost could not be verified by the server.", 4000);
             return;
           }
+        const activeMult = res.mult;
         document.getElementById("booster-modal")?.classList.add("hidden");
         updateTopbar();
         const icon = activeMult === 50 ? "🔥" : "⚡";
         const plotCount = state.plots ? Object.keys(state.plots).length : 0;
         const tierFactor = getTierFactor(plotCount);
         const effectiveMult = Math.round(activeMult * tierFactor);
-        showToast(`${icon} ${effectiveMult}X Multiplier Activated! (+1 Hr)`);
+        const costNote = res.costEb ? ` · −${res.costEb} EB` : "";
+        showToast(`${icon} ${effectiveMult}X Multiplier Activated! (+1 Hr${costNote})`);
         });
       });
     }

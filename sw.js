@@ -1,5 +1,5 @@
 // Bump this version string whenever you deploy an update!
-const CACHE_NAME = 'elden-EARTH-v29.37';
+const CACHE_NAME = 'elden-EARTH-v29.39';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -41,8 +41,8 @@ const ASSETS_TO_CACHE = [
     './assets/diamond-spawn.png',
     './assets/ruler.png',
     './assets/pool.png',
-    './assets/30X.png',
-    './assets/50X.png',
+    './assets/20x.png',
+    './assets/50x.png',
     './assets/2eb-boost.png',
     './assets/rickroll.mp4',
     './assets/models/RedMushroom.glb'

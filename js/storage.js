@@ -1203,7 +1203,7 @@ let lastConflictCheck = {};
       // 🍀 Lucky plots (🍀) earn ×1.1 their rarity rate.
       rate += CONFIG.plotRate(rKey, p.lucky === true);
     }
-    // Apply 30X/50X boost if active (delegated to Multiplier module)
+    // Apply 20X/50X boost if active (delegated to Multiplier module)
     if (typeof Multiplier !== "undefined") {
       rate = Multiplier.applyMultiplier(rate, state);
     }

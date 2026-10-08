@@ -211,9 +211,9 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.44b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.45b</span>
         </div>
-        <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 30X BOOST <span id="boost-countdown">00:00:00</span></div>
+        <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
       <div class="hero-balance-value" id="stat-cash">
         <span class="cash-dollar">$</span><span class="cash-point">.</span><span class="cash-decimal">000000000000000</span>
@@ -334,11 +334,11 @@
       <span class="side-hud-subtext">+2 EB</span>
     </button>
 
-    <!-- 30X/50X Multiplier Button (moved into stack) -->
+    <!-- 20X/50X Multiplier Button (moved into stack) -->
     <button id="multiplier-btn" class="side-hud-btn multiplier-btn-stack" aria-label="Multiplier Boost">
       <div class="side-hud-card custom-hud-card mult-card">
-        <img id="mult-img" src="assets/30x.png" alt="30X Boost" class="custom-hud-img">
-        <span class="mult-tag hidden" id="mult-label">30X</span>
+        <img id="mult-img" src="assets/20x.png" alt="20X Boost" class="custom-hud-img">
+        <span class="mult-tag hidden" id="mult-label">20X</span>
       </div>
       <span class="side-hud-subtext">BOOST</span>
     </button>
@@ -870,7 +870,7 @@
       <div class="guide-card">
         <div class="guide-card-icon">⚡</div>
         <div class="guide-card-text">
-          <strong>5. Stack 30X &amp; 50X Boosts</strong>
+          <strong>5. Stack 20X &amp; 50X Boosts</strong>
           <span>Tap the glowing boost button to bank up to 6 hours of supercharged rent. During 50X events, boosts auto-upgrade to 50X!</span>
         </div>
       </div>
@@ -911,7 +911,7 @@
         <div class="guide-card-icon">🎁</div>
         <div class="guide-card-text">
           <strong>10. Daily Rewards, Quests &amp; Events</strong>
-          <span>Check the calendar for daily claims, weekly pool rewards, limited-time 30X/50X events, and community challenges.</span>
+          <span>Check the calendar for daily claims, weekly pool rewards, limited-time 20X/50X events, and community challenges.</span>
         </div>
       </div>
 
@@ -1010,12 +1010,13 @@
   <div class="modal-card booster-card">
     <button class="close-btn" data-close="booster-modal">✕</button>
     <div class="booster-icon-wrap">⚡</div>
-    <h2 id="booster-modal-title">Activate 30X Boost</h2>
+    <h2 id="booster-modal-title">Activate 20X Boost</h2>
     <p class="modal-sub">Supercharge your realm's income for 1 hour!</p>
     <div class="booster-info-box">
-      <div>Multiplier: <strong id="modal-mult-rate" class="gold-text">30X Income</strong></div>
+      <div>Multiplier: <strong id="modal-mult-rate" class="gold-text">20X Income</strong></div>
       <div>Duration: <strong>+1 Hour</strong></div>
       <div>Max Bank: <strong>Up to 6 Hours</strong></div>
+      <div>Cost: <strong id="modal-mult-cost" class="gold-text">2 EB</strong></div>
     </div>
 
     <!-- Accessibility 50X Screen Shake Toggle -->
@@ -1974,10 +1975,10 @@
               <button id="cashout-withdraw-increase" class="cashout-arrow-btn" aria-label="Increase">▶</button>
             </div>
             <p class="cashout-withdraw-hint" id="cashout-withdraw-hint">Available: <strong id="cashout-available">$0.00</strong> · Minimum $5.00</p>
-          <p class="cashout-weekly-limit" id="cashout-weekly-limit">Weekly: $15.00 / $15.00 available</p>
+          <p class="cashout-weekly-limit" id="cashout-weekly-limit">Weekly: $5.00 / $5.00 available</p>
           <p class="cashout-cooldown" id="cashout-cooldown">No payout cooldown.</p>
           <button id="cashout-submit-withdrawal" class="cashout-submit-btn" disabled>Submit Withdrawal Request</button>
-          <p class="cashout-warning">⚠️ Requests are reviewed manually. Cash is locked upon submission. Approval may take up to 7 business days. Weekly limit: $15.00. 48h cooldown after payout.</p>
+          <p class="cashout-warning">⚠️ Requests are reviewed manually. Cash is locked upon submission. Approval may take up to 7 business days. Weekly limit: $5.00. 48h cooldown after payout.</p>
         </div>
         </div>
         <!-- Sits OUTSIDE the form: hiding the form must never hide its own trigger -->
