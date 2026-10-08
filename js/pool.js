@@ -46,7 +46,14 @@ const WeeklyPool = (() => {
     return result.getTime();
   }
 
-  // Calculate Total Global Lifetime Rent & Global $/Sec Across All Players
+  // One week in seconds — the server's computeWeeklyPool() (functions/index.js)
+  // projects a week of rent the same way, so the offline estimate and the
+  // server headline are derived identically instead of drifting apart.
+  const SECONDS_IN_WEEK = 604800;
+
+  // Calculate Total Global Rate & projected weekly rent across all players.
+  // Rates come from CONFIG.plotRate() (→ PLOT_RARITIES). They used to be
+  // hardcoded here, and the 2026-10-08 rebalance left this table 2x stale.
   async function calculateGlobalPool() {
     if (typeof Leaderboard === "undefined" || !Leaderboard.fetchRankings) {
       return { totalGlobalRent: 1.0, weeklyPool: 0.05, globalRateSec: 0, sortedTop10: [] };
@@ -55,53 +62,24 @@ const WeeklyPool = (() => {
     const data = await Leaderboard.fetchRankings();
     const players = data?.players || [];
 
-    let totalGlobalRent = 0;
     let globalRateSec = 0;
-
-    // Fast Rarity Rate Lookup Table
-    const RATE_MAP = {
-      common: 0.0000000008,
-      rare: 0.000000002428,
-      epic: 0.000000007365,
-      legendary: 0.000000022330
-    };
-    // Calculate global lifetime rent AND global velocity
-    // --- 14-Day (2-Week) Fiscal Period Reset Engine ---
-    const now = Date.now();
-    const TWO_WEEKS_MS = 14 * 24 * 3600 * 1000; // 14-Day Period
-    const MAX_PERIOD_SEC = 14 * 86400;           // Hard cap: Cannot exceed 14 days!
-    const PERIOD_ANCHOR_MS = 1704067200000;      // Monday, Jan 1, 2024 00:00:00 UTC (In the PAST)
-
-    const periodElapsed = Math.abs((now - PERIOD_ANCHOR_MS) % TWO_WEEKS_MS);
-    const periodStartTime = now - periodElapsed;
-
-    // Calculate rent generated ONLY during this active 14-day fiscal period
     players.forEach(p => {
       if (p.plots) {
         for (const tid in p.plots) {
           const plot = p.plots[tid];
           const rKey = plot.rarity?.key || plot.rarity || "common";
           // 🍀 Lucky plots accrue ×1.1 into the global rent pool.
-          const rate = CONFIG.plotRate(rKey, plot.lucky === true);
-
-          // Safe timestamp check
-          let plotClaimedTime = Number(plot.claimedAt) || periodStartTime;
-          if (plotClaimedTime > 0 && plotClaimedTime < 1e11) plotClaimedTime *= 1000; // convert sec to ms
-          
-          const activeSince = Math.max(plotClaimedTime, periodStartTime);
-          // Hard-cap at MAX_PERIOD_SEC so it can NEVER calculate years of rent
-          const periodAgeSec = Math.min(MAX_PERIOD_SEC, Math.max(0, (now - activeSince) / 1000));
-
-          totalGlobalRent += (periodAgeSec * rate);
-          globalRateSec += rate;
+          globalRateSec += CONFIG.plotRate(rKey, plot.lucky === true);
         }
       } else if (p.plotsCount) {
-        const fallbackRate = p.plotsCount * 0.000000007365;
-        const periodSec = Math.min(MAX_PERIOD_SEC, Math.max(0, (now - periodStartTime) / 1000));
-        totalGlobalRent += (periodSec * fallbackRate);
-        globalRateSec += fallbackRate;
+        // No save doc loaded for this player (the leaderboard query caps at 50):
+        // assume an epic plot, which is what this fallback always assumed.
+        globalRateSec += p.plotsCount * CONFIG.plotRate("epic");
       }
     });
+
+    // A projection, not an accrued total: one week of rent at the current rate.
+    const totalGlobalRent = globalRateSec * SECONDS_IN_WEEK;
 
     let weeklyPool = totalGlobalRent * 0.01;
 
@@ -326,20 +304,26 @@ const WeeklyPool = (() => {
     return n.toFixed(6);
   }
 
-  function renderStats({ totalGlobalRent, weeklyPool, globalRateSec, frozenAt, settled }) {
+  // `liveRent`/`liveRate` drive the headline — they track the current economy.
+  // `pool`/`frozenRent`/`frozenAt` come from the frozen snapshot and are what
+  // actually gets paid, so the basis note reports both instead of implying the
+  // frozen pool still equals 1% of the live projection.
+  function renderStats({ liveRent, liveRate, pool, frozenRent, frozenAt, settled }) {
     const rentEl = document.getElementById("modal-global-rent-val");
     const poolEl = document.getElementById("modal-weekly-pool-val");
     const rateEl = document.getElementById("modal-global-rate-val");
     const basisEl = document.getElementById("modal-pool-basis");
-    if (rentEl) rentEl.textContent = `$${fmtCash(totalGlobalRent)}`;
-    if (poolEl) poolEl.textContent = `$${fmtCash(weeklyPool)}`;
-    if (rateEl) rateEl.textContent = `+$${Number(globalRateSec || 0).toFixed(10)} / sec`;
+    if (rentEl) rentEl.textContent = `$${fmtCash(liveRent)}`;
+    if (poolEl) poolEl.textContent = `$${fmtCash(pool)}`;
+    if (rateEl) rateEl.textContent = `+$${Number(liveRate || 0).toFixed(10)} / sec`;
     if (basisEl) {
       // Make the $0.05 floor visible instead of silently reporting "1%".
-      const onePercent = (Number(totalGlobalRent) || 0) * 0.01;
-      let text = onePercent < 0.05
-        ? `1% of weekly rent = $${fmtCash(onePercent)} → minimum floor $0.05 is paying instead.`
-        : `1% of weekly rent = $${fmtCash(onePercent)}.`;
+      const base = Number(frozenRent == null ? liveRent : frozenRent) || 0;
+      const floorApplied = base * 0.01 < 0.05;
+      let text = `Live 1% = $${fmtCash((Number(liveRent) || 0) * 0.01)}. This week's pool = `
+        + (floorApplied
+          ? `the $0.05 minimum floor (1% of $${fmtCash(base)} rent is below it).`
+          : `1% of $${fmtCash(base)} rent.`);
       if (frozenAt) text += ` Frozen ${fmtUTC(frozenAt)}${settled ? " · paid automatically." : "."}`;
       basisEl.textContent = text;
     }
@@ -411,9 +395,10 @@ const WeeklyPool = (() => {
         const info = await ServerAntiCheat.getWeeklyPoolInfo();
         if (info && info.ok) {
           renderStats({
-            totalGlobalRent: info.totalGlobalRent,
-            weeklyPool: info.weeklyPool,
-            globalRateSec: info.globalRateSec,
+            liveRent: info.liveTotalGlobalRent ?? info.totalGlobalRent,
+            liveRate: info.liveGlobalRateSec ?? info.globalRateSec,
+            pool: info.weeklyPool,
+            frozenRent: info.totalGlobalRent,
             frozenAt: info.frozenAt,
             settled: info.settled,
           });
@@ -428,7 +413,12 @@ const WeeklyPool = (() => {
 
     // Offline / pre-auth fallback: local estimate from the leaderboard.
     const { totalGlobalRent, weeklyPool, globalRateSec, sortedTop10 } = await calculateGlobalPool();
-    renderStats({ totalGlobalRent, weeklyPool, globalRateSec });
+    renderStats({
+      liveRent: totalGlobalRent,
+      liveRate: globalRateSec,
+      pool: weeklyPool,
+      frozenRent: totalGlobalRent,
+    });
     renderTop10(
       (sortedTop10 || []).slice(0, 10).map((p, i) => {
         const sharePct = sharePctForRank(i + 1);
