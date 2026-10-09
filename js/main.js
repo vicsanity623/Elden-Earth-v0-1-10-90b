@@ -4162,6 +4162,9 @@
     cashoutConvertAmount = 1;
     updateCashoutDisplay();
     el("cashout-page").classList.remove("hidden");
+    // Refresh the treasury gate on the way in so the lock and the progress bar
+    // are never showing an hour-old figure.
+    if (typeof Cashout !== "undefined" && Cashout.refreshAfterSync) Cashout.refreshAfterSync();
   }
 
   function closeCashoutPage() {

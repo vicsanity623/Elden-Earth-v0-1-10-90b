@@ -422,6 +422,14 @@ const WeeklyPool = (() => {
 
     updateCountdownTicker();
 
+    // Treasury gate progress — the same bar the cashout screen shows, so players
+    // see the goal wherever they already look weekly. Rendered async because
+    // Treasury caches the callable response for a minute.
+    if (typeof Treasury !== "undefined") {
+      const bar = document.getElementById("pool-treasury-bar");
+      Treasury.getStatus().then((s) => Treasury.renderBar(bar, s));
+    }
+
     const state = Store.get();
     const myUid = state?.player?.id;
 

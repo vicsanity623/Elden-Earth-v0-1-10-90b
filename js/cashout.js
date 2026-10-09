@@ -42,6 +42,19 @@ const Cashout = (() => {
     return state?.withdrawPending === true;
   }
 
+  // --- Treasury gate (server-authoritative) ---
+  // Display only. submitWithdrawalRequest re-checks the gate and the monthly
+  // payout budget server-side, so a player who re-enables this button in dev
+  // tools still gets refused.
+  let treasuryStatus = null;
+
+  async function refreshTreasury() {
+    if (typeof Treasury === "undefined") return null;
+    treasuryStatus = await Treasury.getStatus();
+    Treasury.renderBar(el("cashout-treasury-bar"), treasuryStatus);
+    return treasuryStatus;
+  }
+
   function updateUI() {
     const cash = getCashBalance();
     const age = getAccountAgeDays();
@@ -68,7 +81,13 @@ const Cashout = (() => {
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail);
     const amountOk = withdrawAmount >= minWithdraw && withdrawAmount <= Math.min(cash, maxWithdraw);
     const noPending = !pending;
-    const allOk = ageOk && balanceOk && emailOk && amountOk && noPending;
+    // Treasury gate: null/unknown is treated as locked. Fail closed — the
+    // server refuses anyway, and an optimistic button just leads to a rejection.
+    const treasuryOk = !treasuryStatus || !!treasuryStatus.unlocked;
+    const budgetOk = !treasuryStatus
+      || !(Number(treasuryStatus.monthlyPayoutBudgetUsd) > 0)
+      || withdrawAmount <= (Number(treasuryStatus.budgetRemainingUsd) || 0);
+    const allOk = ageOk && balanceOk && emailOk && amountOk && noPending && treasuryOk && budgetOk;
 
     // Weekly limit & cooldown info
     const weeklyPaid = weeklyData?.paid || 0;
@@ -80,7 +99,7 @@ const Cashout = (() => {
     const cooldownHoursLeft = cooldownActive ? Math.ceil((48 * 60 * 60 * 1000 - (Date.now() - weeklyData.lastPaidAt)) / (60 * 60 * 1000)) : 0;
 
     // Show/hide form
-    if (cash >= minWithdraw && !pending) {
+    if (cash >= minWithdraw && !pending && treasuryOk && budgetOk) {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = false;
@@ -91,7 +110,11 @@ const Cashout = (() => {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = true;
-        if (pending) {
+        if (!treasuryOk) {
+          openBtn2.textContent = "Cashouts Locked — Treasury Goal";
+        } else if (!budgetOk) {
+          openBtn2.textContent = "Monthly Payout Budget Spent";
+        } else if (pending) {
           openBtn2.textContent = "Request Pending Review";
         } else if (cash < minWithdraw) {
           openBtn2.textContent = `Need $${minWithdraw.toFixed(2)} to withdraw`;
@@ -109,7 +132,11 @@ const Cashout = (() => {
 
     // Update hint text
     if (hintEl) {
-      if (pending) {
+      if (!treasuryOk) {
+        hintEl.innerHTML = `🏛️ <strong>Cashouts are locked</strong> until the Realm's ad revenue covers the payout budget. Track the goal on this screen and in the Weekly Treasury.`;
+      } else if (!budgetOk) {
+        hintEl.innerHTML = `🏛️ <strong>This month's payout budget is spent.</strong> Cashouts reopen next month.`;
+      } else if (pending) {
         hintEl.innerHTML = `⏳ <strong>Request pending review.</strong> You cannot submit another until this is processed.`;
       } else if (!ageOk) {
         hintEl.innerHTML = `🔒 <strong>Account must be 30+ days old.</strong> Current: ${getAccountAgeDays()} days.`;
@@ -192,6 +219,10 @@ const Cashout = (() => {
       toast("You already have a pending request.", 3000);
       return;
     }
+    if (treasuryStatus && !treasuryStatus.unlocked) {
+      toast("🏛️ Cashouts are locked until the Realm's revenue goal is met.", 4000);
+      return;
+    }
     if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
       toast("⚠️ Server connection required.", 3500);
       return;
@@ -216,6 +247,8 @@ const Cashout = (() => {
           weekly_limit_exceeded: `Weekly limit reached ($${result.weeklyPaid?.toFixed(2) || 0}/$${WEEKLY_LIMIT_USD.toFixed(2)}). Try next week.`,
           cooldown_active: `Cooldown active: ${result.hoursLeft}h until next withdrawal.`,
           region_restricted: "Withdrawals not available in your region.",
+          treasury_locked: `🏛️ Cashouts are locked — the Realm has earned ${fmtCash(result.revenue)} of the ${fmtCash(result.threshold)} revenue goal.`,
+          monthly_budget_exhausted: `🏛️ This month's payout budget is spent (${fmtCash(result.monthPaid)} of ${fmtCash(result.budget)}). Try next month.`,
         };
         toast(msgs[result?.reason] || `Failed: ${result?.reason || "unknown"}`, 4000);
         return;
@@ -257,12 +290,19 @@ const Cashout = (() => {
     bind();
     // Initial UI state
     updateUI();
+    // The treasury gate is server state, so fetch it once up front — otherwise
+    // the lock is wrong on the very first render.
+    refreshTreasury().then(() => updateUI());
   }
 
   // Expose for main.js to call on cash balance changes
   return {
     init,
     updateUI,
-    refreshAfterSync() { updateUI(); }
+    refreshTreasury,
+    refreshAfterSync() {
+      updateUI();
+      refreshTreasury().then(() => updateUI());
+    }
   };
 })();

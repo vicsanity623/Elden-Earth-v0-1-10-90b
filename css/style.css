@@ -9040,6 +9040,80 @@ body.birds-eye-mode .top-hud-row {
   line-height: 1.5;
 }
 
+/* ================= TREASURY GATE PROGRESS BAR =================
+   Shared by the cashout screen and the weekly pool modal (js/treasury.js
+   renders both from the same markup contract), so the two surfaces can never
+   show different numbers. */
+.treasury-bar {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(13, 20, 32, 0.75);
+}
+
+.treasury-bar.is-unlocked {
+  border-color: rgba(46, 204, 113, 0.45);
+  background: rgba(46, 204, 113, 0.08);
+}
+
+.treasury-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.treasury-bar-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--gold-hi);
+}
+
+.treasury-bar.is-unlocked .treasury-bar-label {
+  color: #2ecc71;
+}
+
+.treasury-bar-pct {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--teal);
+}
+
+.treasury-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.treasury-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-hi));
+  transition: width 0.4s ease;
+}
+
+.treasury-bar.is-unlocked .treasury-bar-fill {
+  background: linear-gradient(90deg, #1e8449, #2ecc71);
+}
+
+.treasury-bar-caption {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.treasury-bar.is-unlocked .treasury-bar-caption {
+  color: var(--parchment);
+}
+
 .cashout-redeem-btn:not(:disabled) {
   cursor: pointer;
   opacity: 1;
