@@ -7,6 +7,11 @@ const WeeklyPool = (() => {
   let rewardModal = null;
   let pendingRewardAmount = 0;
 
+  // Last server snapshot for the "rent earned this week" ticker — extrapolated
+  // every second in updateCountdownTicker so the figure visibly climbs even
+  // between server refreshes.
+  let earnTick = { earnedAt: 0, rateAt: 0, fetchedAt: 0 };
+
   // Calculates ISO Week ID: "2025-W36" (Ensures exactly 1 claim per week)
   function getISOWeekId(date = new Date()) {
     // Must match the server's isoWeekId() exactly. This used to build the date
@@ -56,7 +61,7 @@ const WeeklyPool = (() => {
   // hardcoded here, and the 2026-10-08 rebalance left this table 2x stale.
   async function calculateGlobalPool() {
     if (typeof Leaderboard === "undefined" || !Leaderboard.fetchRankings) {
-      return { totalGlobalRent: 1.0, weeklyPool: 0.05, globalRateSec: 0, sortedTop10: [] };
+      return { totalGlobalRent: 1.0, earnedRent: 0, weeklyPool: 0.05, globalRateSec: 0, sortedTop10: [] };
     }
 
     const data = await Leaderboard.fetchRankings();
@@ -81,11 +86,19 @@ const WeeklyPool = (() => {
     // A projection, not an accrued total: one week of rent at the current rate.
     const totalGlobalRent = globalRateSec * SECONDS_IN_WEEK;
 
-    let weeklyPool = totalGlobalRent * 0.01;
+    // Rent earned so far this week at this rate — the visible ticker. Lands
+    // exactly on the projection at the Monday deadline (elapsed = one week).
+    const remainingMs = Math.max(0, getNextMondayUTCTimestamp() - Date.now());
+    const weekElapsedSec = Math.min(SECONDS_IN_WEEK, Math.max(0, (SECONDS_IN_WEEK * 1000 - remainingMs) / 1000));
+    const earnedRent = globalRateSec * weekElapsedSec;
+
+    // Pool = 1% of the rent earned this week (grows with the ticker).
+    let weeklyPool = earnedRent * 0.01;
 
     // 🛡️ GUARANTEED TREASURY SEED:
     // Ensure the pool never drops below a minimum threshold ($0.05)
     // so top landlords always receive a tangible cash reward!
+    // The floor lifts once weekly rent passes $5.00 (1% of $5.00 = $0.05).
     const MINIMUM_WEEKLY_TREASURY = 0.05;
     if (weeklyPool < MINIMUM_WEEKLY_TREASURY) {
       weeklyPool = MINIMUM_WEEKLY_TREASURY;
@@ -98,7 +111,7 @@ const WeeklyPool = (() => {
       return (Number(b.lifetimeRent || b.cash) || 0) - (Number(a.lifetimeRent || a.cash) || 0);
     }).slice(0, 10);
 
-    return { totalGlobalRent, weeklyPool, globalRateSec, sortedTop10 };
+    return { totalGlobalRent, earnedRent, weeklyPool, globalRateSec, sortedTop10 };
   }
 
   // "YYYY-MM-DD HH:MM UTC" for freeze/settlement timestamps.
@@ -286,7 +299,18 @@ const WeeklyPool = (() => {
         cachedModalCountdown.textContent = `${String(days).padStart(2, "0")}D : ${String(hrs).padStart(2, "0")}H : ${String(mins).padStart(2, "0")}M : ${String(secs).padStart(2, "0")}s`;
       }
 
-      // 3. Real-Time 50X Super Boost Countdown (Delegated to Multiplier module)
+      // 3. "Rent earned this week" ticker — extrapolate the fetched snapshot at
+      // the live earn rate so the figure visibly climbs every second, and the
+      // pool (1% of it) moves with it past the $0.05 floor.
+      if (earnTick.fetchedAt) {
+        const earnedNow = earnTick.earnedAt + earnTick.rateAt * ((now - earnTick.fetchedAt) / 1000);
+        const earnedEl = document.getElementById("modal-rent-earned-val");
+        const poolValEl = document.getElementById("modal-weekly-pool-val");
+        if (earnedEl) earnedEl.textContent = `$${earnedNow.toFixed(6)}`;
+        if (poolValEl) poolValEl.textContent = `$${fmtCash(Math.max(0.05, earnedNow * 0.01))}`;
+      }
+
+      // 4. Real-Time 50X Super Boost Countdown (Delegated to Multiplier module)
       const timer50xEl = document.getElementById("modal-50x-countdown-timer");
       const label50xEl = document.getElementById("modal-50x-label");
       const card50xEl = document.querySelector(".event-50x-countdown-card");
@@ -314,31 +338,29 @@ const WeeklyPool = (() => {
     return n.toFixed(6);
   }
 
-  // `liveRent`/`liveRate` drive the headline — they track the current economy.
-  // The running week is never frozen before its Monday deadline: the pool and
-  // the standings keep accumulating until the boundary freezes and pays them.
-  function renderStats({ liveRent, liveRate, pool, frozenRent, frozenAt, settled }) {
+  // Hero stats for the running week. `earnedRent` is the live accumulation
+  // (rent earned this week so far — ticks up every second), `projectedRent` is
+  // one week at the current rate, and `pool` is 1% of the earned rent (floored
+  // at $0.05 — the floor lifts once weekly rent passes $5.00).
+  function renderStats({ earnedRent, projectedRent, liveRate, pool }) {
+    const earnedEl = document.getElementById("modal-rent-earned-val");
     const rentEl = document.getElementById("modal-global-rent-val");
     const poolEl = document.getElementById("modal-weekly-pool-val");
     const rateEl = document.getElementById("modal-global-rate-val");
     const basisEl = document.getElementById("modal-pool-basis");
-    if (rentEl) rentEl.textContent = `$${fmtCash(liveRent)}`;
+    if (earnedEl) earnedEl.textContent = `$${(Number(earnedRent) || 0).toFixed(6)}`;
+    if (rentEl) rentEl.textContent = `$${fmtCash(projectedRent)}`;
     if (poolEl) poolEl.textContent = `$${fmtCash(pool)}`;
     if (rateEl) rateEl.textContent = `+$${Number(liveRate || 0).toFixed(10)} / sec`;
     if (basisEl) {
       // Make the $0.05 floor visible instead of silently reporting "1%".
-      const base = Number(frozenRent == null ? liveRent : frozenRent) || 0;
-      const floorApplied = base * 0.01 < 0.05;
-      let text = `Live 1% = $${fmtCash((Number(liveRent) || 0) * 0.01)}. This week's pool = `
+      const onePct = (Number(earnedRent) || 0) * 0.01;
+      const floorApplied = onePct < 0.05;
+      basisEl.textContent = `Pool = 1% of the rent earned this week (min $0.05). 1% of $${fmtCash(earnedRent)} earned so far = $${fmtCash(onePct)}`
         + (floorApplied
-          ? `the $0.05 minimum floor (1% of $${fmtCash(base)} rent is below it).`
-          : `1% of $${fmtCash(base)} rent.`);
-      if (frozenAt) {
-        text += ` Frozen ${fmtUTC(frozenAt)}${settled ? " · paid automatically." : "."}`;
-      } else {
-        text += ` Rent accumulates all week — freezes and pays automatically at Monday 00:00 UTC.`;
-      }
-      basisEl.textContent = text;
+          ? ` → the $0.05 floor applies until weekly rent passes $5.00.`
+          : ` — above the floor.`)
+        + ` Freezes and pays automatically at Monday 00:00 UTC.`;
     }
   }
 
@@ -411,12 +433,18 @@ const WeeklyPool = (() => {
         const info = await ServerAntiCheat.getWeeklyPoolInfo();
         if (info && info.ok) {
           // The running week is live (never frozen before its deadline):
-          // headline + pool + Top 10 all accumulate until Monday 00:00 UTC.
+          // earned-so-far + pool + Top 10 all accumulate until Monday 00:00 UTC.
           renderStats({
-            liveRent: info.liveTotalGlobalRent ?? info.totalGlobalRent,
+            earnedRent: info.rentEarnedWeekToDate ?? 0,
+            projectedRent: info.liveTotalGlobalRent ?? info.totalGlobalRent,
             liveRate: info.liveGlobalRateSec ?? info.globalRateSec,
             pool: info.weeklyPool,
           });
+          earnTick = {
+            earnedAt: Number(info.rentEarnedWeekToDate) || 0,
+            rateAt: Number(info.liveGlobalRateSec) || 0,
+            fetchedAt: Date.now(),
+          };
           renderTop10(info.top10, myUid);
           renderStanding(info, myUid);
           return;
@@ -427,13 +455,14 @@ const WeeklyPool = (() => {
     }
 
     // Offline / pre-auth fallback: local estimate from the leaderboard.
-    const { totalGlobalRent, weeklyPool, globalRateSec, sortedTop10 } = await calculateGlobalPool();
+    const { totalGlobalRent, earnedRent, weeklyPool, globalRateSec, sortedTop10 } = await calculateGlobalPool();
     renderStats({
-      liveRent: totalGlobalRent,
+      earnedRent,
+      projectedRent: totalGlobalRent,
       liveRate: globalRateSec,
       pool: weeklyPool,
-      frozenRent: totalGlobalRent,
     });
+    earnTick = { earnedAt: earnedRent, rateAt: globalRateSec, fetchedAt: Date.now() };
     renderTop10(
       (sortedTop10 || []).slice(0, 10).map((p, i) => {
         const sharePct = sharePctForRank(i + 1);
