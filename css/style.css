@@ -4507,6 +4507,9 @@ body.buy-mode #treasury-ad-container {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  /* Android keyboard: js/chat.js pads the drawer above the soft keyboard
+     (--kb-inset) so the input row is never hidden behind it. */
+  padding-bottom: var(--kb-inset, 0px);
 }
 
 .chat-drawer-overlay {
@@ -4521,6 +4524,7 @@ body.buy-mode #treasury-ad-container {
   width: 100%;
   max-width: 480px;
   height: 62vh;
+  max-height: 100%;
   margin: 0 auto;
   background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%, rgba(13, 20, 32, 0.96);
   border: none;

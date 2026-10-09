@@ -1,27 +1,32 @@
 // ============================================================
 // Elden Earth — Profanity Filter
-// Shared between client and server for name/chat validation
+// Shared between client and server for name/chat validation.
+//
+// Canonical "dark words" list — mild words (ass, hell, shit, damn, crap,
+// jerk…) are deliberately NOT listed. functions/index.js mirrors this file
+// EXACTLY (chatfiltertest.js enforces both lists stay identical).
 // ============================================================
 
 const ProfanityFilter = (() => {
-  // Comprehensive profanity list (lowercase)
+  // Dark profanity / slurs only (lowercase, deduped)
   const PROFANITY_LIST = [
     // Sexual/Anatomical
     "anal", "anus", "bitch", "boob", "boobs",
     "cock", "cunt", "dick", "dickhead", "dildo", "fag", "faggot",
+    "fuck", "fucked", "fucker", "fuckers", "fucking", "fuckface", "fuckhead",
+    "motherfucker", "motherfuckers",
     "pussy", "rape", "rapist", "sex", "sexual", "slut", "whore",
-    
+
     // Racial/Ethnic Slurs
     "nigger", "nigga", "nigro", "negro", "kike", "spic", "wetback",
     "chink", "gook", "towelhead", "cracker", "honky",
-    
+
     // Other Offensive
-    "bullshit", "dick", "douche", "fag",
-    "faggot", "prick", "pussy", "slut", "whore",
-    
+    "douche", "prick",
+
     // Violence/Abuse
-    "abuse", "kill", "murder", "rape", "rapist", "suicide",
-    
+    "abuse", "kill", "murder", "suicide",
+
     // Drugs
     "cocaine", "crack", "heroin", "meth"
   ];
@@ -37,47 +42,50 @@ const ProfanityFilter = (() => {
     return text.toLowerCase().split('').map(char => LEET_MAP[char] || char).join('');
   }
 
+  // Short, high-collision tokens (kill, meth, rape, sex…) need word boundaries
+  // or they flag harmless words: "bypass" (ass), "grape" (rape), "method"
+  // (meth), "class", "grass", "analysis", "hello" (hell). Longer, specific
+  // tokens keep substring matching so compounds are still caught.
+  function profanityPattern(word, flags) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(word.length <= 6 ? `\\b${escaped}\\b` : escaped, flags);
+  }
+
   // Check if text contains profanity
   function containsProfanity(text) {
     if (!text || typeof text !== 'string') return false;
-    
+
     const normalized = text.toLowerCase().trim();
     const decoded = decodeLeetspeak(normalized);
-    
-    // Check direct match
+
     for (const word of PROFANITY_LIST) {
-      if (normalized.includes(word) || decoded.includes(word)) {
-        return true;
-      }
+      const re = profanityPattern(word, 'i');
+      if (re.test(normalized) || re.test(decoded)) return true;
     }
-    
+
     return false;
   }
 
   // Filter profanity from text (replace with ****)
   function filterProfanity(text) {
     if (!text || typeof text !== 'string') return text;
-    
+
     let filtered = text;
     const normalized = text.toLowerCase();
     const decoded = decodeLeetspeak(normalized);
-    
+
     for (const word of PROFANITY_LIST) {
-      // Replace direct matches
-      const regex = new RegExp(word, 'gi');
-      filtered = filtered.replace(regex, '****');
-      
-      // Replace leetspeak variants (simplified)
-      // This is a basic implementation - production would need more sophisticated matching
+      // Replace direct matches (word boundaries for short tokens)
+      filtered = filtered.replace(profanityPattern(word, 'gi'), '****');
     }
-    
+
     return filtered;
   }
 
   // Check if text is entirely profanity (should be blocked entirely)
   function isEntirelyProfanity(text) {
     if (!text || typeof text !== 'string') return false;
-    
+
     const filtered = filterProfanity(text);
     // If after filtering, the text is mostly ****, it's entirely profanity
     const profanityRatio = (filtered.match(/\*\*\*\*/g) || []).length * 4 / text.length;

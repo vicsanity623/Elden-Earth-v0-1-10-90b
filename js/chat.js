@@ -16,18 +16,14 @@ const Chat = (() => {
   const MAX_MESSAGES = 25;
   const messages = [];
 
-  // Basic profanity / slur filter dictionary
-  const BANNED_PATTERNS = [
-    /\bnigg[a|er]s?\b/gi, /\bfag(got)?s?\b/gi, /\bchink\b/gi, /\bkike\b/gi,
-    /\bspic\b/gi, /\bcunt\b/gi, /\bwhore\b/gi, /\bslut\b/gi
-  ];
-
+  // Unified with the shared ProfanityFilter (js/profanity-filter.js) — the
+  // server (functions/index.js) mirrors the same list and matcher. This is
+  // only the offline fallback; online sends go through filterChatMessage.
   function filterProfanity(text) {
-    let clean = text;
-    BANNED_PATTERNS.forEach((regex) => {
-      clean = clean.replace(regex, "***");
-    });
-    return clean;
+    if (typeof ProfanityFilter !== "undefined" && ProfanityFilter.filterProfanity) {
+      return ProfanityFilter.filterProfanity(text);
+    }
+    return text;
   }
 
   function escapeHtml(str) {
@@ -270,10 +266,25 @@ const Chat = (() => {
     }
   }
 
+  // --- Android keyboard handling ---
+  // The APK's MainActivity runs immersive-sticky fullscreen, where Android
+  // ignores adjustResize and the soft keyboard simply overlays the WebView —
+  // which hid the chat input behind the keyboard. Track the visual viewport
+  // and pad the drawer above the keyboard so the input stays visible. (When
+  // adjustResize DOES work, innerHeight shrinks together with the visual
+  // viewport and the inset stays 0 — no double compensation.)
+  function applyKeyboardInset() {
+    if (!drawer) return;
+    const vv = window.visualViewport;
+    const inset = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    drawer.style.setProperty("--kb-inset", `${inset}px`);
+  }
+
   async function open() {
     if (!drawer) return;
     isOpen = true;
     drawer.classList.remove("hidden");
+    applyKeyboardInset();
     
     // Mark all current messages as read in local storage!
     localStorage.setItem("eldenEarth.lastChatRead.v1", Date.now().toString());
@@ -313,6 +324,7 @@ const Chat = (() => {
     if (!drawer) return;
     isOpen = false;
     drawer.classList.add("hidden");
+    drawer.style.setProperty("--kb-inset", "0px");
   }
 
   function init() {
@@ -330,6 +342,18 @@ const Chat = (() => {
     inputEl?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") sendMessage();
     });
+
+    // Keep the input above the Android keyboard (see applyKeyboardInset).
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", applyKeyboardInset);
+      window.visualViewport.addEventListener("scroll", applyKeyboardInset);
+    }
+    inputEl?.addEventListener("focus", () => {
+      applyKeyboardInset();
+      // Let the keyboard animate in, then keep the input visible.
+      setTimeout(() => inputEl.scrollIntoView({ block: "nearest", behavior: "smooth" }), 300);
+    });
+    inputEl?.addEventListener("blur", () => setTimeout(applyKeyboardInset, 200));
 
     // Cache online element & start heartbeat
     onlineCountEl = document.getElementById("chat-online-count");
