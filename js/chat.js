@@ -267,17 +267,35 @@ const Chat = (() => {
   }
 
   // --- Android keyboard handling ---
-  // The APK's MainActivity runs immersive-sticky fullscreen, where Android
-  // ignores adjustResize and the soft keyboard simply overlays the WebView —
-  // which hid the chat input behind the keyboard. Track the visual viewport
-  // and pad the drawer above the keyboard so the input stays visible. (When
-  // adjustResize DOES work, innerHeight shrinks together with the visual
-  // viewport and the inset stays 0 — no double compensation.)
+  // Three layers keep the input visible above the soft keyboard:
+  //   1. viewport meta `interactive-widget=resizes-content` (Chrome/WebView
+  //      108+) resizes the LAYOUT viewport, so fixed bottom UI rises on its own;
+  //   2. the visualViewport inset below (iOS Safari + Androids that report it);
+  //   3. applyKeyboardGuess() for immersive WebViews that never report the
+  //      keyboard at all (the APK runs immersive-sticky fullscreen, where
+  //      Android ignores adjustResize and the IME simply overlays the page).
+  // When a real resize signal exists, innerHeight shrinks with the visual
+  // viewport and the computed inset stays 0 — no double compensation.
   function applyKeyboardInset() {
     if (!drawer) return;
     const vv = window.visualViewport;
-    const inset = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    // +12px margin: keyboards with suggestion strips (Gboard "Suggest strong
+    // password") report slightly less than they actually cover.
+    const inset = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 12 : 0;
     drawer.style.setProperty("--kb-inset", `${inset}px`);
+  }
+
+  // No-signal fallback: on touch devices, if nothing changed shortly after the
+  // input gained focus, assume the on-screen keyboard covers the lower ~42% of
+  // the screen (typical Android IME). Overshooting is safe — the input just
+  // sits a little higher. Desktop (fine pointer) is never affected.
+  function applyKeyboardGuess() {
+    if (!drawer || !inputEl || document.activeElement !== inputEl) return;
+    if (!window.matchMedia || !window.matchMedia("(pointer: coarse)").matches) return;
+    const vv = window.visualViewport;
+    if (vv && window.innerHeight - vv.height > 40) return; // real signal won
+    // 45% + margin covers typical Android IMEs including their suggestion strips.
+    drawer.style.setProperty("--kb-inset", `${Math.round(window.innerHeight * 0.45)}px`);
   }
 
   async function open() {
@@ -348,12 +366,15 @@ const Chat = (() => {
       window.visualViewport.addEventListener("resize", applyKeyboardInset);
       window.visualViewport.addEventListener("scroll", applyKeyboardInset);
     }
+    window.addEventListener("resize", applyKeyboardInset);
     inputEl?.addEventListener("focus", () => {
       applyKeyboardInset();
-      // Let the keyboard animate in, then keep the input visible.
-      setTimeout(() => inputEl.scrollIntoView({ block: "nearest", behavior: "smooth" }), 300);
+      // Let the keyboard animate in; re-check as signals arrive late (or never).
+      setTimeout(applyKeyboardInset, 300);
+      setTimeout(applyKeyboardGuess, 650);
+      setTimeout(() => inputEl.scrollIntoView({ block: "nearest", behavior: "smooth" }), 350);
     });
-    inputEl?.addEventListener("blur", () => setTimeout(applyKeyboardInset, 200));
+    inputEl?.addEventListener("blur", () => setTimeout(applyKeyboardInset, 250));
 
     // Cache online element & start heartbeat
     onlineCountEl = document.getElementById("chat-online-count");

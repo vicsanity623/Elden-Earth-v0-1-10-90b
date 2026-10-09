@@ -4508,8 +4508,10 @@ body.buy-mode #treasury-ad-container {
   flex-direction: column;
   justify-content: flex-end;
   /* Android keyboard: js/chat.js pads the drawer above the soft keyboard
-     (--kb-inset) so the input row is never hidden behind it. */
+     (--kb-inset). The safe-area term matches every other bottom window so the
+     input clears the gesture bar — the chat used to sit flush at the edge. */
   padding-bottom: var(--kb-inset, 0px);
+  padding-bottom: max(var(--kb-inset, 0px), env(safe-area-inset-bottom, 0px));
 }
 
 .chat-drawer-overlay {
