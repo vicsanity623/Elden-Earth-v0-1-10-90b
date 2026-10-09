@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.55b",
+  GAME_VERSION: "0.1.11.56b",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -211,11 +211,15 @@ const CONFIG = {
   },
 
   // --- Withdrawal Limits ---
+  // Redemptions are a small thank-you reward, not earnings — $5 once a month.
+  // The old $5/week is $20/month of exposure, which reads as an income
+  // proposition and undermines the "rewards program" framing (see
+  // FINANCIALPLAN.md §4). Must match WITHDRAWAL_* in functions/index.js.
   WITHDRAWAL: {
     minUsd: 5.00,
-    maxUsd: 1000.00,
-    weeklyLimitUsd: 5.00,
-    minAccountAgeDays: 30,
+    maxUsd: 5.00,
+    monthlyLimitUsd: 5.00,
+    minAccountAgeDays: 90,
     cooldownHours: 48,
   },
 

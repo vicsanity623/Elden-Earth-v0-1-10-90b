@@ -10,10 +10,11 @@ const Cashout = (() => {
   let paypalEmail = "";
   let isSubmitting = false;
 
-  // Weekly cap lives in CONFIG.WITHDRAWAL — no hardcoded $15 anywhere, so the
-  // UI can never drift from functions/index.js WITHDRAWAL_WEEKLY_LIMIT_USD.
+  // Caps live in CONFIG.WITHDRAWAL so the UI can never drift from
+  // functions/index.js WITHDRAWAL_MONTHLY_LIMIT_USD.
   const WITHDRAWAL_CFG = (typeof CONFIG !== "undefined" && CONFIG.WITHDRAWAL) ? CONFIG.WITHDRAWAL : {};
-  const WEEKLY_LIMIT_USD = Number(WITHDRAWAL_CFG.weeklyLimitUsd) || 5.00;
+  const MONTHLY_LIMIT_USD = Number(WITHDRAWAL_CFG.monthlyLimitUsd) || 5.00;
+  const MIN_ACCOUNT_AGE_DAYS = Number(WITHDRAWAL_CFG.minAccountAgeDays) || 90;
 
   const toast = (msg, ms = 3000) => {
     if (typeof window !== "undefined" && typeof window.showToast === "function") window.showToast(msg, ms);
@@ -76,7 +77,7 @@ const Cashout = (() => {
     const cooldownEl = el("cashout-cooldown");
 
     // Determine eligibility
-    const ageOk = getAccountAgeDays() >= 30;
+    const ageOk = getAccountAgeDays() >= MIN_ACCOUNT_AGE_DAYS;
     const balanceOk = cash >= minWithdraw;
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail);
     const amountOk = withdrawAmount >= minWithdraw && withdrawAmount <= Math.min(cash, maxWithdraw);
@@ -84,22 +85,29 @@ const Cashout = (() => {
     // Treasury gate: null/unknown is treated as locked. Fail closed — the
     // server refuses anyway, and an optimistic button just leads to a rejection.
     const treasuryOk = !treasuryStatus || !!treasuryStatus.unlocked;
-    const budgetOk = !treasuryStatus
+    const monthBudgetOk = !treasuryStatus
       || !(Number(treasuryStatus.monthlyPayoutBudgetUsd) > 0)
       || withdrawAmount <= (Number(treasuryStatus.budgetRemainingUsd) || 0);
-    const allOk = ageOk && balanceOk && emailOk && amountOk && noPending && treasuryOk && budgetOk;
+    const yearBudgetOk = !treasuryStatus
+      || !(Number(treasuryStatus.yearlyPayoutBudgetUsd) > 0)
+      || withdrawAmount <= (Number(treasuryStatus.yearBudgetRemainingUsd) || 0);
+    const budgetOk = monthBudgetOk && yearBudgetOk;
+    // Age gate. js/age.js is advisory — submitWithdrawalRequest re-checks 18+
+    // server-side, so this only avoids sending a request that would bounce.
+    const ageGateOk = (typeof AgeGate === "undefined") ? true : AgeGate.isRedemptionEligible();
+    const allOk = ageOk && balanceOk && emailOk && amountOk && noPending && treasuryOk && budgetOk && ageGateOk;
 
-    // Weekly limit & cooldown info
-    const weeklyPaid = weeklyData?.paid || 0;
-    const weeklyLimit = WEEKLY_LIMIT_USD;
-    const weeklyRemaining = Math.max(0, weeklyLimit - weeklyPaid);
+    // Monthly cap & cooldown info. The server is authoritative — it sums paid
+    // redemptions over a rolling 30 days. The local mirror is only written after
+    // a redemption, so it is not shown as an "available" balance; that used to
+    // claim the full $5 was free even when the month was already spent.
     const lastPaidAt = weeklyData?.lastPaidAt || 0;
     const cooldownMs = 48 * 60 * 60 * 1000;
     const cooldownActive = lastPaidAt && (Date.now() - lastPaidAt) < 48 * 60 * 60 * 1000;
-    const cooldownHoursLeft = cooldownActive ? Math.ceil((48 * 60 * 60 * 1000 - (Date.now() - weeklyData.lastPaidAt)) / (60 * 60 * 1000)) : 0;
+    const cooldownHoursLeft = cooldownActive ? Math.ceil((cooldownMs - (Date.now() - lastPaidAt)) / (60 * 60 * 1000)) : 0;
 
     // Show/hide form
-    if (cash >= minWithdraw && !pending && treasuryOk && budgetOk) {
+    if (cash >= minWithdraw && !pending && treasuryOk && budgetOk && ageGateOk) {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = false;
@@ -110,10 +118,14 @@ const Cashout = (() => {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = true;
-        if (!treasuryOk) {
+        if (!ageGateOk) {
+          openBtn2.textContent = (typeof AgeGate !== "undefined" && !AgeGate.isVerified())
+            ? "Confirm Your Age to Redeem"
+            : "Redeeming Unlocks at 18";
+        } else if (!treasuryOk) {
           openBtn2.textContent = "Cashouts Locked — Treasury Goal";
         } else if (!budgetOk) {
-          openBtn2.textContent = "Monthly Payout Budget Spent";
+          openBtn2.textContent = !monthBudgetOk ? "Monthly Program Budget Spent" : "Yearly Program Budget Spent";
         } else if (pending) {
           openBtn2.textContent = "Request Pending Review";
         } else if (cash < minWithdraw) {
@@ -132,14 +144,20 @@ const Cashout = (() => {
 
     // Update hint text
     if (hintEl) {
-      if (!treasuryOk) {
-        hintEl.innerHTML = `🏛️ <strong>Cashouts are locked</strong> until the Realm's ad revenue covers the payout budget. Track the goal on this screen and in the Weekly Treasury.`;
+      if (!ageGateOk) {
+        hintEl.innerHTML = (typeof AgeGate !== "undefined" && !AgeGate.isVerified())
+          ? `🎂 <strong>Confirm your date of birth</strong> to unlock rewards redemption. Redeeming is available from age 18.`
+          : `🎂 <strong>Rewards redemption unlocks at 18.</strong> Thanks for playing!`;
+      } else if (!treasuryOk) {
+        hintEl.innerHTML = `🏛️ <strong>Redemptions are locked</strong> until the Realm's ad revenue covers the program budget. Track the goal on this screen and in the Weekly Treasury.`;
       } else if (!budgetOk) {
-        hintEl.innerHTML = `🏛️ <strong>This month's payout budget is spent.</strong> Cashouts reopen next month.`;
+        hintEl.innerHTML = !monthBudgetOk
+          ? `🏛️ <strong>This month's program budget is spent.</strong> Redemptions reopen next month.`
+          : `🏛️ <strong>This year's program budget is spent.</strong> Redemptions reopen next year.`;
       } else if (pending) {
         hintEl.innerHTML = `⏳ <strong>Request pending review.</strong> You cannot submit another until this is processed.`;
       } else if (!ageOk) {
-        hintEl.innerHTML = `🔒 <strong>Account must be 30+ days old.</strong> Current: ${getAccountAgeDays()} days.`;
+        hintEl.innerHTML = `🔒 <strong>Account must be ${MIN_ACCOUNT_AGE_DAYS}+ days old.</strong> Current: ${getAccountAgeDays()} days.`;
       } else if (!balanceOk) {
         hintEl.innerHTML = `💰 <strong>Need $${minWithdraw.toFixed(2)}+</strong> to withdraw.`;
       } else {
@@ -147,10 +165,10 @@ const Cashout = (() => {
       }
     }
 
-    // Weekly limit & cooldown readouts (values were computed above but the two
-    // elements were never written to, so they showed stale placeholder copy)
+    // Monthly cap & cooldown readouts. The server holds the real rolling total;
+    // this states the policy rather than inventing an "available" figure.
     if (weeklyLimitEl) {
-      weeklyLimitEl.textContent = `Weekly: $${weeklyPaid.toFixed(2)} / $${weeklyLimit.toFixed(2)} · $${weeklyRemaining.toFixed(2)} available`;
+      weeklyLimitEl.textContent = `Monthly limit: $${MONTHLY_LIMIT_USD.toFixed(2)} per player`;
     }
     if (cooldownEl) {
       cooldownEl.textContent = cooldownActive
@@ -208,7 +226,7 @@ const Cashout = (() => {
       return;
     }
     if (getAccountAgeDays() < 30) {
-      toast("Account must be 30+ days old.", 4000);
+      toast(`Account must be ${MIN_ACCOUNT_AGE_DAYS}+ days old.`, 4000);
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail)) {
@@ -239,16 +257,22 @@ const Cashout = (() => {
 
       if (!result?.ok) {
         const msgs = {
-          not_enough_cash: "Insufficient cash balance.",
-          account_too_young: "Account must be 30+ days old.",
+          not_enough_cash: "Insufficient rewards balance.",
+          account_too_young: `Account must be ${MIN_ACCOUNT_AGE_DAYS}+ days old.`,
           already_pending: "You already have a pending request.",
           invalid_email: "Invalid PayPal email.",
           rate_limited: "Too many requests. Try again later.",
-          weekly_limit_exceeded: `Weekly limit reached ($${result.weeklyPaid?.toFixed(2) || 0}/$${WEEKLY_LIMIT_USD.toFixed(2)}). Try next week.`,
-          cooldown_active: `Cooldown active: ${result.hoursLeft}h until next withdrawal.`,
-          region_restricted: "Withdrawals not available in your region.",
-          treasury_locked: `🏛️ Cashouts are locked — the Realm has earned ${fmtCash(result.revenue)} of the ${fmtCash(result.threshold)} revenue goal.`,
-          monthly_budget_exhausted: `🏛️ This month's payout budget is spent (${fmtCash(result.monthPaid)} of ${fmtCash(result.budget)}). Try next month.`,
+          monthly_limit_exceeded: `Monthly limit reached (${fmtCash(result.monthlyPaid)} of ${fmtCash(result.limit)}). Try next month.`,
+          cooldown_active: `Cooldown active: ${result.hoursLeft}h until next redemption.`,
+          phone_verification_required: "📱 Verify your phone number before redeeming rewards.",
+          region_unverified: "🌍 We couldn't confirm your location. Open the game with location enabled and try again.",
+          region_restricted: "Redemptions are not available in your region.",
+          user_not_found: "Account not found. Please sign in again.",
+          treasury_locked: `🏛️ Redemptions are locked — the Realm has earned ${fmtCash(result.revenue)} of the ${fmtCash(result.threshold)} revenue goal.`,
+          monthly_budget_exhausted: `🏛️ This month's program budget is spent (${fmtCash(result.monthPaid)} of ${fmtCash(result.budget)}). Try next month.`,
+          yearly_budget_exhausted: `🏛️ This year's program budget is spent (${fmtCash(result.yearPaid)} of ${fmtCash(result.yearBudget)}). Try next year.`,
+          age_verification_required: "🎂 Confirm your date of birth before redeeming rewards.",
+          age_not_eligible: "🎂 Rewards redemption is available from age 18.",
         };
         toast(msgs[result?.reason] || `Failed: ${result?.reason || "unknown"}`, 4000);
         return;

@@ -68,13 +68,17 @@ const Treasury = (() => {
 
     // A stale revenue figure locks the gate server-side, so say so plainly
     // instead of showing a progress bar that is not measuring anything.
+    const yearBudget = Number(status.yearlyPayoutBudgetUsd) || 0;
+    const spentLine = yearBudget > 0
+      ? `${fmtUsd(status.monthPaidUsd)} of ${fmtUsd(status.monthlyPayoutBudgetUsd)} this month · ${fmtUsd(status.yearPaidUsd)} of ${fmtUsd(yearBudget)} this year`
+      : `${fmtUsd(status.monthPaidUsd)} of ${fmtUsd(status.monthlyPayoutBudgetUsd)} program budget used`;
     const caption = !fresh
-      ? "The Realm's revenue figures are being updated — cashouts stay locked until they're current."
+      ? "The Realm's revenue figures are being updated — redemptions stay locked until they're current."
       : unlocked
-        ? `Open this month · ${fmtUsd(status.monthPaidUsd)} of ${fmtUsd(status.monthlyPayoutBudgetUsd)} payout budget used`
-        : `${fmtUsd(status.revenue)} / ${fmtUsd(status.threshold)} monthly ad revenue needed to unlock cashouts`;
+        ? `Open this month · ${spentLine}`
+        : `${fmtUsd(status.revenue)} / ${fmtUsd(status.threshold)} monthly ad revenue needed to unlock redemptions`;
 
-    const label = !fresh ? "Cashouts Locked" : (unlocked ? "Cashouts Open" : "Cashouts Locked");
+    const label = !fresh ? "Redemptions Locked" : (unlocked ? "Redemptions Open" : "Redemptions Locked");
     const pctLabel = !fresh ? "Updating" : (unlocked ? "Goal met" : pct + "%");
     const width = !fresh ? 0 : pct;
 

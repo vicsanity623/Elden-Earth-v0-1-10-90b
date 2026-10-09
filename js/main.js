@@ -4321,6 +4321,7 @@
     Auth.init(onSignedIn);
     if (typeof ServerAntiCheat !== "undefined") ServerAntiCheat.init();
     if (typeof Cashout !== "undefined") Cashout.init();
+    if (typeof AgeGate !== "undefined") AgeGate.init();
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     el("locate-btn")?.addEventListener("click", startLocating);
     el("retry-location-btn")?.addEventListener("click", startLocating);
