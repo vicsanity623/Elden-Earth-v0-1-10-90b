@@ -172,6 +172,47 @@ const Leaderboard = (() => {
   }
 
   // Universal State Normalizer
+  // ================= MAYOR-RACE ELIGIBILITY =================
+  // A plot may sit in any place Nominatim resolves, but only a real CITY or
+  // TOWN may run a mayor race. Boroughs, townships, villages, counties and
+  // other sub-municipal units stay display-only territory: without this, one
+  // landlord collects a crown per tiny adjacent borough and out-mayors whole
+  // real cities (all 17 PA borough/township territories are held by a single
+  // player).
+  const NON_CITY_TOWN_SUFFIX =
+    /(township|borough|municipality|village|hamlet|precinct|county|cdp|census-designated place|neighbourhood|neighborhood)$/i;
+
+  // Pennsylvania has exactly three municipal classes — cities, boroughs and
+  // townships — and no incorporated "towns". PA boroughs also drop the word
+  // "Borough" from everyday use (Carnegie, Dormont, Castle Shannon, Rosslyn
+  // Farms…), so no suffix rule can ever catch them. Only PA's 56 cities may
+  // hold a mayorship. Source: List of cities in Pennsylvania (Wikipedia).
+  const PA_CITIES = new Set([
+    "Aliquippa", "Allentown", "Altoona", "Arnold", "Beaver Falls", "Bethlehem",
+    "Bradford", "Butler", "Carbondale", "Chester", "Clairton", "Coatesville",
+    "Connellsville", "Corry", "DuBois", "Duquesne", "Easton", "Erie", "Farrell",
+    "Franklin", "Greensburg", "Harrisburg", "Hazleton", "Hermitage", "Jeannette",
+    "Johnstown", "Lancaster", "Lebanon", "Lock Haven", "Lower Burrell",
+    "McKeesport", "Meadville", "Monessen", "Monongahela", "Nanticoke",
+    "New Castle", "New Kensington", "Oil City", "Parker", "Philadelphia",
+    "Pittsburgh", "Pittston", "Pottsville", "Reading", "St. Marys", "Saint Marys", "Scranton",
+    "Shamokin", "Sharon", "Sunbury", "Titusville", "Uniontown", "Warren",
+    "Washington", "Wilkes-Barre", "Williamsport", "York",
+  ].map(n => n.replace(/[^a-z0-9]/gi, "").toLowerCase()));
+
+  // rawCity looks like "Castle Shannon, PA 🇺🇸" / "Pittsburgh, PA 🇺🇸" /
+  // "Halle (Saale), Saxony-Anhalt 🇩🇪" — the place name is everything before
+  // the first comma, the state code the first token after it.
+  function isCityOrTown(rawCity) {
+    const label = String(rawCity || "").split(",")[0].trim();
+    if (!label || label === "Unknown City") return false;
+    if (NON_CITY_TOWN_SUFFIX.test(label)) return false;
+    const stateSeg = String(rawCity).split(",")[1] || "";
+    const stateCode = ((stateSeg.trim().match(/^[A-Za-z]{2}/) || [""])[0]).toUpperCase();
+    if (stateCode === "PA" && !PA_CITIES.has(label.replace(/[^a-z0-9]/gi, "").toLowerCase())) return false;
+    return true;
+  }
+
   function normalizeState(rawState, cityStr) {
     const s = (rawState || "").toLowerCase();
     const ci = (cityStr || "").toLowerCase();
@@ -317,8 +358,13 @@ const Leaderboard = (() => {
         playerStats[oid].cities[rawCity] = (playerStats[oid].cities[rawCity] || 0) + 1;
         const cityKey = cleanTerritoryKey(rawCity);
         playerStats[oid].citiesClean[cityKey] = (playerStats[oid].citiesClean[cityKey] || 0) + 1;
-        cityCounts[rawCity] = cityCounts[rawCity] || {};
-        cityCounts[rawCity][oid] = (cityCounts[rawCity][oid] || 0) + 1;
+        // Boroughs/townships/villages remain in the player's territory list but
+        // never enter the mayor race — no race, no crown, no royalty stack, and
+        // awardTerritoryDividends finds no ruler to pay.
+        if (isCityOrTown(rawCity)) {
+          cityCounts[rawCity] = cityCounts[rawCity] || {};
+          cityCounts[rawCity][oid] = (cityCounts[rawCity][oid] || 0) + 1;
+        }
       }
       if (!isUnknownState) {
         playerStats[oid].states[stateName] = (playerStats[oid].states[stateName] || 0) + 1;
@@ -711,8 +757,12 @@ const Leaderboard = (() => {
     const cleanState = normalizeState(territory.state, cleanCity);
     const cleanCountry = normalizeCountry(territory.country, cleanCity);
 
-    // Skip dividend awards for plots with unknown/incomplete territory data
-    if (!cleanCity || !cleanCountry) return;
+    // Skip dividend awards for plots with unknown/incomplete country data.
+    // City may legitimately be empty (PA boroughs/townships resolve to no
+    // territory) — Governor and President royalties still pay; the Mayor
+    // lookup below just finds no race.
+    if (!cleanCountry) return;
+    const cleanTerritory = territory.city || territory.state || "";
 
     const mayor = lookupRuler(data.mayorsMap, cleanCity);
     const governor = lookupRuler(data.governorsMap, cleanState);
@@ -744,7 +794,7 @@ const Leaderboard = (() => {
             recipientId: oid,
             amount: p.amount,
             titleBadge: p.titles.join(" & "),
-            territory: territory.city,
+            territory: cleanTerritory,
             claimed: false,
             createdAt: Date.now()
           }).then(() => claimPendingDividends()).catch(e => console.warn("[Dividends] Mailbox drop notice:", e));
@@ -754,7 +804,7 @@ const Leaderboard = (() => {
           recipientId: oid,
           amount: p.amount,
           titleBadge: p.titles.join(" & "),
-          territory: territory.city,
+          territory: cleanTerritory,
           claimed: false,
           createdAt: Date.now()
         }).catch(e => console.warn("[Dividends] Mailbox drop notice:", e));
@@ -763,7 +813,7 @@ const Leaderboard = (() => {
       if (typeof Feed !== "undefined") {
         Feed.broadcast("dividend", {
           rulerName: p.name,
-          territory: territory.city,
+          territory: cleanTerritory,
           amount: p.amount,
           titleBadge: p.titles.join(" & "),
           titleIcon: p.icons.join("")
@@ -1072,5 +1122,5 @@ const Leaderboard = (() => {
     };
   }
 
-  return { init, open, render, fetchRankings, invalidateCache, invalidateLiveTerritory, awardTerritoryDividends, initDividendMailbox, getLocalTerritoryRulers, getPlayerLocalTerritory, openRoyaltiesModal, claimAllRoyalties, renderRoyaltiesModal, fetchPendingReferralBonuses, updateRoyaltiesButton };
+  return { init, open, render, fetchRankings, invalidateCache, invalidateLiveTerritory, isCityOrTown, awardTerritoryDividends, initDividendMailbox, getLocalTerritoryRulers, getPlayerLocalTerritory, openRoyaltiesModal, claimAllRoyalties, renderRoyaltiesModal, fetchPendingReferralBonuses, updateRoyaltiesButton };
 })();

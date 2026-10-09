@@ -122,6 +122,45 @@ const Geo = (() => {
     "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC"
   };
 
+  // Pennsylvania gate — PA has 56 official cities and ~2,560 boroughs plus
+  // ~1,000 townships; only official cities may become a territory label.
+  // Nominatim labels PA boroughs inconsistently: at zoom=14 a borough point
+  // returns town/village=<borough> with NO city key, but at zoom=18 the
+  // borough level is sometimes dropped and a lying city=Pittsburgh appears
+  // (Castle Shannon, Dormont). So PA is resolved municipality-key-first and
+  // re-queried at zoom=14 whenever the borough level is missing.
+  const PA_CITY_NAMES = new Set([
+    "Aliquippa", "Allentown", "Altoona", "Arnold", "Beaver Falls", "Bethlehem",
+    "Bradford", "Butler", "Carbondale", "Chester", "Clairton", "Coatesville",
+    "Connellsville", "Corry", "DuBois", "Duquesne", "Easton", "Erie", "Farrell",
+    "Franklin", "Greensburg", "Harrisburg", "Hazleton", "Hermitage", "Jeannette",
+    "Johnstown", "Lancaster", "Lebanon", "Lock Haven", "Lower Burrell",
+    "McKeesport", "Meadville", "Monessen", "Monongahela", "Nanticoke",
+    "New Castle", "New Kensington", "Oil City", "Parker", "Philadelphia",
+    "Pittsburgh", "Pittston", "Pottsville", "Reading", "St. Marys", "Saint Marys",
+    "Scranton", "Shamokin", "Sharon", "Sunbury", "Titusville", "Uniontown",
+    "Warren", "Washington", "Wilkes-Barre", "Williamsport", "York",
+  ].map(n => n.replace(/[^a-z0-9]/gi, "").toLowerCase()));
+
+  function isPAAddress(addr) {
+    return addr["ISO3166-2-lvl4"] === "US-PA" || US_STATES[addr.state] === "PA";
+  }
+  function paMunicipalKey(addr) {
+    return addr.township || addr.borough || addr.town || addr.village || addr.municipality || "";
+  }
+  function normalizePlaceName(n) {
+    return String(n || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  }
+  // Resolves the raw (flag-less) municipality name for an address. Returns ""
+  // for PA locations that are not inside an official city — no territory.
+  function resolveCityName(addr) {
+    if (isPAAddress(addr)) {
+      const name = paMunicipalKey(addr) || addr.city || "";
+      return PA_CITY_NAMES.has(normalizePlaceName(name)) ? name : "";
+    }
+    return addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+  }
+
   async function getTerritoryInfo(lat, lon) {
     const key = `${lat.toFixed(4)}_${lon.toFixed(4)}`;
     if (territoryCache[key]) return territoryCache[key];
@@ -132,25 +171,51 @@ const Geo = (() => {
         headers: { "User-Agent": "EldenEarth/1.0 (vicsanity623.github.io)", "Accept-Language": "en" }
       });
       const data = await res.json();
-      const addr = data.address || {};
+      let addr = data.address || {};
+      let city = resolveCityName(addr);
 
-      // Standard Nominatim hierarchy: trust the address breakdown
-      // city field is the administrative boundary — most accurate for territory
-      const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+      // PA address with no borough/township-level key at zoom=18 — the city
+      // key alone is untrustworthy (may name the metro city, not the
+      // municipality). Re-resolve at zoom=14 where the borough level shows.
+      if (isPAAddress(addr) && !paMunicipalKey(addr)) {
+        try {
+          const res14 = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14&addressdetails=1`, {
+            headers: { "User-Agent": "EldenEarth/1.0 (vicsanity623.github.io)", "Accept-Language": "en" }
+          });
+          if (res14.ok) {
+            const data14 = await res14.json();
+            if (data14.address && Object.keys(data14.address).length) {
+              addr = data14.address;
+              city = resolveCityName(addr);
+            }
+          }
+        } catch (e) { /* keep the zoom=18 resolution */ }
+      }
+
       const rawState = addr.state || "";
       const stateCode = rawState ? (US_STATES[rawState] || (rawState.length === 2 ? rawState.toUpperCase() : rawState)) : "";
       const country = addr.country || "";
       const cc = addr.country_code ? addr.country_code.toUpperCase() : "";
       const flag = cc ? cc.replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397)) : "";
 
-      // Reject if Nominatim couldn't resolve a real city/country
-      if (!city || !country || city.match(/^\d/)) {
-        return null;
-      }
+      // Reject if Nominatim couldn't resolve a country
+      if (!country) return null;
 
-      const cityDisplay = stateCode ? `${city}, ${stateCode} ${flag}` : `${city} ${flag}`;
       const stateDisplay = rawState ? `${rawState} ${flag}` : flag;
       const countryDisplay = `${country} ${flag}`;
+
+      // PA boroughs/townships resolve to a claim-less territory: empty city,
+      // state+country kept so purchases/dividends still work.
+      if (!city) {
+        if (!isPAAddress(addr)) return null;
+        const info = { city: "", state: stateDisplay, country: countryDisplay };
+        territoryCache[key] = info;
+        if (typeof AntiCheat !== "undefined") AntiCheat.setPlayerCountry(country);
+        return info;
+      }
+      if (city.match(/^\d/)) return null;
+
+      const cityDisplay = stateCode ? `${city}, ${stateCode} ${flag}` : `${city} ${flag}`;
 
       const info = {
         city: cityDisplay,
@@ -334,6 +399,9 @@ const Geo = (() => {
     randomPointInRadius,
     createCirclePolygon,
     getTerritoryInfo,
+    resolveCityName,
+    isPAAddress,
+    paMunicipalKey,
     NetworkVerifier
   };
 })();

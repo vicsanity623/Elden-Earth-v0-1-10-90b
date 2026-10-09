@@ -2010,10 +2010,6 @@
     const rulerAvatarEl = el("landlord-ruler-avatar");
     if (!pill || !titleEl || !locEl) return;
 
-    const titles = ["mayor", "governor", "president"];
-    const title = titles[landlordIndex % titles.length];
-    landlordIndex++;
-
     try {
       // Ensure leaderboard data is loaded
       if (typeof Leaderboard !== "undefined" && Leaderboard.fetchRankings) {
@@ -2035,6 +2031,14 @@
         pill.classList.add("hidden");
         return;
       }
+
+      // No real city (claim-less territory like a PA borough, or no GPS city
+      // yet) → cycle Governor/President only; a "Mayor of Local City" phase
+      // would be meaningless.
+      const hasCity = Boolean(myCity) && myCity !== "Local City" && !/^\d/.test(myCity);
+      const titles = hasCity ? ["mayor", "governor", "president"] : ["governor", "president"];
+      const title = titles[landlordIndex % titles.length];
+      landlordIndex++;
 
       const rulers = Leaderboard.getLocalTerritoryRulers(myCity, myState, myCountry);
       const ruler = rulers[title];
@@ -3410,33 +3414,15 @@
         if (locKey === lastTerritoryQuery) return;
         lastTerritoryQuery = locKey;
 
-        // Nominatim reverse geocoding (free, no API key)
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`, {
-          headers: { "Accept-Language": "en" }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const addr = data.address || {};
+        // Gated reverse geocode via Geo module (PA boroughs/townships resolve
+        // to no city; result is cached by coordinate so this stays cheap)
+        const info = await Geo.getTerritoryInfo(lat, lon);
+        if (!info) return;
 
-        const city = addr.city || addr.town || addr.village || addr.hamlet || addr.municipality || "";
-        const state = addr.state || addr.county || "";
-        const country = addr.country_code ? addr.country_code.toUpperCase() : "";
+        let display = info.city || info.state || "";
+        if (!display && info.country) display = info.country;
 
-        let display = "";
-        if (city && state) display = `${city}, ${state}`;
-        else if (city) display = city;
-        else if (state) display = state;
-        else if (data.display_name) {
-          // Fallback: take first 2 parts of display_name
-          const parts = data.display_name.split(",").map(s => s.trim());
-          display = parts.slice(0, 2).join(", ");
-        } else {
-          display = "Unknown Territory";
-        }
-
-        if (country) display += ` ${country}`;
-
-        if (territoryText) territoryText.textContent = `📍 ${display}`;
+        if (territoryText) territoryText.textContent = `📍 ${display || "Unknown Territory"}`;
       } catch (e) {
         console.warn("[Territory] Reverse geocode failed:", e);
       }

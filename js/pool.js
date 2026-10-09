@@ -138,7 +138,8 @@ const WeeklyPool = (() => {
     // STRICT GUARD: ONLY triggers on Mondays!
     if (!isMonday) return;
 
-    const currentWeekId = getISOWeekId(now);
+    // The Monday payout covers the week that just hit its deadline.
+    const currentWeekId = getISOWeekId(new Date(now.getTime() - 7 * 86400000));
     const state = Store.get();
     if (!state || !state.player?.id) return;
 
@@ -153,14 +154,20 @@ const WeeklyPool = (() => {
         const info = await ServerAntiCheat.getWeeklyPoolInfo();
         if (info && info.ok) {
           serverAnswered = true;
+          // The Monday payout is for the week that just hit its deadline —
+          // that is the settled record, not the (freshly accumulating) week.
+          const settledWeekId = (info.lastSettled && info.lastSettled.weekId) || currentWeekId;
           // Already credited by the Monday auto-payout — just tell the player.
           if (info.myClaimed) {
-            announceAutoPayout(state, currentWeekId, info);
+            announceAutoPayout(state, settledWeekId, {
+              myRank: info.lastSettledRank,
+              myPrize: info.lastSettledPrize,
+            });
             return;
           }
-          if (info.myRank) {
-            myRank = info.myRank;
-            prize = Number(info.myPrize) || 0;
+          if (info.lastSettledRank) {
+            myRank = info.lastSettledRank;
+            prize = Number(info.lastSettledPrize) || 0;
           }
         }
       } catch (e) {
@@ -207,10 +214,12 @@ const WeeklyPool = (() => {
   async function claimWeeklyReward() {
     if (pendingRewardAmount <= 0) return;
     const state = Store.get();
-    const currentWeekId = getISOWeekId();
+    // The claimable week is the one that just hit its Monday deadline.
+    const currentWeekId = getISOWeekId(new Date(Date.now() - 7 * 86400000));
 
     // Server-authoritative claim — prevents client-side cash forging
     let serverReward = null;
+    let serverWeekId = null;
     if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
       try {
         const result = await ServerAntiCheat.claimWeeklyPool();
@@ -222,6 +231,7 @@ const WeeklyPool = (() => {
         if (typeof result.newLifetimeRent === "number") state.lifetimeRent = result.newLifetimeRent;
         // Credit the amount the SERVER paid — the local estimate may differ.
         if (typeof result.reward === "number") serverReward = result.reward;
+        if (typeof result.weekId === "string") serverWeekId = result.weekId;
       } catch (e) {
         console.warn("[Pool] Server claim failed:", e);
         if (typeof showToast === "function") showToast("⚠️ Pool claim failed. Try again.", 3000);
@@ -233,7 +243,7 @@ const WeeklyPool = (() => {
       state.lifetimeRent = (Number(state.lifetimeRent) || 0) + pendingRewardAmount;
     }
 
-    state.lastWeeklyPoolClaim = currentWeekId;
+    state.lastWeeklyPoolClaim = serverWeekId || currentWeekId;
     Store.save(true);
 
     // Report what was actually credited, not the pre-claim estimate.
@@ -305,9 +315,8 @@ const WeeklyPool = (() => {
   }
 
   // `liveRent`/`liveRate` drive the headline — they track the current economy.
-  // `pool`/`frozenRent`/`frozenAt` come from the frozen snapshot and are what
-  // actually gets paid, so the basis note reports both instead of implying the
-  // frozen pool still equals 1% of the live projection.
+  // The running week is never frozen before its Monday deadline: the pool and
+  // the standings keep accumulating until the boundary freezes and pays them.
   function renderStats({ liveRent, liveRate, pool, frozenRent, frozenAt, settled }) {
     const rentEl = document.getElementById("modal-global-rent-val");
     const poolEl = document.getElementById("modal-weekly-pool-val");
@@ -324,7 +333,11 @@ const WeeklyPool = (() => {
         + (floorApplied
           ? `the $0.05 minimum floor (1% of $${fmtCash(base)} rent is below it).`
           : `1% of $${fmtCash(base)} rent.`);
-      if (frozenAt) text += ` Frozen ${fmtUTC(frozenAt)}${settled ? " · paid automatically." : "."}`;
+      if (frozenAt) {
+        text += ` Frozen ${fmtUTC(frozenAt)}${settled ? " · paid automatically." : "."}`;
+      } else {
+        text += ` Rent accumulates all week — freezes and pays automatically at Monday 00:00 UTC.`;
+      }
       basisEl.textContent = text;
     }
   }
@@ -355,26 +368,29 @@ const WeeklyPool = (() => {
     }).join("");
   }
 
-  // "Your standing" line + honest claim-window copy.
+  // "Your standing" line + honest lifecycle copy (the running week accumulates
+  // live until the Monday deadline; the last settled week is the payout record).
   function renderStanding(info, myUid) {
     const el = document.getElementById("modal-pool-my-standing");
     const note = document.getElementById("modal-top10-note");
     if (!el) return;
+    let paidLine = "";
+    if (info && info.myClaimed && info.lastSettled && info.lastSettled.settledAt) {
+      paidLine = `✓ Your payout from last week landed automatically ${fmtUTC(info.lastSettled.settledAt)}`
+        + `${info.lastSettledRank ? ` (rank #${info.lastSettledRank})` : ""}. `;
+    } else if (info && info.lastSettled && info.lastSettled.settledAt) {
+      paidLine = `Last week's pool paid automatically ${fmtUTC(info.lastSettled.settledAt)}. `;
+    }
+    const liveLine = "Standings are live and keep accumulating until Monday 00:00 UTC; the Top 10 are paid automatically.";
     if (!info || info.myRank == null) {
       el.textContent = myUid ? "Your standing: outside the Top 10" : "Your standing: sign in to see";
-      if (note) note.textContent = "Rankings freeze at Monday 00:00 UTC; the Top 10 are paid automatically.";
+      if (note) note.textContent = paidLine + liveLine;
       return;
     }
     const icon = info.myRank === 1 ? "🥇" : info.myRank === 2 ? "🥈" : info.myRank === 3 ? "🥉" : "🏅";
-    el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · prize <strong>$${fmtCash(info.myPrize)}</strong>`;
+    el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · projected prize <strong>$${fmtCash(info.myPrize)}</strong>`;
     if (note) {
-      if (info.myClaimed) {
-        note.textContent = `✓ Paid automatically${info.settledAt ? " " + fmtUTC(info.settledAt) : ""}. This week's standings are frozen.`;
-      } else if (info.isMonday) {
-        note.textContent = "Rankings are frozen — automatic payout runs at 00:00 UTC. Claim now if you would rather not wait.";
-      } else {
-        note.textContent = "Payout lands automatically at the next Monday 00:00 UTC.";
-      }
+      note.textContent = paidLine + liveLine;
     }
   }
 
@@ -394,13 +410,12 @@ const WeeklyPool = (() => {
       try {
         const info = await ServerAntiCheat.getWeeklyPoolInfo();
         if (info && info.ok) {
+          // The running week is live (never frozen before its deadline):
+          // headline + pool + Top 10 all accumulate until Monday 00:00 UTC.
           renderStats({
             liveRent: info.liveTotalGlobalRent ?? info.totalGlobalRent,
             liveRate: info.liveGlobalRateSec ?? info.globalRateSec,
             pool: info.weeklyPool,
-            frozenRent: info.totalGlobalRent,
-            frozenAt: info.frozenAt,
-            settled: info.settled,
           });
           renderTop10(info.top10, myUid);
           renderStanding(info, myUid);

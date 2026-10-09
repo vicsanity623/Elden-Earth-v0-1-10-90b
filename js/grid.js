@@ -358,7 +358,7 @@ const Grid = (() => {
     const centerLat = (corners[0][0] + corners[2][0]) / 2;
     const centerLon = (corners[0][1] + corners[2][1]) / 2;
     const territory = await Geo.getTerritoryInfo(centerLat, centerLon);
-    if (!territory || !territory.city || !territory.country) {
+    if (!territory || !territory.country || (!territory.city && !territory.state)) {
       if (typeof showToast === "function") showToast("📍 Could not resolve location — try a different area.", 3500);
       return;
     }
@@ -552,7 +552,7 @@ const Grid = (() => {
     const centerLon = (corners[0][1] + corners[2][1]) / 2;
     const territory = await Geo.getTerritoryInfo(centerLat, centerLon);
 
-    if (!territory || !territory.city || !territory.country) {
+    if (!territory || !territory.country || (!territory.city && !territory.state)) {
       if (typeof showToast === "function") showToast("📍 Could not resolve location — try a different area.", 3500);
       onBuyAttempt(false, null);
       return;
