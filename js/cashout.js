@@ -32,6 +32,15 @@ const Cashout = (() => {
     return Number(state?.cash) || 0;
   }
 
+  // Reward Points are the ONLY currency redeemable for real money (100 RP =
+  // $1.00). `cash` is in-game "Realm Coins" now and is not a redemption path —
+  // see FINANCIALPLAN.md §3.
+  const RP_PER_USD = 100;
+  function getRpBalance() {
+    const state = Store.get();
+    return Number(state?.rewardPoints) || 0;
+  }
+
   function getAccountAgeDays() {
     const state = Store.get();
     const created = state?.createdAt || Date.now();
@@ -58,6 +67,8 @@ const Cashout = (() => {
 
   function updateUI() {
     const cash = getCashBalance();
+    const rpBalance = getRpBalance();
+    const rpCost = Math.round(withdrawAmount * RP_PER_USD);
     const age = getAccountAgeDays();
     const pending = hasPendingWithdrawal();
     const weeklyData = Store.get()?.withdrawalWeekly || { paid: 0, lastPaidAt: 0 };
@@ -76,11 +87,12 @@ const Cashout = (() => {
     const weeklyLimitEl = el("cashout-weekly-limit");
     const cooldownEl = el("cashout-cooldown");
 
-    // Determine eligibility
+    // Redemption is denominated in USD but paid for in Reward Points
+    // (100 RP = $1.00), so affordability is an RP question, not a cash one.
     const ageOk = getAccountAgeDays() >= MIN_ACCOUNT_AGE_DAYS;
-    const balanceOk = cash >= minWithdraw;
+    const balanceOk = rpBalance >= rpCost;
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail);
-    const amountOk = withdrawAmount >= minWithdraw && withdrawAmount <= Math.min(cash, maxWithdraw);
+    const amountOk = withdrawAmount >= minWithdraw && withdrawAmount <= maxWithdraw;
     const noPending = !pending;
     // Treasury gate: null/unknown is treated as locked. Fail closed — the
     // server refuses anyway, and an optimistic button just leads to a rejection.
@@ -107,7 +119,7 @@ const Cashout = (() => {
     const cooldownHoursLeft = cooldownActive ? Math.ceil((cooldownMs - (Date.now() - lastPaidAt)) / (60 * 60 * 1000)) : 0;
 
     // Show/hide form
-    if (cash >= minWithdraw && !pending && treasuryOk && budgetOk && ageGateOk) {
+    if (balanceOk && amountOk && !pending && treasuryOk && budgetOk && ageGateOk) {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = false;
@@ -128,8 +140,8 @@ const Cashout = (() => {
           openBtn2.textContent = !monthBudgetOk ? "Monthly Program Budget Spent" : "Yearly Program Budget Spent";
         } else if (pending) {
           openBtn2.textContent = "Request Pending Review";
-        } else if (cash < minWithdraw) {
-          openBtn2.textContent = `Need $${minWithdraw.toFixed(2)} to withdraw`;
+        } else if (!balanceOk) {
+          openBtn2.textContent = `Need ${Math.ceil(minWithdraw * RP_PER_USD)}RP to redeem`;
         } else {
           openBtn2.textContent = "Withdrawal unavailable";
         }
@@ -159,9 +171,9 @@ const Cashout = (() => {
       } else if (!ageOk) {
         hintEl.innerHTML = `🔒 <strong>Account must be ${MIN_ACCOUNT_AGE_DAYS}+ days old.</strong> Current: ${getAccountAgeDays()} days.`;
       } else if (!balanceOk) {
-        hintEl.innerHTML = `💰 <strong>Need $${minWithdraw.toFixed(2)}+</strong> to withdraw.`;
+        hintEl.innerHTML = `💰 <strong>Need ${Math.ceil(minWithdraw * RP_PER_USD)}RP</strong> to redeem (100 RP = $1.00).`;
       } else {
-        hintEl.innerHTML = `Available: <strong>${fmtCash(cash)}</strong> · Minimum $${minWithdraw.toFixed(2)}`;
+        hintEl.innerHTML = `Available: <strong>${rpBalance}RP (${fmtCash(rpBalance / RP_PER_USD)})</strong> · Minimum $${minWithdraw.toFixed(2)}`;
       }
     }
 
@@ -205,8 +217,9 @@ const Cashout = (() => {
   }
 
   function changeAmount(delta) {
-    const cash = getCashBalance();
-    const newAmount = Math.max(minWithdraw, Math.min(maxWithdraw, cash, withdrawAmount + delta));
+    // Cap the stepper by what the player can actually afford in Reward Points.
+    const affordableUsd = getRpBalance() / RP_PER_USD;
+    const newAmount = Math.max(minWithdraw, Math.min(maxWithdraw, affordableUsd, withdrawAmount + delta));
     if (newAmount !== withdrawAmount) {
       withdrawAmount = Math.round(newAmount * 100) / 100;
       updateUI();
@@ -220,8 +233,9 @@ const Cashout = (() => {
 
   async function submitRequest() {
     if (isSubmitting) return;
-    const cash = getCashBalance();
-    if (withdrawAmount < minWithdraw || withdrawAmount > cash) {
+    const rpBalance = getRpBalance();
+    const rpCost = Math.round(withdrawAmount * RP_PER_USD);
+    if (withdrawAmount < minWithdraw || withdrawAmount > maxWithdraw || rpBalance < rpCost) {
       toast("Invalid amount.", 3000);
       return;
     }
@@ -258,6 +272,7 @@ const Cashout = (() => {
       if (!result?.ok) {
         const msgs = {
           not_enough_cash: "Insufficient rewards balance.",
+          not_enough_rp: `Insufficient Reward Points — you need ${Math.round((result.rpCost || 0))}RP.`,
           account_too_young: `Account must be ${MIN_ACCOUNT_AGE_DAYS}+ days old.`,
           already_pending: "You already have a pending request.",
           invalid_email: "Invalid PayPal email.",
@@ -278,14 +293,17 @@ const Cashout = (() => {
         return;
       }
 
-      // Server deducted cash — mirror locally immediately (prevents max-merge refund)
+      // Server locked the Reward Points — mirror locally immediately so the
+      // balance can't be spent twice before the next sync. rewardPoints is not
+      // in SAFE_SAVE_FIELDS, so this never reaches the cloud; the server copy
+      // is the only authority.
       const state = Store.get();
-      state.cash = Math.max(0, Number(result.nextCash) || 0);
+      state.rewardPoints = Math.max(0, Number(result.nextRewardPoints) || 0);
       state.withdrawPending = true;
       Store.save(true);
       if (typeof updateTopbar === "function") updateTopbar();
 
-      toast(`📝 Withdrawal request submitted! $${withdrawAmount.toFixed(2)} locked.`, 5000);
+      toast(`📝 Redemption request submitted! ${rpCost}RP locked.`, 5000);
       closeWithdrawForm();
       updateUI();
     } catch (e) {

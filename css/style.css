@@ -545,6 +545,9 @@ html,body{
 .calendar-quest-item.ready-claim { border-color:rgba(255,43,67,0.7); background:linear-gradient(135deg, rgba(34,48,68,0.95), rgba(20,28,42,0.98)); box-shadow:0 0 12px rgba(255,43,67,0.25); }
 .calendar-quest-item .quest-title { font-weight:700; color:var(--parchment); font-size:13px; }
 .calendar-quest-item .quest-reward { color:var(--gold-hi); font-weight:700; font-size:12px; margin-top:2px; }
+/* Reward Points — the only currency redeemable for real money (100 RP = $1).
+   Deliberately its own colour so it never reads as EB. */
+.quest-rp { color:#2ecc71; font-weight:800; letter-spacing:0.3px; }
 .calendar-quest-item .quest-action-slot { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .calendar-quest-item .quest-check { width:24px; height:24px; border-radius:50%; background:rgba(255,43,67,0.12); border:1px solid rgba(255,43,67,0.5); color:#ff5566; display:flex; align-items:center; justify-content:center; font-size:13px; }
 .calendar-quest-item .quest-check.done { background:rgba(255,43,67,0.25); border-color:#ff2b43; font-weight:800; }

@@ -2334,7 +2334,9 @@
 
         // Check if day has diamonds
         const diamondText = r.diamonds ? ` & +${r.diamonds} ◆` : "";
-        const rewardLabel = `+${r.eb} EB${diamondText}`;
+        const dayRp = rpForCalendarDay(dayNum);
+        const rpText = dayRp ? ` <span class="quest-rp">+${dayRp}RP</span>` : "";
+        const rewardLabel = `+${r.eb} EB${diamondText}${rpText}`;
 
         const row = document.createElement("div");
         row.className = "cal-day-row" + (isReadyToClaim ? " active" : "") + (isAlreadyClaimed ? " claimed" : "") + (isLockedTomorrow || isFutureLocked ? " locked" : "");
@@ -2446,7 +2448,8 @@
       
       const diaToast = serverResult.diamonds > 0 ? ` & +${serverResult.diamonds} Diamonds` : "";
       const questMsg = serverResult.eb > ebAmount ? ` (+${serverResult.eb - ebAmount} EB Quest Bonus)` : "";
-      showToast(`🎉 Claimed +${totalEB} EB${questMsg}${diaToast} Daily Reward!`);
+      const rpToast = serverResult.rp ? ` · +${serverResult.rp}RP` : "";
+      showToast(`🎉 Claimed +${totalEB} EB${questMsg}${diaToast}${rpToast} Daily Reward!`);
 
       // Broadcast login streak
       if (typeof Feed !== "undefined") {
@@ -2462,13 +2465,28 @@
       }, 650);
     }
 
+    // RP per quest. `wheel` pays EB only — awarding redeemable points for a
+    // chance outcome is exactly what FINANCIALPLAN.md §3 exists to prevent.
+    // Must match QUEST_RP in functions/index.js. Points are integers (1 RP = 1c).
     const QUEST_DEFS = [
-      { id: "login", title: "Claim daily login bonus", reward: 5, rewardText: "+5 EB", action: "login" },
-      { id: "wheel", title: "Spin the Diamond Wheel", reward: 10, rewardText: "+10 EB", action: "wheel" },
-      { id: "gift", title: "Send a gift to a friend", reward: 10, rewardText: "+10 EB", action: "gift" },
-      { id: "mayor", title: "Check Mayorship & Dividends", reward: 5, rewardText: "+5 EB", action: "mayor" },
-      { id: "survey", title: "Explore & survey 1 new area", reward: 15, rewardText: "+15 EB", action: "survey" }
+      { id: "login", title: "Claim daily login bonus", reward: 5, rewardText: "+5 EB", rp: 2, action: "login" },
+      { id: "wheel", title: "Spin the Diamond Wheel", reward: 10, rewardText: "+10 EB", rp: 0, action: "wheel" },
+      { id: "gift", title: "Send a gift to a friend", reward: 10, rewardText: "+10 EB", rp: 3, action: "gift" },
+      { id: "mayor", title: "Check Mayorship & Dividends", reward: 5, rewardText: "+5 EB", rp: 1, action: "mayor" },
+      { id: "survey", title: "Explore & survey 1 new area", reward: 15, rewardText: "+15 EB", rp: 1, action: "survey" }
     ];
+
+    // Mirror of rpForCalendarDay() in functions/index.js — the ladder curve is
+    // derived so the UI and the server can never disagree about the value.
+    function rpForCalendarDay(day) {
+      const d = Number(day) || 0;
+      if (d >= 90) return 5;
+      if (d >= 60) return 4;
+      if (d >= 30) return 3;
+      if (d % 7 === 0) return 3;
+      if (d % 5 === 0) return 2;
+      return 1;
+    }
 
     function getDailyQuestsState() {
       const state = Store.get();
@@ -2546,7 +2564,8 @@
       const originY = (typeof startY === "number" && startY > 0) ? startY : window.innerHeight / 2;
       launchFlyingEBStream(originX, originY, result.reward);
 
-      showToast(`🎉 Quest Claimed! +${result.reward} EB added to balance!`);
+      const rpBit = result.rp ? ` · +${result.rp}RP` : "";
+      showToast(`🎉 Quest Claimed! +${result.reward} EB${rpBit}`);
       renderDailyQuests();
     }
     window.claimQuestReward = claimQuestReward;
@@ -2563,7 +2582,8 @@
         if (item.claimed) {
           actionHtml = `<div class="quest-check done" title="Claimed">✓</div>`;
         } else if (item.completed) {
-          actionHtml = `<button class="cal-claim-btn quest-claim-btn" data-quest-id="${q.id}">Claim ${q.rewardText}</button>`;
+          const rpBit = q.rp ? ` +${q.rp}RP` : "";
+          actionHtml = `<button class="cal-claim-btn quest-claim-btn" data-quest-id="${q.id}">Claim ${q.rewardText}${rpBit}</button>`;
         } else {
           actionHtml = `<div class="quest-check">○</div>`;
         }
@@ -2572,7 +2592,7 @@
           <div class="calendar-quest-item ${item.completed && !item.claimed ? 'ready-claim' : ''}" data-quest-id="${q.id}" style="${!item.completed || !item.claimed ? 'cursor:pointer;' : ''}">
             <div>
               <div class="quest-title">${q.title}</div>
-              <div class="quest-reward">${q.rewardText}</div>
+              <div class="quest-reward">${q.rewardText}${q.rp ? ` <span class="quest-rp">+${q.rp}RP</span>` : ""}</div>
             </div>
             <div class="quest-action-slot">
               ${actionHtml}
