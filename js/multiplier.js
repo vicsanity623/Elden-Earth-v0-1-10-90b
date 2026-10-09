@@ -221,6 +221,28 @@ const Multiplier = (() => {
 
   // --- UI Update Functions ---
 
+  // --- Android local notification for boost expiry ---
+  // The client already knows the exact expiry (state.boostExpiry), so the OS
+  // notification is scheduled locally rather than waiting on a server sweep.
+  // WorkManager holds it across reboots and app updates natively.
+  //
+  // updateUI() ticks once a second, so we only talk to the native bridge when
+  // the expiry actually moves — and re-announce on every launch, which is what
+  // reschedules the notification after a reboot.
+  let notifiedBoostExpiry = -1;
+  function syncBoostNotification(state) {
+    if (typeof NativeBridge === "undefined" || !NativeBridge.isAndroid) return;
+    const expiry = Number(state?.boostExpiry) || 0;
+    if (expiry === notifiedBoostExpiry) return;
+    notifiedBoostExpiry = expiry;
+    if (expiry > Date.now()) {
+      const mult = Number(state.boostMultiplier) === 50 ? 50 : 20;
+      NativeBridge.scheduleBoostEnd(expiry, mult);
+    } else {
+      NativeBridge.cancelBoostEnd();
+    }
+  }
+
   /**
    * Update all multiplier-related UI elements
    * @param {object} state - Game state object
@@ -290,6 +312,8 @@ const Multiplier = (() => {
       timerBadge?.classList.add("hidden");
       timerBadge?.classList.remove("super-50x");
     }
+
+    syncBoostNotification(state);
   }
 
   /**
@@ -358,6 +382,7 @@ const Multiplier = (() => {
         const activeMult = res.mult;
         document.getElementById("booster-modal")?.classList.add("hidden");
         updateTopbar();
+        updateUI(state);
         const icon = activeMult === 50 ? "🔥" : "⚡";
         const plotCount = state.plots ? Object.keys(state.plots).length : 0;
         const tierFactor = getTierFactor(plotCount);

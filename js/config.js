@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.11.51b",
+  GAME_VERSION: "0.1.11.53b",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -300,17 +300,20 @@ const CONFIG = {
 
   // --- 30-Day Daily Login Calendar ---
   // Base 3 EB daily, scaling on Day 2 & every 5th day up to Day 30 (200 EB Jackpot)
+  // 90-day login ladder. MUST match DAILY_REWARDS in functions/index.js exactly
+  // — the server pays out from its copy and the UI renders from this one, so a
+  // drift here shows players one reward and pays another. Edit both together.
   DAILY_CALENDAR_REWARDS: [
     { day: 1,  eb: 3   },
-    { day: 2,  eb: 5   }, // Scaling boost
+    { day: 2,  eb: 5   },
     { day: 3,  eb: 3   },
     { day: 4,  eb: 3   },
-    { day: 5,  eb: 10  }, // Milestone 5
+    { day: 5,  eb: 10  },
     { day: 6,  eb: 3   },
     { day: 7,  eb: 12, diamonds: 75 },
     { day: 8,  eb: 3   },
     { day: 9,  eb: 3   },
-    { day: 10, eb: 20  }, // Milestone 10
+    { day: 10, eb: 20  },
     { day: 11, eb: 3   },
     { day: 12, eb: 3   },
     { day: 13, eb: 3   },
@@ -331,5 +334,65 @@ const CONFIG = {
     { day: 28, eb: 3   },
     { day: 29, eb: 3   },
     { day: 30, eb: 200, diamonds: 100 },
+    { day: 31, eb: 3   },
+    { day: 32, eb: 6   },
+    { day: 33, eb: 3   },
+    { day: 34, eb: 3   },
+    { day: 35, eb: 12  },
+    { day: 36, eb: 3   },
+    { day: 37, eb: 15, diamonds: 75 },
+    { day: 38, eb: 3   },
+    { day: 39, eb: 3   },
+    { day: 40, eb: 25  },
+    { day: 41, eb: 3   },
+    { day: 42, eb: 3   },
+    { day: 43, eb: 3   },
+    { day: 44, eb: 3   },
+    { day: 45, eb: 42, diamonds: 100 },
+    { day: 46, eb: 3   },
+    { day: 47, eb: 3   },
+    { day: 48, eb: 3   },
+    { day: 49, eb: 3   },
+    { day: 50, eb: 60, diamonds: 100 },
+    { day: 51, eb: 3   },
+    { day: 52, eb: 3   },
+    { day: 53, eb: 3   },
+    { day: 54, eb: 3   },
+    { day: 55, eb: 90, diamonds: 100 },
+    { day: 56, eb: 3   },
+    { day: 57, eb: 3   },
+    { day: 58, eb: 3   },
+    { day: 59, eb: 3   },
+    { day: 60, eb: 150, diamonds: 250 },
+    { day: 61, eb: 3   },
+    { day: 62, eb: 6   },
+    { day: 63, eb: 3   },
+    { day: 64, eb: 3   },
+    { day: 65, eb: 12  },
+    { day: 66, eb: 3   },
+    { day: 67, eb: 15, diamonds: 100 },
+    { day: 68, eb: 3   },
+    { day: 69, eb: 3   },
+    { day: 70, eb: 25  },
+    { day: 71, eb: 3   },
+    { day: 72, eb: 3   },
+    { day: 73, eb: 3   },
+    { day: 74, eb: 3   },
+    { day: 75, eb: 45, diamonds: 125 },
+    { day: 76, eb: 3   },
+    { day: 77, eb: 3   },
+    { day: 78, eb: 3   },
+    { day: 79, eb: 3   },
+    { day: 80, eb: 70, diamonds: 125 },
+    { day: 81, eb: 3   },
+    { day: 82, eb: 3   },
+    { day: 83, eb: 3   },
+    { day: 84, eb: 3   },
+    { day: 85, eb: 110, diamonds: 150 },
+    { day: 86, eb: 3   },
+    { day: 87, eb: 3   },
+    { day: 88, eb: 3   },
+    { day: 89, eb: 3   },
+    { day: 90, eb: 250, diamonds: 400 },
   ],
 };

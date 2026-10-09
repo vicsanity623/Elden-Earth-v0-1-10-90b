@@ -14,6 +14,7 @@ const Chat = (() => {
   let heartbeatTimer = null;
   let kbGuessTimer = null;
   let kbGuessPx = 0;
+  let kbFocusStartedAt = 0;
   let baseInnerHeight = 0;
   const PRESENCE_HEARTBEAT_MS = 90000; // Lightweight pulse every 90 seconds
   const MAX_MESSAGES = 25;
@@ -316,6 +317,10 @@ const Chat = (() => {
   // safe — the input just sits a little higher.
   function applyKeyboardGuess() {
     if (!drawer || !inputEl || document.activeElement !== inputEl) return;
+    // Give real signals (visualViewport / layout resize) time to land first,
+    // otherwise on iOS and Chrome the input jumps up 45% for a beat before the
+    // keyboard's own measurement replaces the guess.
+    if (Date.now() - kbFocusStartedAt < 450) return;
     const vv = window.visualViewport;
     if (vv && window.innerHeight - vv.height > 40) return; // real signal won
     if (layoutAlreadyResized()) return; // viewport already shrank for the IME
@@ -331,6 +336,7 @@ const Chat = (() => {
 
   function startKeyboardTracking() {
     if (!inputEl) return;
+    kbFocusStartedAt = Date.now();
     applyKeyboardInset();
     // The IME animates in and often reports nothing at all in an immersive
     // WebView, so keep guessing until a real signal or blur settles it.
@@ -357,7 +363,16 @@ const Chat = (() => {
     isOpen = true;
     drawer.classList.remove("hidden");
     applyKeyboardInset();
-    
+
+    // Focus here, synchronously inside the tap handler. iOS only raises the
+    // soft keyboard for a focus() that runs in the user-gesture call stack — the
+    // eligibility check below awaits, which breaks that stack, so focusing after
+    // it (or in a setTimeout) leaves the keyboard shut with a dead gap where the
+    // composer should be. open() is only ever called from a click, so this is
+    // always still inside the gesture.
+    if (inputEl && !inputEl.disabled) inputEl.focus();
+    startKeyboardTracking();
+
     // Mark all current messages as read in local storage!
     localStorage.setItem("eldenEarth.lastChatRead.v1", Date.now().toString());
     if (unreadBadge) {
@@ -375,6 +390,8 @@ const Chat = (() => {
           sendBtn.disabled = true;
           sendBtn.style.opacity = "0.5";
           sendBtn.style.cursor = "not-allowed";
+          // The focus above was optimistic — take it back if they can't type.
+          inputEl.blur();
         } else {
           inputEl.disabled = false;
           inputEl.placeholder = "Type a message...";
@@ -389,12 +406,6 @@ const Chat = (() => {
 
     renderMessages();
     updateOnlineCount();
-    setTimeout(() => {
-      // focus() is a no-op if the input is already focused (no focus event), so
-      // start tracking explicitly rather than relying on the listener alone.
-      if (document.activeElement !== inputEl) inputEl?.focus();
-      startKeyboardTracking();
-    }, 250);
   }
 
   function close() {

@@ -2214,13 +2214,22 @@
       }
     }
 
-    // --- 30-Day Daily Login Calendar System (Tamper-Proof 20-Hour Cooldown) ---
+    // --- 90-Day Daily Login Calendar (one claim per UTC day) ---
+    const UTC_DAY_MS = 86400000;
+    const DAILY_CALENDAR_LENGTH = 90;
+    // Date.now() is epoch-based UTC millis, so integer division gives the UTC
+    // calendar day directly. Mirrors utcDayOf() in functions/index.js.
+    const utcDayOf = (ts) => Math.floor(ts / UTC_DAY_MS);
+
     function getCalendarState() {
       const state = Store.get();
       if (!state.calendar) {
         state.calendar = {
-          claimedDays: 0,       // Exact count of days claimed (0 to 30)
+          claimedDays: 0,       // Position on the 1-90 ladder
+          cycle: 1,             // Completed 90-day laps (lifetime counter)
+          graceAvailable: true, // One-day streak forgiveness not yet spent
           lastClaimTime: 0,     // Timestamp of last claim
+          lastClaimDay: 0,      // UTC day index of the last claim
           lastClaimDate: null   // Legacy migration support
         };
       }
@@ -2233,14 +2242,25 @@
       if (state.calendar.lastClaimDate && !state.calendar.lastClaimTime) {
         state.calendar.lastClaimTime = new Date(state.calendar.lastClaimDate).getTime() || Date.now();
       }
+      // Accounts that predate lastClaimDay derive it from the timestamp, so
+      // their existing streak carries over instead of restarting.
+      if (!state.calendar.lastClaimDay && state.calendar.lastClaimTime) {
+        state.calendar.lastClaimDay = utcDayOf(state.calendar.lastClaimTime);
+      }
+      if (!state.calendar.cycle) state.calendar.cycle = 1;
+      if (state.calendar.graceAvailable === undefined) state.calendar.graceAvailable = true;
       return state.calendar;
     }
 
     function isRewardReady() {
       const cal = getCalendarState();
-      if (!cal.lastClaimTime) return true;
-      const HOURS_20 = 20 * 3600 * 1000; // 20 hours minimum between claims
-      return (Date.now() - cal.lastClaimTime) >= HOURS_20;
+      // Different UTC day to the last claim = claimable. The server re-checks
+      // this in claimDailyReward; this copy is UI affordance only.
+      return utcDayOf(Date.now()) !== (cal.lastClaimDay || 0);
+    }
+
+    function msUntilUtcReset() {
+      return (utcDayOf(Date.now()) + 1) * UTC_DAY_MS - Date.now();
     }
 
     function updateCalendarHUD() {
@@ -2252,17 +2272,50 @@
       if (el("cal-hud-month")) el("cal-hud-month").textContent = months[now.getMonth()];
       if (el("cal-hud-day")) el("cal-hud-day").textContent = now.getDate();
 
+      // Previously gated on claimedDays < 30, which silently hid the dot at the
+      // top of the ladder — exactly when the player should claim to start the
+      // next cycle. Any unclaimed day is worth flagging.
       const unreadDot = el("calendar-unread-dot");
       if (unreadDot) {
-        if (ready && (cal.claimedDays || 0) < 30) {
-          unreadDot.classList.remove("hidden");
-        } else {
-          unreadDot.classList.add("hidden");
-        }
+        if (ready) unreadDot.classList.remove("hidden");
+        else unreadDot.classList.add("hidden");
       }
     }
 
+    /**
+     * Human-readable streak summary shown under the modal title: which cycle the
+     * player is on, how far along the 90-day ladder they are, and how long until
+     * the next UTC reset.
+     */
+    function calendarStreakStatus() {
+      const cal = getCalendarState();
+      const claimed = cal.claimedDays || 0;
+      const cycle = cal.cycle || 1;
+      const parts = [];
+      parts.push(cycle > 1 ? `Cycle ${cycle} · Day ${claimed || 1} / ${DAILY_CALENDAR_LENGTH}`
+        : `Day ${claimed} / ${DAILY_CALENDAR_LENGTH}`);
+
+      if (isRewardReady()) {
+        parts.push("Ready to claim");
+      } else {
+        const ms = msUntilUtcReset();
+        const hrs = Math.floor(ms / 3600000);
+        const mins = Math.floor((ms % 3600000) / 60000);
+        parts.push(`Next reward in ${hrs}h ${mins}m`);
+      }
+
+      // Only surface the grace once it has actually been spent — otherwise it is
+      // just noise for players who have never missed a day.
+      if (cal.graceAvailable === false) {
+        parts.push("Streak grace used");
+      }
+      return parts.join(" · ");
+    }
+
     function renderCalendarModal() {
+      const statusEl = el("calendar-streak-status");
+      if (statusEl) statusEl.textContent = calendarStreakStatus();
+
       const list = el("calendar-days-list");
       if (!list) return;
       list.innerHTML = "";
@@ -2292,7 +2345,7 @@
         } else if (isReadyToClaim) {
           actionHtml = `<button class="cal-claim-btn" id="claim-day-${dayNum}">Claim ${rewardLabel}</button>`;
         } else if (isLockedTomorrow) {
-          const remainingMs = Math.max(0, (cal.lastClaimTime + (20 * 3600 * 1000)) - Date.now());
+          const remainingMs = msUntilUtcReset();
           const remHrs = Math.floor(remainingMs / 3600000);
           const remMins = Math.floor((remainingMs % 3600000) / 60000);
           actionHtml = `<span class="cal-status-locked" style="color:var(--teal);opacity:0.85;">⏳ ${remHrs}h ${remMins}m</span>`;
@@ -2355,7 +2408,7 @@
         return;
       }
       if (!serverResult?.claimed) {
-        if (serverResult?.reason === "cooldown") showToast("⏳ Daily reward is still on cooldown.", 3500);
+        if (serverResult?.reason === "cooldown") showToast("⏳ Already claimed today — next reward at 00:00 UTC.", 3500);
         return;
       }
 
@@ -2363,13 +2416,27 @@
       cal.lastClaimTime = serverResult.calendar.lastClaimTime;
       cal.claimedDays = serverResult.calendar.claimedDays;
       cal.lastClaimDate = serverResult.calendar.lastClaimDate;
+      cal.lastClaimDay = serverResult.calendar.lastClaimDay;
+      cal.cycle = serverResult.calendar.cycle || 1;
+      cal.graceAvailable = serverResult.calendar.graceAvailable !== false;
       state.dailyQuests = serverResult.dailyQuests;
       state.eb = serverResult.nextEb;
       state.diamonds = serverResult.nextDiamonds;
       Store.save(true);
 
       updateTopbar();
+    updateCalendarHUD();
+    // Keep the countdown and the red dot honest while the game is left open
+    // across a UTC midnight. Without this the dot only appeared on a reload,
+    // which is exactly the moment a player about to log off would miss it.
+    setInterval(() => {
       updateCalendarHUD();
+      const modal = document.getElementById("calendar-modal");
+      const status = el("calendar-streak-status");
+      if (status && modal && !modal.classList.contains("hidden")) {
+        status.textContent = calendarStreakStatus();
+      }
+    }, 30000);
 
       // Trigger visual particles with full EB amount to the sub stat bar
       launchFlyingEBStream(clickX, clickY, totalEB);

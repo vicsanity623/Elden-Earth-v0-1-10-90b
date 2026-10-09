@@ -63,6 +63,19 @@ const NativeBridge = (() => {
     };
   }
 
+  // Local OS notifications. Browsers have no equivalent (Web Push is not
+  // available inside Android WebView), so these are no-ops outside the app and
+  // js/multiplier.js simply never gets its boost-expiry nudge there.
+  function scheduleBoostEnd(expiryMs, multiplier) {
+    if (!isNativeApp || typeof window.EldenEarthNative.scheduleBoostEnd !== 'function') return;
+    window.EldenEarthNative.scheduleBoostEnd(expiryMs, multiplier || 20);
+  }
+
+  function cancelBoostEnd() {
+    if (!isNativeApp || typeof window.EldenEarthNative.cancelBoostEnd !== 'function') return;
+    window.EldenEarthNative.cancelBoostEnd();
+  }
+
   return {
     isNativeApp,
     isAndroid,
@@ -75,7 +88,9 @@ const NativeBridge = (() => {
     getDeviceId,
     isOnline,
     openExternal,
-    getVersionInfo
+    getVersionInfo,
+    scheduleBoostEnd,
+    cancelBoostEnd
   };
 })();
 
