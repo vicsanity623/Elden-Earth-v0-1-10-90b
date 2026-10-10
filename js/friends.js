@@ -127,6 +127,9 @@ const Friends = (() => {
 
       await d.collection("friend_requests").doc(requestDocId).delete();
       toast("✅ Friend request accepted!", 3000);
+      // Friendship creation is a direct Firestore write with no server call
+      // site, so it reports progress here like the other client-only actions.
+      if (typeof Achievements !== "undefined") Achievements.record("friendsMade");
       setTimeout(() => renderFriendsTab(), 350);
     } catch (e) {
       console.warn("[Friends] Accept error:", e);

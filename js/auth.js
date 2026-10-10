@@ -317,12 +317,26 @@ const Auth = (() => {
     const existing = await ref.get().catch(() => null);
     const currentName = user.displayName || existing?.data()?.name || "Traveler";
     const currentAvatar = user.photoURL ? "img:" + user.photoURL : (existing?.data()?.avatar || "🙂");
+
+    // Referral code, generated here at signup. It used to be created only when
+    // the Referrals tab first opened, so anyone invited by a player who had
+    // never visited that tab got "invalid_code" — which is why the referral
+    // achievement never moved. Must satisfy /^[A-Z0-9]{6,12}$/ on the server.
+    let referralCode = String(existing?.data()?.referralCode || "").trim();
+    if (!/^[A-Z0-9]{6,12}$/.test(referralCode)) {
+      const base = (currentName || "traveler").replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase();
+      const rand = Math.random().toString(36).slice(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      referralCode = (base + rand).slice(0, 12);
+      while (referralCode.length < 6) referralCode += Math.floor(Math.random() * 10);
+    }
+
     const profile = {
       uid,
       email: user.email || existing?.data()?.email || "",
       name: currentName,
       avatar: currentAvatar,
       authProvider: "google",
+      referralCode,
       lastSeenAt: Date.now(),
       createdAt: existing?.data()?.createdAt || Date.now(),
       canonicalSaveId: uid,

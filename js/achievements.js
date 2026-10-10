@@ -164,6 +164,9 @@ const Achievements = (() => {
       <div class="ach-summary">
         <span><strong>${Object.keys(c).length}</strong> / ${ALL.length} unlocked</span>
         <span class="ach-summary-hint">Badges you earn appear in your profile</span>
+        ${ready.length
+          ? `<button class="ach-claim-all" id="ach-claim-all">Claim all ${ready.length}</button>`
+          : ""}
       </div>`;
 
     // Group by category so the list reads as sections rather than a wall.
@@ -216,15 +219,10 @@ const Achievements = (() => {
       });
     });
 
-    if (ready.length) {
-      const head = container.querySelector(".ach-summary");
-      if (head) {
-        const n = document.createElement("span");
-        n.className = "quest-rp";
-        n.textContent = `${ready.length} ready to claim`;
-        head.appendChild(n);
-      }
-    }
+    el("ach-claim-all")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      claimAll();
+    });
   }
 
   async function claim(key) {
@@ -450,6 +448,72 @@ const Achievements = (() => {
     return claimable().length > 0;
   }
 
+  /**
+   * Claim every completed achievement at once.
+   *
+   * Claims are sent one at a time (each is its own server transaction that
+   * verifies the progress) with a short stagger between them so the
+   * claimAchievement rate limit is not tripped and the toasts stack rather
+   * than overwrite each other.
+   */
+  let claimingAll = false;
+  async function claimAll() {
+    const ready = claimable();
+    if (!ready.length) {
+      toast("Nothing ready to claim yet.", 2500);
+      return;
+    }
+    if (claimingAll) return;
+    claimingAll = true;
+
+    let granted = 0, skipped = 0, ebTotal = 0, rpTotal = 0;
+
+    for (let i = 0; i < ready.length; i++) {
+      const def = ready[i];
+      try {
+        const fn = firebase.functions().httpsCallable("claimAchievement");
+        const res = (await fn({ key: def.key })).data;
+        if (res && res.ok) {
+          granted++;
+          ebTotal += Number(res.eb) || 0;
+          rpTotal += Number(res.rp) || 0;
+
+          const state = Store.get();
+          if (state) {
+            state.achievementsClaimed = Object.assign({}, state.achievementsClaimed || {}, {
+              [def.key]: { claimedAt: Date.now(), tier: def.tier, target: def.target },
+            });
+            state.eb = Math.max(0, Number(res.nextEb) || Number(state.eb) || 0);
+            state.rewardPoints = Math.max(0, Number(res.nextRewardPoints) || Number(state.rewardPoints) || 0);
+            Store.save && Store.save(false);
+          }
+
+          // Staggered so the toasts stack up instead of replacing each other.
+          setTimeout(() => {
+            toast(`🏅 ${def.title} · +${def.eb} EB${def.rp ? ` · +${def.rp}RP` : ""}`, 3500);
+          }, i * 300);
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        console.warn("[Achievements] claimAll failed for", def.key, e && e.message);
+        skipped++;
+      }
+      // Small gap between requests so we stay under the per-minute rate limit.
+      if (i < ready.length - 1) await new Promise((r) => setTimeout(r, 120));
+    }
+
+    renderAll();
+    if (typeof window.updateCalendarHUD === "function") window.updateCalendarHUD();
+
+    setTimeout(() => {
+      if (skipped) toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP (${skipped} skipped)`, 5000);
+      else toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP`, 5000);
+    }, ready.length * 300 + 150);
+
+    claimingAll = false;
+  }
+
   function renderAll() {
     const list = el("calendar-achievements-list");
     if (list) renderTab(list);
@@ -466,7 +530,7 @@ const Achievements = (() => {
     renderAll();
   }
 
-  return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, hasClaimable, ALL, CATEGORIES, BY_KEY };
+  return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, claimAll, hasClaimable, ALL, CATEGORIES, BY_KEY };
 })();
 
 window.Achievements = Achievements;
