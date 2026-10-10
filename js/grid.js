@@ -6,6 +6,24 @@ const Grid = (() => {
   let onBuyAttempt = () => {};
   let pendingTile = null;
   let globalPlots = {};
+
+  /**
+   * Client-side rarity roll, used ONLY for the optimistic paint before the
+   * server answers. The server is still the authority and its roll replaces
+   * this — the two can differ, which is why the optimistic plot lives in
+   * `globalPlots` (render-only, never synced) rather than `state.plots`.
+   */
+  function rollClientRarity() {
+    const rarities = CONFIG.PLOT_RARITIES || [];
+    const total = rarities.reduce((a, r) => a + (Number(r.weight) || 0), 0);
+    if (!total || !rarities.length) return "common";
+    let roll = Math.random() * total;
+    for (const r of rarities) {
+      roll -= Number(r.weight) || 0;
+      if (roll <= 0) return r.key;
+    }
+    return rarities[rarities.length - 1].key;
+  }
   let activeMarkers = [];
   let isBuyMode = false;
   let playerCoords = null;
@@ -64,7 +82,7 @@ const Grid = (() => {
     }
 
     const ts = CONFIG.TILE_SIZE_METERS || 6.096;
-    const radiusM = CONFIG.DIAMOND_COLLECT_RADIUS_METERS || 75;
+    const radiusM = CONFIG.LAND_PLACE_RADIUS_METERS || 150;
 
     if (playerCoords && playerCoords.lat) {
       const bounds = Geo.tileBounds(tx, ty, ts);
@@ -582,6 +600,26 @@ const Grid = (() => {
         }
       }
 
+      // OPTIMISTIC PLACEMENT: paint the tile the instant the player confirms so
+      // the Cloud Function round trip does not read as a stall. Only
+      // `globalPlots` is touched — it is render-only and never synced to the
+      // server — so a rejection simply rolls the tile back. The server's rarity
+      // and instanceId replace this entry on success.
+      const optimisticRarity = rollClientRarity();
+      const optimisticRate = (CONFIG.PLOT_RARITIES || []).find(r => r.key === optimisticRarity)?.rate || 0;
+      globalPlots[tid] = {
+        tid,
+        tx,
+        ty,
+        ownerId: state.player?.id,
+        ownerName: state.player?.name,
+        rarity: optimisticRarity,
+        rate: optimisticRate,
+        pending: true,
+      };
+      scheduleRender();
+      if (typeof showToast === "function") showToast("⏳ Placing plot…", 1200);
+
       let serverResult = null;
       let transportError = false;
       try {
@@ -605,6 +643,11 @@ const Grid = (() => {
       }
 
       if (!serverResult || !serverResult.allowed) {
+        // Roll the optimistic plot back out of the render layer.
+        if (globalPlots[tid] && globalPlots[tid].pending) {
+          delete globalPlots[tid];
+          scheduleRender();
+        }
         const toastFn = window.showToast || alert;
         const reason = serverResult ? serverResult.reason : "server_error";
         // Sync server's cooldown timestamp to keep client in check
@@ -815,7 +858,7 @@ const Grid = (() => {
     const emptyGridFeatures = [];
     if (isBuyMode && playerCoords) {
       const ts = CONFIG.TILE_SIZE_METERS;
-      const radiusM = CONFIG.DIAMOND_COLLECT_RADIUS_METERS || 50;
+      const radiusM = CONFIG.LAND_PLACE_RADIUS_METERS || 150;
       const centerTile = Geo.tileForLatLon(playerCoords.lat, playerCoords.lon, ts);
       const tileRadius = Math.ceil(radiusM / ts);
 
@@ -881,7 +924,7 @@ const Grid = (() => {
     const ascensionFeatures = [];
     if (isAscensionMode && playerCoords) {
       const ts = CONFIG.TILE_SIZE_METERS;
-      const radiusM = CONFIG.DIAMOND_COLLECT_RADIUS_METERS || 75;
+      const radiusM = CONFIG.LAND_PLACE_RADIUS_METERS || 150;
       const selMap = {};
       ascensionSelections.forEach((s, i) => { selMap[s.tid] = i; });
 
@@ -1151,6 +1194,10 @@ const Grid = (() => {
 
   function setPlayerPosition(lat, lon) {
     playerCoords = { lat, lon };
+    // The buy / ascension grids are drawn from playerCoords, so without a
+    // re-render they stay frozen at the position the mode was entered at and
+    // the player walks straight out of the placement radius.
+    if (isBuyMode || isAscensionMode) scheduleRender();
   }
 
   function getPlayerPosition() {
@@ -1166,7 +1213,7 @@ const Grid = (() => {
   function handleAscensionClick(lngLat) {
     if (!isAscensionMode || !onAscensionPick) return;
     const ts = CONFIG.TILE_SIZE_METERS || 6.096;
-    const radiusM = CONFIG.DIAMOND_COLLECT_RADIUS_METERS || 75;
+    const radiusM = CONFIG.LAND_PLACE_RADIUS_METERS || 150;
     const { lng, lat } = lngLat;
 
     if (playerCoords && playerCoords.lat) {
@@ -1325,7 +1372,7 @@ const Grid = (() => {
       if (!isBuyMode) return; // Only allow buying in Buy Land mode
       const { lng, lat } = e.lngLat;
       const ts = CONFIG.TILE_SIZE_METERS || 6.096;
-      const radiusM = CONFIG.DIAMOND_COLLECT_RADIUS_METERS || 75;
+      const radiusM = CONFIG.LAND_PLACE_RADIUS_METERS || 150;
 
       // Strict Reach Radius Guard: Block any tile clicked outside the circle!
       if (playerCoords && playerCoords.lat) {

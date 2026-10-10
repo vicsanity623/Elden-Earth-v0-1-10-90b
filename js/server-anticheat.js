@@ -26,15 +26,32 @@ const ServerAntiCheat = (() => {
   // OWN container, so warming has to address each hot one individually. The
   // server answers { __warm: 1 } before touching Firestore, so a ping costs a
   // single round trip, zero reads, and effectively nothing in billing.
+  // Callables that must not be cold when the player taps something. A cold
+  // Cloud Functions container costs 1-3s on cell data, which is exactly why
+  // buying land / spinning a stop felt like you had to stand still and wait.
+  // validatePurchase was missing from this list entirely, so every land
+  // purchase was a cold start.
   const KEEPALIVE_FNS = [
     "validatePosition",
     "validateCollect",
+    "validatePurchase",
     "spinWheel",
     "spinEldenStop",
     "plantEldenStop",
     "spawnDiamonds",
+    "ascendPlot",
+    "citadelAction",
+    "recallCitadel",
+    "conquerCitadel",
+    "claimDailyReward",
+    "claimQuestReward",
+    "claimAchievement",
+    "recordActivity",
+    "convertCash",
   ];
-  const KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000;
+  // 5 minutes rather than 10: Cloud Functions containers idle out somewhere
+  // around 5-15 min, so a 10-minute ping let them go cold between sessions.
+  const KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
   let keepAliveTimer = null;
   let keepAliveHooked = false;
 

@@ -164,10 +164,12 @@ const Diamonds = (() => {
       }
       const d = live[did];
 
-      // Keep all diamonds within 1,500m visible on the 3D horizon
+      // Cull anything outside the render radius — the marker is decorative and
+      // drawing 80 of them across a 2.5km field is wasted work. The data stays
+      // in `live`, so the diamond is still there when the player walks back.
       if (playerPos) {
         const distToPlayer = Geo.haversine(playerPos.lat, playerPos.lon, d.lat, d.lon);
-        if (distToPlayer > 1500) {
+        if (distToPlayer > (CONFIG.DIAMOND_RENDER_RADIUS_METERS || 2000)) {
           if (markers[did]) { markers[did].remove(); delete markers[did]; }
           continue;
         }
@@ -306,15 +308,24 @@ const Diamonds = (() => {
     if (changed) Store.save(true);
   }
 
-  // Guaranteed Horizon Seeder: Instantly spawns 24 diamonds across 3 visible street layers
-  async function seedHorizonBatch(targetCount = 24) {
+  /**
+   * Ask the server for `toAdd` more diamonds near the player.
+   *
+   * `toAdd` is the DEFICIT — how many more we want — not a target total. This
+   * used to compare the total active count against the deficit and bail out
+   * whenever the field was already partly full, which is why diamonds stopped
+   * appearing at all once you walked away from the first batch.
+   */
+  async function seedHorizonBatch(toAdd = 20) {
     if (!playerPos) return;
     const state = Store.get();
     if (!state.liveDiamonds) state.liveDiamonds = {};
     pruneExpired();
 
+    const MAX_ACTIVE = CONFIG.DIAMOND_MAX_ACTIVE || 80;
     const curCount = Object.keys(state.liveDiamonds).length;
-    if (curCount >= targetCount) return;
+    const room = MAX_ACTIVE - curCount;
+    if (room <= 0) return;
 
     // Cap close diamonds (within 100m) to max 3 — don't request more if already have 3+
     let closeCount = 0;
@@ -323,7 +334,7 @@ const Diamonds = (() => {
       if (Geo.haversine(playerPos.lat, playerPos.lon, d.lat, d.lon) <= 100) closeCount++;
     }
     const wantClose = Math.max(0, 3 - closeCount);
-    const requestCount = Math.min(6, targetCount - curCount); // max 6 per batch, not 12
+    const requestCount = Math.min(20, Math.max(1, Math.floor(toAdd)), room);
 
     if (spawnInFlight || typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) return;
     spawnInFlight = true;
@@ -349,22 +360,26 @@ const Diamonds = (() => {
       return;
     }
 
-    const MAX_ACTIVE = CONFIG.DIAMOND_MAX_ACTIVE || 36;
+    const MAX_ACTIVE = CONFIG.DIAMOND_MAX_ACTIVE || 80;
     const allDiamonds = Object.keys(state.liveDiamonds).length;
     if (allDiamonds >= MAX_ACTIVE) return;
 
-    // Count nearby diamonds specifically (within 1200m)
+    // Count diamonds within the render radius — that is the number the player
+    // can actually see, so that is what we keep topped up. (Was a hardcoded
+    // 1200m / 6 target, which is why the field looked empty once you walked
+    // anywhere new.)
+    const renderRadius = CONFIG.DIAMOND_RENDER_RADIUS_METERS || 2000;
     let nearbyCount = 0;
     for (const did in state.liveDiamonds) {
       const d = state.liveDiamonds[did];
-      if (Geo.haversine(playerPos.lat, playerPos.lon, d.lat, d.lon) <= 1200) {
+      if (Geo.haversine(playerPos.lat, playerPos.lon, d.lat, d.lon) <= renderRadius) {
         nearbyCount++;
       }
     }
 
-    const TARGET_NEARBY = 6;
+    const TARGET_NEARBY = CONFIG.DIAMOND_TARGET_NEARBY || 30;
     if (nearbyCount < TARGET_NEARBY) {
-      const toSpawn = Math.min(6, TARGET_NEARBY - nearbyCount, MAX_ACTIVE - allDiamonds);
+      const toSpawn = Math.min(20, TARGET_NEARBY - nearbyCount, MAX_ACTIVE - allDiamonds);
       if (toSpawn > 0) await seedHorizonBatch(toSpawn);
     }
   }

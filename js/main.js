@@ -1030,7 +1030,7 @@
     
     if (typeof Citadels !== "undefined") Citadels.setPlayerPosition(currentPos.lat, currentPos.lon);
     if (typeof EldenStops !== "undefined") EldenStops.setPlayerPosition(currentPos.lat, currentPos.lon);
-    
+
     // 1. Move 3D Character & Radius Layer
     Character3D.setPlayerPosition(currentPos.lon, currentPos.lat);
     if (typeof CompanionPet !== "undefined") {
@@ -1038,6 +1038,12 @@
     }
     updatePlayerRadiusLayer();
     Diamonds.setPlayerPosition(currentPos.lat, currentPos.lon);
+    // The grid is drawn from its own playerCoords — without this buy mode stays
+    // frozen at the position it was opened at and you walk straight out of the
+    // placement radius before the tile lands.
+    if (typeof Grid !== "undefined" && Grid.setPlayerPosition) {
+      Grid.setPlayerPosition(currentPos.lat, currentPos.lon);
+    }
 
     // Anti-cheat: Periodic territory check for embargo (every ~500m movement)
     if (typeof AntiCheat !== "undefined" && typeof Geo !== "undefined") {

@@ -41,14 +41,26 @@ const CONFIG = {
   
   // --- Tile grid ---
   TILE_SIZE_METERS: 6.096,        // ~20 x 20 feet
+  // How far from the player a plot may be placed. Was reusing
+  // DIAMOND_COLLECT_RADIUS_METERS (75m), which is far too tight while walking —
+  // a few seconds of movement put every tile out of range before the round trip
+  // finished. Must match PURCHASE_RADIUS_M in functions/index.js.
+  LAND_PLACE_RADIUS_METERS: 150,
   GRID_RENDER_MIN_ZOOM: 16,       // grid only draws once zoomed in this close
   GRID_RENDER_MAX_TILES: 1200,    // safety cap per redraw
 
   // --- Diamonds ---
-  DIAMOND_SPAWN_RADIUS_METERS: 1000,     // ~.75 mile maximum
+  // Diamond field. The old numbers (11 active within ~1km, checked every 5
+  // minutes) meant walking away from your usual spot meant seeing nothing at
+  // all. The field is now dense around wherever the player currently is and
+  // tops up continuously as they move, so it works anywhere in the city.
+  // Rendering is culled to DIAMOND_RENDER_RADIUS_METERS to keep it cheap.
+  DIAMOND_SPAWN_RADIUS_METERS: 2500,     // ~1.5 mile spawn band around the player
+  DIAMOND_RENDER_RADIUS_METERS: 2000,    // only draw diamonds this close
   DIAMOND_COLLECT_RADIUS_METERS: 75,     // Exact player collection radius
-  DIAMOND_MAX_ACTIVE: 11,
-  DIAMOND_SPAWN_CHECK_MS: 5 * 60 * 1000, // Check for respawns every 5 minutes
+  DIAMOND_MAX_ACTIVE: 80,
+  DIAMOND_TARGET_NEARBY: 30,             // aim for this many within the render radius
+  DIAMOND_SPAWN_CHECK_MS: 60 * 1000,     // top the field up every minute
   DIAMOND_INNER_COOLDOWN_MS: 60 * 60 * 1000, // 1-Hour inner cooldown (stops pet infinite farm)
   DIAMOND_IDLE_TIMEOUT_MS: 120 * 60 * 1000,  // Pause spawning after 2 hours idle
   DIAMOND_MOVEMENT_THRESHOLD_METERS: 50,     // Ignore GPS drift smaller than 50m
