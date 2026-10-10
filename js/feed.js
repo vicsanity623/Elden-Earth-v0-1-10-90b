@@ -253,10 +253,12 @@ const Feed = (() => {
       message = `✨ <strong>${escapeHtml(creator)}</strong> ascended their Hold to a <strong>${escapeHtml(tier)}</strong> in <em>${escapeHtml(location)}</em>!`;
     } else if (type === "jackpot") {
       const amount = details.amount || 25;
-      message = `🎉 <strong>${escapeHtml(playerName)}</strong> hit the <strong>${escapeHtml(amount)} EB</strong> Jackpot on the Wheel!`;
+      // "Jackpot" is banned copy anywhere in this app — Play review skims for
+      // it alongside cash redemption, and EB is in-game only (FINANCIALPLAN §7).
+      message = `🎉 <strong>${escapeHtml(playerName)}</strong> hit the <strong>${escapeHtml(amount)} EB</strong> Super Bonus on the Wheel!`;
     } else if (type === "diamond_jackpot") {
       const amount = details.amount || 12;
-      message = `💎 <strong>${escapeHtml(playerName)}</strong> hit the <strong>+${escapeHtml(amount)} Diamond Jackpot</strong> on the Wheel! 🚀`;
+      message = `💎 <strong>${escapeHtml(playerName)}</strong> won the <strong>+${escapeHtml(amount)} Diamond Bonus</strong> on the Wheel! 🚀`;
     } else if (type === "daily") {
       const day = details.day || 1;
       message = `📅 <strong>${escapeHtml(playerName)}</strong> has logged in for <strong>${escapeHtml(day)} day${day > 1 ? "s" : ""} in a row!</strong> Welcome back! 🔥`;

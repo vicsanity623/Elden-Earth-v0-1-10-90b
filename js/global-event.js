@@ -132,7 +132,7 @@ const GlobalEvent = (() => {
     if (sharePoolEl) sharePoolEl.textContent = fmtEB(basePool);
     const poolNote = el("ge-pool-note");
     if (poolNote) {
-      poolNote.innerHTML = `Prize pool = ${fmtEB(basePool)} EB ÷ <strong id="ge-participants">${participants}</strong> players = <strong id="ge-total-pool">${fmtEB(totalPool)}</strong> EB, split by contribution share.`;
+      poolNote.innerHTML = `Bonus pool = ${fmtEB(basePool)} EB ÷ <strong id="ge-participants">${participants}</strong> players = <strong id="ge-total-pool">${fmtEB(totalPool)}</strong> EB, split by contribution share.`;
     }
 
     const myAmtEl = el("ge-my-amount");
@@ -445,7 +445,7 @@ const GlobalEvent = (() => {
           event_not_complete: "⏳ Event is not complete yet.",
           already_claimed: "✓ You already claimed this reward.",
           no_contribution: "⚠️ You have no recorded contributions.",
-          prize_too_small: "⚠️ Prize too small to claim.",
+          prize_too_small: "⚠️ Bonus too small to claim.",
           rate_limited: "⏳ Slow down — try again shortly.",
         };
         toast(msgs[result?.reason] || `⚠️ Claim failed: ${result?.reason || "unknown"}`, 3500);

@@ -410,7 +410,7 @@ const WeeklyPool = (() => {
       return;
     }
     const icon = info.myRank === 1 ? "🥇" : info.myRank === 2 ? "🥈" : info.myRank === 3 ? "🥉" : "🏅";
-    el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · projected prize <strong>$${fmtCash(info.myPrize)}</strong>`;
+    el.innerHTML = `Your standing: <strong>${icon} #${info.myRank}</strong> · projected bonus <strong>$${fmtCash(info.myPrize)}</strong> (in-game)`;
     if (note) {
       note.textContent = paidLine + liveLine;
     }

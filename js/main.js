@@ -3853,8 +3853,8 @@
         } else if (winningSlice.type === "diamond_jackpot") {
           // 💎 +12 or +24 Diamond Jackpot!
           const winDiamonds = (Number(winningSlice.amount) || 12) * multAward;
-          el("wheel-result").textContent = `🎉 MEGA JACKPOT! +${winDiamonds} Diamonds!`;
-          showToast(`💎 MEGA JACKPOT! Won +${winDiamonds} Diamonds!`);
+          el("wheel-result").textContent = `🎉 MEGA BONUS! +${winDiamonds} Diamonds!`;
+          showToast(`💎 MEGA BONUS! Won +${winDiamonds} Diamonds!`);
 
           // Only broadcast diamond jackpots on 1X spins (not 10X) to prevent feed flooding
           if (multAward === 1 && typeof Feed !== "undefined") {

@@ -15,10 +15,13 @@ SCPR.md
 PLAN.md
 PEER.md
 FINANCIALPLAN.md
+CHANGELOG.md
+PLAY-LISTING.md
 
 # Firebase
 .firebase/
 firestore.rules
+deploy-functions.sh
 storage.rules
 functions/
 *.service-account.json

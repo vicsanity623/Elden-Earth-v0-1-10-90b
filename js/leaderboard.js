@@ -844,7 +844,7 @@ const Leaderboard = (() => {
       const parts = [];
       if (result.dividendsEb > 0) parts.push(`+${result.dividendsEb} EB royalties`);
       if (result.giftsEb > 0) parts.push(`+${result.giftsEb} EB friend gifts`);
-      toastFn(`👑 Royal Payout! You collected ${parts.join(" and ")}!`, 5000);
+      toastFn(`👑 Royal Dividend! You collected ${parts.join(" and ")}!`, 5000);
     } catch (e) {
       console.warn("[Dividends] Auto-claim notice:", e);
     }

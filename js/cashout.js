@@ -123,7 +123,7 @@ const Cashout = (() => {
       if (openBtn2) {
         openBtn2.style.display = "block";
         openBtn2.disabled = false;
-        openBtn2.textContent = "Request Withdrawal";
+        openBtn2.textContent = "Redeem Rewards";
         openBtn2.classList.remove("hidden");
       }
     } else {
@@ -143,7 +143,7 @@ const Cashout = (() => {
         } else if (!balanceOk) {
           openBtn2.textContent = `Need ${Math.ceil(minWithdraw * RP_PER_USD)}RP to redeem`;
         } else {
-          openBtn2.textContent = "Withdrawal unavailable";
+          openBtn2.textContent = "Redemption unavailable";
         }
         openBtn2.classList.remove("hidden");
       }
@@ -184,15 +184,15 @@ const Cashout = (() => {
     }
     if (cooldownEl) {
       cooldownEl.textContent = cooldownActive
-        ? `⏳ Payout cooldown active — ${cooldownHoursLeft}h remaining.`
-        : "No payout cooldown.";
+        ? `⏳ Redemption cooldown active — ${cooldownHoursLeft}h remaining.`
+        : "No redemption cooldown.";
     }
 
     // Enable/disable submit button
     if (submitBtn) {
       submitBtn.disabled = !allOk || isSubmitting;
       if (isSubmitting) submitBtn.textContent = "Submitting...";
-      else submitBtn.textContent = "Submit Withdrawal Request";
+      else submitBtn.textContent = "Confirm Redemption";
     }
 
     // Update amount controls
