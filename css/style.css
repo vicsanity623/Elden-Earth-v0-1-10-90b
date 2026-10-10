@@ -1808,6 +1808,16 @@ html,body{
   text-overflow: ellipsis;
 }
 
+/* Reward Points — the only currency redeemable for real money (100 RP = $1).
+   Private to the account owner; the block is hidden on other players' profiles. */
+#info-rp-balance { color: #2ecc71; }
+.info-rp-hint {
+  margin-top: 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
 /* ================= PLAYER INFO MAYORSHIP & DIVIDENDS ================= */
 .info-mayor-card {
   background: var(--panel-2);

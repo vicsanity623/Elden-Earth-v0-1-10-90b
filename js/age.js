@@ -3,8 +3,12 @@
 //
 // Collects date of birth once, server-side, and exposes redemption
 // eligibility. The server is authoritative: setDateOfBirth writes
-// saves/{uid}.dateOfBirth a single time and refuses to overwrite it, and
-// submitWithdrawalRequest re-checks 18+ independently of anything here.
+// saves_private/{uid}.dateOfBirth a single time and refuses to overwrite it,
+// and submitWithdrawalRequest re-checks 18+ independently of anything here.
+//
+// saves_private is owner-only in firestore.rules because `saves` is world
+// readable (the leaderboard and profile modal need it) and a date of birth must
+// not be. See FINANCIALPLAN.md §5.
 //
 // Self-asserted DOB is the accepted norm for a $5/month rewards program
 // (FINANCIALPLAN.md §5). If the per-player cap ever rises, identity

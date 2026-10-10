@@ -564,7 +564,15 @@ const Store = (() => {
     }
 
     try {
-      const doc = await firestore.collection("saves").doc(playerId).get();
+      // saves_private holds the fields that must NOT be world-readable (Reward
+      // Points, date of birth) — `saves` is readable by every player because
+      // the leaderboard and the profile modal need it. The rules make this doc
+      // owner-only, so this read succeeds for the player and is denied for
+      // anyone else, which is exactly the privacy boundary we want.
+      const [doc, privateDoc] = await Promise.all([
+        firestore.collection("saves").doc(playerId).get(),
+        firestore.collection("saves_private").doc(playerId).get().catch(() => null),
+      ]);
       if (doc.exists) {
         const cloudData = doc.data();
         const localPlayer = Object.assign({}, defaultState().player, state?.player || {});
@@ -743,6 +751,17 @@ const Store = (() => {
           localStorage.setItem(KEY, JSON.stringify(state));
         }
         }
+      }
+
+      // Reward Points and date of birth live in saves_private and deliberately
+      // take no part in the local/cloud merge above: they are server-owned and
+      // never client-writable, so the server copy simply replaces local. This
+      // is also the ONLY place they enter the client — they are not on the
+      // world-readable `saves` doc, so no other player can read them.
+      if (privateDoc && privateDoc.exists) {
+        const priv = privateDoc.data() || {};
+        if (priv.rewardPoints !== undefined) state.rewardPoints = Number(priv.rewardPoints) || 0;
+        if (priv.dateOfBirth) state.dateOfBirth = Number(priv.dateOfBirth);
       }
 
       // 2. Query and restore all plots officially owned by this player from world map

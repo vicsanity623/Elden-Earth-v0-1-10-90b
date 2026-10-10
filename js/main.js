@@ -384,6 +384,33 @@
     let rentVal = isOtherPlayer ? 0 : (state.lifetimeRent || state.cash || 0);
     el("info-total-rent").textContent = "$" + Number(rentVal).toFixed(11);
 
+    // REWARD POINTS — private. The block is hidden outright on another player's
+    // profile, and their RP is never fetched in the first place: it lives in
+    // saves_private, whose Firestore rules are owner-only. This is the one
+    // place a player can track their balance while redemption is still locked.
+    const rpSection = el("info-rp-section");
+    if (rpSection) {
+      rpSection.classList.toggle("hidden", isOtherPlayer);
+      if (!isOtherPlayer) {
+        const rp = Number(state.rewardPoints) || 0;
+        const rpValEl = el("info-rp-balance");
+        if (rpValEl) rpValEl.textContent = `${Number.isFinite(rp) ? rp.toLocaleString() : 0} RP`;
+        const hint = el("info-rp-hint");
+        if (hint) {
+          const usd = (rp / 100).toFixed(2);
+          hint.textContent = `100 RP = $1.00 · worth $${usd}`;
+          if (typeof Treasury !== "undefined") {
+            Treasury.getStatus().then((s) => {
+              if (!hint.isConnected) return;
+              hint.textContent = (s && s.unlocked)
+                ? `100 RP = $1.00 · worth $${usd} · redemptions open`
+                : `100 RP = $1.00 · worth $${usd} · redemptions open once the Realm reaches its revenue goal`;
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+
     // Fetch and display the other player's live cloud earnings (including offline accumulation)
     if (isOtherPlayer && targetPlayerData.ownerId) {
       const db = Store.getDb();
@@ -2424,6 +2451,9 @@
       state.dailyQuests = serverResult.dailyQuests;
       state.eb = serverResult.nextEb;
       state.diamonds = serverResult.nextDiamonds;
+      if (serverResult.nextRewardPoints !== undefined) {
+        state.rewardPoints = Number(serverResult.nextRewardPoints) || 0;
+      }
       Store.save(true);
 
       updateTopbar();
@@ -2557,6 +2587,9 @@
       const state = Store.get();
       state.eb = result.nextEb;
       state.dailyQuests = result.dailyQuests;
+      if (result.nextRewardPoints !== undefined) {
+        state.rewardPoints = Number(result.nextRewardPoints) || 0;
+      }
       Store.save(true);
       updateTopbar();
 

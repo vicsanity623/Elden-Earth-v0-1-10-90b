@@ -595,6 +595,19 @@
         </div>
       </div>
 
+      <!-- Reward Points — PRIVATE. Only ever rendered for your own profile.
+           Your RP balance lives in saves_private (owner-only Firestore rules),
+           so other players cannot read it even if they go looking; this block
+           is additionally hidden whenever the modal is showing someone else. -->
+      <div class="info-section" id="info-rp-section">
+        <div class="info-section-title">REWARD POINTS:</div>
+        <div class="info-cash-box">
+          <span class="cash-icon">⭐</span>
+          <span id="info-rp-balance" class="info-cash-val">0 RP</span>
+        </div>
+        <div class="info-rp-hint" id="info-rp-hint"></div>
+      </div>
+
       <!-- Mayorship & Dividends -->
       <div class="info-section">
         <div class="info-section-title">MAYORSHIP & DIVIDENDS:</div>
