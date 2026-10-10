@@ -488,6 +488,7 @@ const Grid = (() => {
       }
       if (typeof AntiCheat !== "undefined") AntiCheat.recordPurchase("land", tid);
       if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("survey");
+      if (typeof Achievements !== "undefined") Achievements.record("areasSurveyed");
       if (typeof Leaderboard !== "undefined" && Leaderboard.invalidateCache) Leaderboard.invalidateCache();
     } catch (extraErr) {
       console.warn("[Grid] Post-purchase extras notice:", extraErr && extraErr.message);

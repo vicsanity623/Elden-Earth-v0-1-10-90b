@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.57b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.58b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -606,6 +606,13 @@
           <span id="info-rp-balance" class="info-cash-val">0 RP</span>
         </div>
         <div class="info-rp-hint" id="info-rp-hint"></div>
+      </div>
+
+      <!-- Badges — PRIVATE, exactly like Reward Points. Filled by
+           js/achievements.js, which hides the whole block on other players'
+           profiles and never fetches their unlocks. -->
+      <div class="info-section" id="info-badges-section">
+        <!-- generated -->
       </div>
 
       <!-- Mayorship & Dividends -->
@@ -1278,6 +1285,7 @@
     <div class="calendar-tab-row">
       <button class="calendar-tab active" data-calendar-tab="rewards">Rewards</button>
       <button class="calendar-tab" data-calendar-tab="quests">Quests</button>
+      <button class="calendar-tab" data-calendar-tab="achievements">Badges</button>
     </div>
     <div id="calendar-rewards-panel" class="calendar-panel active">
       <div id="calendar-days-list" class="calendar-days-list">
@@ -1286,6 +1294,10 @@
     </div>
     <div id="calendar-quests-panel" class="calendar-panel hidden">
       <div id="calendar-quest-list" class="calendar-quest-list"></div>
+    </div>
+    <div id="calendar-achievements-panel" class="calendar-panel hidden">
+      <!-- Generated dynamically in js/achievements.js -->
+      <div id="calendar-achievements-list" class="calendar-achievements-list"></div>
     </div>
   </div>
 </div>
@@ -1779,6 +1791,7 @@
 <script defer src="js/elden-stops.js"></script>
 <script defer src="js/treasury.js"></script>
 <script defer src="js/age.js"></script>
+<script defer src="js/achievements.js"></script>
 <script defer src="js/pool.js"></script>
 <script defer src="js/chat.js"></script>
 <script defer src="js/friends.js"></script>
@@ -2025,6 +2038,21 @@
     <p id="age-verify-error" class="modal-sub" style="color:var(--ruby);min-height:20px;margin:8px 0;"></p>
     <button id="age-verify-confirm" class="cal-claim-btn" style="width:100%;padding:12px;">Confirm</button>
     <p class="modal-sub" style="opacity:.6;font-size:10px;margin-top:12px;">Stored securely, checked once, and cannot be changed afterwards.</p>
+  </div>
+</div>
+
+<!-- Badge grid. Opens from the player profile's badge strip. Every badge is
+     generated from its category + tier in js/achievements.js, so this needs no
+     image assets to show 100 of them. -->
+<div id="badge-grid-modal" class="modal hidden">
+  <div class="modal-card">
+    <button class="close-btn" data-close="badge-grid-modal">✕</button>
+    <h2 style="font-family:var(--font-display);letter-spacing:1px;margin:4px 0 4px;">BADGES</h2>
+    <p class="modal-sub" style="margin-bottom:12px;">Tap a badge for its requirements and the date you earned it.</p>
+    <div class="badge-grid-wrap">
+      <div id="badge-grid-list" class="badge-grid-list"></div>
+      <div id="badge-grid-detail" class="badge-grid-detail"></div>
+    </div>
   </div>
 </div>
 

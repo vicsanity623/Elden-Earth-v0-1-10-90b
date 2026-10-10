@@ -411,6 +411,7 @@ const Friends = (() => {
     if (typeof window.completeDailyQuest === "function") {
       window.completeDailyQuest("gift");
     }
+    if (typeof Achievements !== "undefined") Achievements.record("giftsSent");
     renderFriendsTab();
   }
 

@@ -162,6 +162,7 @@ const Chat = (() => {
           timestamp: now,
           filtered: true,
         });
+        if (typeof Achievements !== "undefined") Achievements.record("chatMessages");
       } catch (err) {
         console.warn("[Chat] Send failed:", err);
       }

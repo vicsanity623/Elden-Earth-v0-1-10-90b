@@ -297,6 +297,10 @@
   async function updatePlayerInfoModal(targetPlayerData = null) {
     const state = Store.get();
     const isOtherPlayer = targetPlayerData && targetPlayerData.ownerId !== state.player.id;
+    // Achievements.renderAll() reads this to decide whether badges may render —
+    // badges are private, exactly like the RP balance.
+    const infoModalEl = el("player-info-modal");
+    if (infoModalEl) infoModalEl.dataset.otherPlayer = isOtherPlayer ? "true" : "false";
     
     const name = isOtherPlayer ? (targetPlayerData.ownerName || "Traveler") : (state.player.name || "Traveler");
     // Image Safety Review Status: Shows centered banner while pending; vanishes when approved!
@@ -409,6 +413,12 @@
           }
         }
       }
+    }
+
+    // Badges — private, exactly like the RP balance. Hidden outright on another
+    // player's profile, and their unlocks are never fetched.
+    if (typeof Achievements !== "undefined") {
+      Achievements.renderBadges(el("info-badges-section"), isOtherPlayer);
     }
 
     // Fetch and display the other player's live cloud earnings (including offline accumulation)
@@ -2756,27 +2766,28 @@
         document.querySelectorAll(".calendar-tab").forEach(t => t.classList.remove("active"));
         tab.classList.add("active");
         const target = tab.getAttribute("data-calendar-tab");
-        const rewardsPanel = el("calendar-rewards-panel");
-        const questsPanel = el("calendar-quests-panel");
+        // One panel per tab — panels are id'd calendar-<tab>-panel.
+        ["rewards", "quests", "achievements"].forEach((name) => {
+          const panel = el(`calendar-${name}-panel`);
+          if (!panel) return;
+          const on = name === target;
+          panel.classList.toggle("hidden", !on);
+          panel.classList.toggle("active", on);
+        });
         if (target === "quests") {
-          rewardsPanel?.classList.add("hidden");
-          rewardsPanel?.classList.remove("active");
-          questsPanel?.classList.remove("hidden");
-          questsPanel?.classList.add("active");
           renderDailyQuests();
+        } else if (target === "achievements") {
+          if (typeof Achievements !== "undefined") Achievements.renderAll();
         } else {
-          questsPanel?.classList.add("hidden");
-          questsPanel?.classList.remove("active");
-          rewardsPanel?.classList.remove("hidden");
-          rewardsPanel?.classList.add("active");
           renderCalendarModal();
         }
       });
     });
-    
+
     el("calendar-btn")?.addEventListener("click", () => {
       renderCalendarModal();
       renderDailyQuests();
+      if (typeof Achievements !== "undefined") Achievements.renderAll();
       openModal("calendar-modal");
     });
 
@@ -4446,6 +4457,7 @@
     if (typeof ServerAntiCheat !== "undefined") ServerAntiCheat.init();
     if (typeof Cashout !== "undefined") Cashout.init();
     if (typeof AgeGate !== "undefined") AgeGate.init();
+    if (typeof Achievements !== "undefined") Achievements.init();
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     el("locate-btn")?.addEventListener("click", startLocating);
     el("retry-location-btn")?.addEventListener("click", startLocating);

@@ -762,6 +762,10 @@ const Store = (() => {
         const priv = privateDoc.data() || {};
         if (priv.rewardPoints !== undefined) state.rewardPoints = Number(priv.rewardPoints) || 0;
         if (priv.dateOfBirth) state.dateOfBirth = Number(priv.dateOfBirth);
+        // Achievement progress + unlock record. Server-owned like the two
+        // above — never client-writable, so a tampered save cannot mint badges.
+        if (priv.stats && typeof priv.stats === "object") state.achievementStats = priv.stats;
+        if (priv.achievements && typeof priv.achievements === "object") state.achievementsClaimed = priv.achievements;
       }
 
       // 2. Query and restore all plots officially owned by this player from world map

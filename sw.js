@@ -1,5 +1,5 @@
 // Bump this version string whenever you deploy an update!
-const CACHE_NAME = 'elden-EARTH-v29.75';
+const CACHE_NAME = 'elden-EARTH-v29.76';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -15,6 +15,7 @@ const ASSETS_TO_CACHE = [
     './js/friends.js',
     './js/loading.js',
     './js/leaderboard.js',
+    './js/achievements.js',
     './js/wheel.js',
     './js/diamonds.js',
     './js/auth.js',
