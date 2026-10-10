@@ -933,7 +933,10 @@ const CompanionPet = (() => {
     state.pet.lastFedAt = Date.now();
     Store.save(true);
     if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("feed_berries");
-    if (typeof Achievements !== "undefined") Achievements.record("berriesFed");
+    // NOT reported through Achievements.record(): feeding has no server call
+    // site, so the server derives it from this very save — pet.lastFedAt moving
+    // while state.berries falls (see syncSafeState). Reporting it here as well
+    // would double-count.
 
     playAnimation("jump");
     if (typeof showToast === "function") showToast("🍓 Fed your buddy! Mood restored.");

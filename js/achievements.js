@@ -368,11 +368,26 @@ const Achievements = (() => {
    * server-side and cannot be reported through here at all.
    */
   function record(kind, n) {
-    if (typeof firebase === "undefined" || !firebase.functions) return;
+    if (typeof firebase === "undefined" || !firebase.functions) {
+      console.warn("[Achievements] record skipped — firebase.functions missing:", kind);
+      return;
+    }
     try {
       const fn = firebase.functions().httpsCallable("recordActivity");
-      fn({ kind, n: n || 1 }).catch(() => {});
-    } catch (e) { /* never let progress reporting break gameplay */ }
+      fn({ kind, n: n || 1 }).then((res) => {
+        const d = res && res.data;
+        if (d && d.ok) {
+          console.log(`[Achievements] ${kind} +${d.n} -> ${d.total}`);
+        } else {
+          // Server refused — the reason is the whole point of logging it.
+          console.warn("[Achievements] recordActivity rejected:", kind, d);
+        }
+      }).catch((e) => {
+        console.warn("[Achievements] recordActivity failed:", kind, e && e.message, e);
+      });
+    } catch (e) {
+      console.warn("[Achievements] record threw:", kind, e);
+    }
   }
 
   function renderAll() {
