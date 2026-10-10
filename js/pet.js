@@ -13,6 +13,7 @@ const CompanionPet = (() => {
   let isFollowing = false;
   let isFetching = false;
   let fetchTarget = null;
+  let fetchTimer = null;
   let fetchReturnPhase = false;
   let fetchState = "idle";
   let moodDecayInterval = null;
@@ -604,11 +605,26 @@ const CompanionPet = (() => {
     const state = Store.get();
     if (!state.liveDiamonds) return null;
 
+    const collected = new Set(state.collectedDiamondIds || []);
+    const now = Date.now();
+    const lifetime = CONFIG.DIAMOND_LIFETIME_MS || 30 * 60 * 1000;
+
     let nearest = null;
     let nearestDist = Infinity;
 
     for (const did in state.liveDiamonds) {
+      // Skip anything the pet cannot actually pick up. liveDiamonds is a local
+      // cache and goes stale after a tab swap, reload or force-close — the
+      // entries below are exactly the ones that made the pet walk in circles
+      // around a diamond it could never collect.
+      if (collected.has(did)) continue;
+      if (failedDiamondBlacklist.has(did)) continue;
+
       const d = state.liveDiamonds[did];
+      const spawnedAt = Number(d.spawnedAt) || 0;
+      const expiresAt = Number(d.expiresAt) || (spawnedAt + lifetime);
+      if (now > expiresAt) continue;
+
       const dist = Geo.haversine(petCoords.lat, petCoords.lng, d.lat, d.lon);
 
       if (dist <= FETCH_RADIUS_METERS && dist < nearestDist) {
@@ -637,15 +653,25 @@ const CompanionPet = (() => {
     console.log("[CompanionPet] Starting fetch to:", diamond);
     playAnimation("idle");
 
-    const fetchInterval = setInterval(() => {
+    // Always tear down the previous fetch loop first. Overlapping intervals
+    // left after a tab swap were one way the pet got stuck driving toward a
+    // diamond it could no longer collect.
+    if (fetchTimer) {
+      clearInterval(fetchTimer);
+      fetchTimer = null;
+    }
+
+    fetchTimer = setInterval(() => {
       if (!isFetching || !fetchTarget) {
-        clearInterval(fetchInterval);
+        clearInterval(fetchTimer);
+        fetchTimer = null;
         return;
       }
 
       // Watchdog: never let the pet stay locked in a fetch that cannot end.
       if (Date.now() - fetchStartedAt > 45000) {
-        clearInterval(fetchInterval);
+        clearInterval(fetchTimer);
+        fetchTimer = null;
         console.warn("[CompanionPet] Fetch timed out — returning to player");
         returnToPlayer();
         return;
@@ -656,7 +682,8 @@ const CompanionPet = (() => {
       // 1. Arrived!
       if (distToTarget < 3.0) {
         collectDiamond(fetchTarget.id);
-        clearInterval(fetchInterval);
+        clearInterval(fetchTimer);
+        fetchTimer = null;
         return;
       }
 
@@ -933,10 +960,11 @@ const CompanionPet = (() => {
     state.pet.lastFedAt = Date.now();
     Store.save(true);
     if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("feed_berries");
-    // NOT reported through Achievements.record(): feeding has no server call
-    // site, so the server derives it from this very save — pet.lastFedAt moving
-    // while state.berries falls (see syncSafeState). Reporting it here as well
-    // would double-count.
+    // One report per actual feed. This used to be inferred server-side from the
+    // cloud/client `berries` delta, which could register a single feed as
+    // dozens of points (berries also move when a spin awards them, and
+    // lastFedAt moves when the pet is first unlocked).
+    if (typeof Achievements !== "undefined") Achievements.record("berriesFed");
 
     playAnimation("jump");
     if (typeof showToast === "function") showToast("🍓 Fed your buddy! Mood restored.");
