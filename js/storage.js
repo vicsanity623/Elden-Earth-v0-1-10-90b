@@ -766,6 +766,9 @@ const Store = (() => {
         // above — never client-writable, so a tampered save cannot mint badges.
         if (priv.stats && typeof priv.stats === "object") state.achievementStats = priv.stats;
         if (priv.achievements && typeof priv.achievements === "object") state.achievementsClaimed = priv.achievements;
+        // Citadel spoils daily tally + the post-recall re-station cooldown.
+        if (priv.citadelSpoils && typeof priv.citadelSpoils === "object") state.citadelSpoils = priv.citadelSpoils;
+        if (priv.citadelRecallCooldownUntil) state.citadelRecallCooldownUntil = Number(priv.citadelRecallCooldownUntil) || 0;
       }
 
       // 2. Query and restore all plots officially owned by this player from world map

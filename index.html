@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.58b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.59b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -1498,6 +1498,21 @@
       <div class="guide-title">🏛️ HOLD REWARDS & SIEGE RULES</div>
       <p id="citadel-rate-desc">Mining Rate: 1 Diamond every 1 Hour (+60% EB chance/hr)</p>
       <span class="guide-rules-hint"><strong>How to Overtake:</strong> Walk within 100m, spend 1 Diamond to initiate a Reflex Siege, and win the duel to dethrone the defender and earn a +5 EB bounty!</span>
+    </div>
+
+    <!-- Spoils limits. Server-enforced in functions/index.js — this is the
+         display only. Spoils stop accruing after 24h of holding, a recall
+         needs a 30-minute minimum hold and then puts a 30-minute cooldown on
+         re-stationing, and total spoils per player per UTC day are capped. -->
+    <div class="citadel-guide-box" id="citadel-limits-box">
+      <div class="guide-title">⏱️ HOLD LIMITS</div>
+      <div class="citadel-limits-rows">
+        <div class="citadel-limit-row"><span>Spoils stop after</span><strong>24h of holding</strong></div>
+        <div class="citadel-limit-row"><span>Minimum hold before recall</span><strong>30m</strong></div>
+        <div class="citadel-limit-row"><span>Re-station cooldown after recall</span><strong>30m</strong></div>
+      </div>
+      <div class="citadel-daily-tally" id="citadel-daily-tally">Daily spoils: 0 EB &amp; 0 ◆ earned</div>
+      <div class="citadel-recall-cooldown hidden" id="citadel-recall-cooldown"></div>
     </div>
 
     <!-- Action Buttons (Dynamically switches based on status) -->

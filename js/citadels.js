@@ -452,6 +452,30 @@ const Citadels = (() => {
     const rateDescEl = document.getElementById("citadel-rate-desc");
     if (rateDescEl) rateDescEl.textContent = rateText;
 
+    // Spoils limits — enforced server-side in functions/index.js (CITADEL_*
+    // constants). This is display only; the server re-checks everything.
+    const tallyEl = document.getElementById("citadel-daily-tally");
+    if (tallyEl) {
+      const today = new Date().toISOString().slice(0, 10);
+      const t = state.citadelSpoils;
+      const used = t && t.day === today ? t : { eb: 0, diamonds: 0 };
+      tallyEl.textContent =
+        `Daily spoils: ${Number(used.eb) || 0}/150 EB & ${Number(used.diamonds) || 0}/60 ◆ earned`;
+    }
+    // Re-station cooldown left over from a recall.
+    const cooldownEl = document.getElementById("citadel-recall-cooldown");
+    if (cooldownEl) {
+      const until = Number(state.citadelRecallCooldownUntil) || 0;
+      const waitMs = until - Date.now();
+      if (waitMs > 0) {
+        cooldownEl.classList.remove("hidden");
+        cooldownEl.textContent =
+          `⏳ Re-stationing available in ${Math.ceil(waitMs / 60000)}m`;
+      } else {
+        cooldownEl.classList.add("hidden");
+      }
+    }
+
     const spoils = calculateSpoils(cit);
     const def = cit.defender;
 
@@ -631,7 +655,12 @@ const Citadels = (() => {
 
     const serverResult = await ServerAntiCheat.citadelAction("station", { citadelId: cid });
     if (!serverResult.ok) {
-      showToast("⚠️ Stationing rejected: " + serverResult.reason, 3500);
+      if (serverResult.reason === "recall_cooldown") {
+        const mins = Math.ceil((Number(serverResult.waitMs) || 0) / 60000);
+        showToast(`⏳ You recently recalled a defender — re-stationing in ${mins}m.`, 4200);
+      } else {
+        showToast("⚠️ Stationing rejected: " + serverResult.reason, 3500);
+      }
       return;
     }
 
@@ -653,12 +682,24 @@ const Citadels = (() => {
     }
     const result = await ServerAntiCheat.recallCitadel(cid);
     if (!result.recalled) {
-      showToast("⚠️ Citadel recall rejected: " + result.reason, 3500);
+      if (result.reason === "recall_too_soon") {
+        const mins = Math.ceil((Number(result.waitMs) || 0) / 60000);
+        showToast(`⏳ Hold this citadel for ${mins}m before recalling.`, 4000);
+      } else if (result.reason === "recall_cooldown") {
+        const mins = Math.ceil((Number(result.waitMs) || 0) / 60000);
+        showToast(`⏳ Re-stationing available in ${mins}m.`, 4000);
+      } else {
+        showToast("⚠️ Citadel recall rejected: " + result.reason, 3500);
+      }
       return;
     }
     const spoils = result.spoils || { diamonds: 0, eb: 0 };
     state.diamonds = result.nextDiamonds;
     state.eb = result.nextEb;
+    // Mirror the server's daily tally + cooldown so the limits panel is current
+    // without waiting for the next sync.
+    if (result.dailySpoils) state.citadelSpoils = result.dailySpoils;
+    if (result.recallCooldownUntil) state.citadelRecallCooldownUntil = Number(result.recallCooldownUntil) || 0;
 
     cit.defender = null;
 
@@ -672,7 +713,8 @@ const Citadels = (() => {
     document.getElementById("citadel-modal")?.classList.add("hidden");
     render();
     if (typeof showToast === "function") {
-      showToast(`🏆 Defender Recalled! Banked +${spoils.diamonds} Diamonds & +${spoils.eb} EB!`, 3500);
+      const capNote = result.capped ? " · daily limit reached" : "";
+      showToast(`🏆 Defender Recalled! Banked +${spoils.diamonds} Diamonds & +${spoils.eb} EB${capNote}`, 4200);
     }
   }
   
@@ -930,26 +972,34 @@ const Citadels = (() => {
       state.player?.avatar || "🙂"
     );
     if (!result.conquered) {
-      showToast("⚠️ Siege rejected: " + result.reason, 3500);
+      if (result.reason === "recall_cooldown") {
+        const mins = Math.ceil((Number(result.waitMs) || 0) / 60000);
+        showToast(`⏳ You recently recalled a defender — sieging again in ${mins}m.`, 4200);
+      } else {
+        showToast("⚠️ Siege rejected: " + result.reason, 3500);
+      }
       return;
     }
     state.eb = result.nextEb;
     state.diamonds = result.nextDiamonds;
+    if (result.dailySpoils) state.citadelSpoils = result.dailySpoils;
 
+    const bounty = Number(result.bounty) || 0;
     const oldDefenderName = cit.defender?.name || "Defender";
 
     cit.defender = result.defender;
 
     if (typeof Feed !== "undefined") {
       Feed.broadcast("land", {
-        rarity: `⚔️ ${state.player?.name || "Traveler"} breached the ${cit.creatorName}'s Hold & dethroned ${oldDefenderName}! (+5 EB Bounty)`,
+        rarity: `⚔️ ${state.player?.name || "Traveler"} breached the ${cit.creatorName}'s Hold & dethroned ${oldDefenderName}! (+${bounty} EB Bounty)`,
         location: "the Realm 🌐"
       });
     }
 
     render();
     if (typeof showToast === "function") {
-      showToast("🏆 CITADEL BREACHED! You are the new Reigning Defender! (+5 EB Bounty)", 4000);
+      const capNote = result.capped ? " · daily limit reached" : "";
+      showToast(`🏆 CITADEL BREACHED! You are the new Reigning Defender! (+${bounty} EB${capNote})`, 4000);
     }
   }
 
