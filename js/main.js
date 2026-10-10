@@ -2300,24 +2300,44 @@
       return (utcDayOf(Date.now()) + 1) * UTC_DAY_MS - Date.now();
     }
 
+    /**
+     * Any daily quest finished and waiting to be claimed? Used for the red dot
+     * on the side-hub Daily button.
+     */
+    function hasClaimableQuest() {
+      try {
+        const q = getDailyQuestsState().quests || {};
+        return Object.keys(q).some((id) => q[id] && q[id].completed && !q[id].claimed);
+      } catch (e) {
+        return false;
+      }
+    }
+
     function updateCalendarHUD() {
       const cal = getCalendarState();
       const ready = isRewardReady();
-
       const now = new Date();
       const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
       if (el("cal-hud-month")) el("cal-hud-month").textContent = months[now.getMonth()];
       if (el("cal-hud-day")) el("cal-hud-day").textContent = now.getDate();
 
-      // Previously gated on claimedDays < 30, which silently hid the dot at the
-      // top of the ladder — exactly when the player should claim to start the
-      // next cycle. Any unclaimed day is worth flagging.
+      // The dot now means "there is something to claim in here" — the daily
+      // login reward, a finished quest, or an unlocked achievement. It used to
+      // gate on claimedDays < 30, which silently hid it at the top of the
+      // ladder, exactly when a player should claim to start the next cycle.
+      const claimableQuest = hasClaimableQuest();
+      const claimableBadge = typeof Achievements !== "undefined" && Achievements.hasClaimable
+        ? Achievements.hasClaimable()
+        : false;
       const unreadDot = el("calendar-unread-dot");
       if (unreadDot) {
-        if (ready) unreadDot.classList.remove("hidden");
+        if (ready || claimableQuest || claimableBadge) unreadDot.classList.remove("hidden");
         else unreadDot.classList.add("hidden");
       }
     }
+    // Achievements' realtime listener drives this so the dot lights the instant
+    // a badge or quest becomes claimable, not on the next full sync.
+    window.updateCalendarHUD = updateCalendarHUD;
 
     /**
      * Human-readable streak summary shown under the modal title: which cycle the

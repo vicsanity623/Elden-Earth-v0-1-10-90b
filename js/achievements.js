@@ -390,6 +390,66 @@ const Achievements = (() => {
     }
   }
 
+  /**
+   * Live listener on saves_private.
+   *
+   * Every achievement counter lives server-side, so without this the client
+   * only learns about progress on the next full save — which is why badges
+   * appeared to "catch up after closing out the game and reloading". The
+   * snapshot fires the instant any server-side bump lands (a wheel spin, a
+   * citadel recall, a gift) and re-renders, so the bar moves as it happens.
+   */
+  let unsub = null;
+  let refreshTimer = null;
+  function startRealtime() {
+    if (unsub) return;
+    try {
+      const db = Store.getDb && Store.getDb();
+      const uid = Store.get()?.player?.id;
+      if (!db || !uid) return;
+      unsub = db.collection("saves_private").doc(uid).onSnapshot((snap) => {
+        if (!snap || !snap.exists) return;
+        const priv = snap.data() || {};
+        const state = Store.get();
+        if (!state) return;
+        // Server-owned fields replace local values outright — never
+        // Store.save() them back, they are not client-writable anyway.
+        if (priv.stats && typeof priv.stats === "object") state.achievementStats = priv.stats;
+        if (priv.achievements && typeof priv.achievements === "object") state.achievementsClaimed = priv.achievements;
+        if (priv.citadelSpoils && typeof priv.citadelSpoils === "object") state.citadelSpoils = priv.citadelSpoils;
+        if (priv.citadelRecallCooldownUntil) state.citadelRecallCooldownUntil = Number(priv.citadelRecallCooldownUntil) || 0;
+        if (priv.rewardPoints !== undefined) state.rewardPoints = Number(priv.rewardPoints) || 0;
+        renderAll();
+        // Light the red dot on the side-hub Daily button the moment something
+        // becomes claimable.
+        if (typeof window.updateCalendarHUD === "function") window.updateCalendarHUD();
+      }, (e) => {
+        console.warn("[Achievements] realtime listener error:", e && e.message);
+      });
+
+      // Derived stats (lifetimeRent, plotsOwned, extractorLevel...) are read
+      // live off the save and never bump a counter, so the snapshot above never
+      // fires for them. Refresh on a slow tick while the badges tab is open so
+      // e.g. "Accrue N in lifetime rent" keeps moving.
+      if (!refreshTimer) {
+        refreshTimer = setInterval(() => {
+          const modal = el("calendar-modal");
+          const panel = el("calendar-achievements-panel");
+          if (modal && !modal.classList.contains("hidden") && panel && !panel.classList.contains("hidden")) {
+            renderAll();
+          }
+        }, 5000);
+      }
+    } catch (e) {
+      console.warn("[Achievements] realtime listener failed:", e);
+    }
+  }
+
+  /** True when anything is ready to claim — drives the red dot on Daily. */
+  function hasClaimable() {
+    return claimable().length > 0;
+  }
+
   function renderAll() {
     const list = el("calendar-achievements-list");
     if (list) renderTab(list);
@@ -402,10 +462,11 @@ const Achievements = (() => {
   }
 
   function init() {
+    startRealtime();
     renderAll();
   }
 
-  return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, ALL, CATEGORIES, BY_KEY };
+  return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, hasClaimable, ALL, CATEGORIES, BY_KEY };
 })();
 
 window.Achievements = Achievements;
