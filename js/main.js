@@ -2497,14 +2497,47 @@
 
     // RP per quest. `wheel` pays EB only — awarding redeemable points for a
     // chance outcome is exactly what FINANCIALPLAN.md §3 exists to prevent.
-    // Must match QUEST_RP in functions/index.js. Points are integers (1 RP = 1c).
+    // `purchase_plots_5x` and the ascend quests are likewise EB-only: plots cost
+    // 100 EB and EB comes from the wheel, so paying RP for them re-opens the
+    // same path. Must match QUEST_RP / QUEST_REWARDS in functions/index.js.
+    // Points are integers (1 RP = 1c).
     const QUEST_DEFS = [
       { id: "login", title: "Claim daily login bonus", reward: 5, rewardText: "+5 EB", rp: 2, action: "login" },
       { id: "wheel", title: "Spin the Diamond Wheel", reward: 10, rewardText: "+10 EB", rp: 0, action: "wheel" },
       { id: "gift", title: "Send a gift to a friend", reward: 10, rewardText: "+10 EB", rp: 3, action: "gift" },
-      { id: "mayor", title: "Check Mayorship & Dividends", reward: 5, rewardText: "+5 EB", rp: 1, action: "mayor" },
-      { id: "survey", title: "Explore & survey 1 new area", reward: 15, rewardText: "+15 EB", rp: 1, action: "survey" }
+      { id: "mayor", title: "Check Mayoralship & Dividends", reward: 5, rewardText: "+5 EB", rp: 1, action: "mayor" },
+      { id: "survey", title: "Explore & survey 1 new area", reward: 15, rewardText: "+15 EB", rp: 1, action: "survey" },
+
+      // --- Added 2026-10-09 ---
+      { id: "recall_defender", title: "Recall a defender from a Citadel", reward: 15, rewardText: "+15 EB", rp: 2, action: "citadel" },
+      { id: "recall_defender_5x", title: "Recall 5 defenders from Citadels", reward: 20, rewardText: "+20 EB", rp: 2, action: "citadel", progressNeeded: 5 },
+      { id: "convert_cash", title: "Convert Cash to EB", reward: 25, rewardText: "+25 EB", rp: 2, action: "cashout" },
+      { id: "spin_elden_stop", title: "Spin an Elden Stop", reward: 2, rewardText: "+2 EB", rp: 1, action: "eldenstop" },
+      { id: "feed_berries", title: "Feed a berry to Buddy", reward: 5, rewardText: "+5 EB", rp: 1, action: "pet" },
+      { id: "purchase_plots_5x", title: "Purchase 5 plots today", reward: 90, rewardText: "+90 EB", rp: 0, action: "grid", progressNeeded: 5 },
     ];
+
+    // Exactly ONE ascend quest is active per UTC day, picked from the date so
+    // every player gets the same one and it cannot be re-rolled by reloading.
+    // Three separate ids because each tier carries its own reward.
+    const ASCEND_QUESTS = [
+      { id: "ascend_common", title: "Ascend 1 Common Plot to Rare", reward: 50, rewardText: "+50 EB", rp: 0, action: "ascend" },
+      { id: "ascend_rare", title: "Ascend 1 Rare Plot to Epic", reward: 50, rewardText: "+50 EB", rp: 0, action: "ascend" },
+      { id: "ascend_epic", title: "Ascend 1 Epic Plot to Legendary", reward: 100, rewardText: "+100 EB", rp: 0, action: "ascend" },
+    ];
+
+    function todaysAscendQuest() {
+      const day = new Date().toISOString().slice(0, 10);
+      let h = 0;
+      for (let i = 0; i < day.length; i++) h = (h * 31 + day.charCodeAt(i)) >>> 0;
+      return ASCEND_QUESTS[h % ASCEND_QUESTS.length];
+    }
+
+    // Full board for today: the fixed quests plus whichever ascend quest the
+    // date selected.
+    function activeQuestDefs() {
+      return QUEST_DEFS.concat([todaysAscendQuest()]);
+    }
 
     // Mirror of rpForCalendarDay() in functions/index.js — the ladder curve is
     // derived so the UI and the server can never disagree about the value.
@@ -2534,7 +2567,7 @@
           }
         };
       }
-      QUEST_DEFS.forEach(q => {
+      activeQuestDefs().forEach(q => {
         if (!state.dailyQuests.quests[q.id]) {
           state.dailyQuests.quests[q.id] = { completed: false, claimed: false };
         }
@@ -2547,13 +2580,37 @@
       return state.dailyQuests;
     }
 
+    /**
+     * Mark a quest complete. Repeat-count quests (recall 5 defenders, buy 5
+     * plots) take their target from the definition and complete once the
+     * counter reaches it.
+     *
+     * Only quests on today's board can be completed. Without that guard the two
+     * inactive ascend tiers could be pre-completed and claimed on a later day.
+     *
+     * NOTE: completion is recorded client-side, same as the original five
+     * quests — claimQuestReward trusts `completed`, so a tampered client could
+     * claim anything. The RP caps bound the damage to the $5/month ceiling, but
+     * this is a known gap and should move server-side alongside the achievements
+     * pass, which will need trusted progress counters anyway.
+     */
     function completeDailyQuest(questId) {
       const qState = getDailyQuestsState();
-      if (qState.quests[questId] && !qState.quests[questId].completed) {
-        qState.quests[questId].completed = true;
-        Store.save(true);
-        renderDailyQuests();
+      const q = qState.quests[questId];
+      if (!q || q.claimed || q.completed) return;
+
+      const qDef = activeQuestDefs().find(x => x.id === questId);
+      if (!qDef) return;
+
+      const needed = Number(qDef.progressNeeded) || 0;
+      if (needed > 1) {
+        q.progress = (Number(q.progress) || 0) + 1;
+        if (q.progress >= needed) q.completed = true;
+      } else {
+        q.completed = true;
       }
+      Store.save(true);
+      renderDailyQuests();
     }
     window.completeDailyQuest = completeDailyQuest;
 
@@ -2566,7 +2623,7 @@
       const itemState = qState.quests[questId];
       if (!itemState || !itemState.completed || itemState.claimed) return;
 
-      const qDef = QUEST_DEFS.find(q => q.id === questId);
+      const qDef = activeQuestDefs().find(q => q.id === questId);
       if (!qDef) return;
 
       if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
@@ -2609,7 +2666,7 @@
 
       const qState = getDailyQuestsState();
 
-      questList.innerHTML = QUEST_DEFS.map(q => {
+      questList.innerHTML = activeQuestDefs().map(q => {
         const item = qState.quests[q.id] || { completed: false, claimed: false };
         let actionHtml = "";
         if (item.claimed) {
@@ -2621,11 +2678,24 @@
           actionHtml = `<div class="quest-check">○</div>`;
         }
 
+        // Repeat-count quests show 2/5 style progress until they complete.
+        let progressHtml = "";
+        if (q.progressNeeded > 1 && !item.completed && !item.claimed) {
+          const done = Math.min(Number(item.progress) || 0, q.progressNeeded);
+          const pct = Math.round((done / q.progressNeeded) * 100);
+          progressHtml = `
+            <div class="quest-progress">
+              <div class="quest-progress-track"><div class="quest-progress-fill" style="width:${pct}%"></div></div>
+              <span class="quest-progress-label">${done}/${q.progressNeeded}</span>
+            </div>`;
+        }
+
         return `
           <div class="calendar-quest-item ${item.completed && !item.claimed ? 'ready-claim' : ''}" data-quest-id="${q.id}" style="${!item.completed || !item.claimed ? 'cursor:pointer;' : ''}">
             <div>
               <div class="quest-title">${q.title}</div>
               <div class="quest-reward">${q.rewardText}${q.rp ? ` <span class="quest-rp">+${q.rp}RP</span>` : ""}</div>
+              ${progressHtml}
             </div>
             <div class="quest-action-slot">
               ${actionHtml}
@@ -4291,6 +4361,7 @@
         state.eb = result.data.newEb;
         state.diamonds = result.data.newDiamonds;
         Store.save(true);
+        completeDailyQuest("convert_cash");
         updateTopbar();
         closeCashoutPage();
       } else {

@@ -662,6 +662,13 @@ const Citadels = (() => {
 
     cit.defender = null;
 
+    // Daily quests: one recall completes the single-recall quest; the counter
+    // quest needs 5 in the same day.
+    if (typeof window.completeDailyQuest === "function") {
+      window.completeDailyQuest("recall_defender");
+      window.completeDailyQuest("recall_defender_5x");
+    }
+
     document.getElementById("citadel-modal")?.classList.add("hidden");
     render();
     if (typeof showToast === "function") {

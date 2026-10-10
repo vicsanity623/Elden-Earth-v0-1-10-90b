@@ -932,6 +932,7 @@ const CompanionPet = (() => {
     state.pet.mood = Math.min(100, (state.pet.mood || 0) + 5);
     state.pet.lastFedAt = Date.now();
     Store.save(true);
+    if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("feed_berries");
 
     playAnimation("jump");
     if (typeof showToast === "function") showToast("🍓 Fed your buddy! Mood restored.");

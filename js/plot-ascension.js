@@ -529,6 +529,13 @@ const PlotAscension = (() => {
     }
     Store.save(true);
 
+    // Daily quest: the active ascend quest depends on the target's starting
+    // rarity, so mark whichever of ascend_common / ascend_rare / ascend_epic
+    // matches. completeDailyQuest ignores it if that tier is not today's quest.
+    if (typeof window.completeDailyQuest === "function") {
+      window.completeDailyQuest("ascend_" + String(target.rarity || "").toLowerCase());
+    }
+
     // Exit pick mode if still active, keep FX points
     if (isPicking) exitMapPickMode(true);
     el("ascension-modal")?.classList.add("hidden");

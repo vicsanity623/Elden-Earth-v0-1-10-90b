@@ -456,6 +456,9 @@ const Grid = (() => {
     state.plots[tid] = plotData;
     globalPlots[tid] = plotData;
     Store.save(true);
+    // Daily quest: buy 5 plots in one day (counter quest, no RP — plots cost EB
+    // which comes from the wheel, see FINANCIALPLAN.md §3).
+    if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("purchase_plots_5x");
 
     const rarityObj = CONFIG.PLOT_RARITIES.find(r => r.key === plotData.rarity) || CONFIG.PLOT_RARITIES[0];
 

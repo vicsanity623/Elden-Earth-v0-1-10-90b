@@ -550,6 +550,7 @@ const EldenStops = (() => {
 
       // Success! Cache the 15-minute recharge window locally
       setReadyAt(stopId, Number(result.readyAt) || Date.now() + COOLDOWN_MS());
+      if (typeof window.completeDailyQuest === "function") window.completeDailyQuest("spin_elden_stop");
       // If the server answered faster than the twirl, let the twirl finish —
       // but never hold the reward back beyond it.
       const elapsed = Date.now() - spinStartedAt;
