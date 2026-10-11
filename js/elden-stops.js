@@ -889,7 +889,7 @@ const EldenStops = (() => {
       badge.style.color = rarity.color;
     }
     const rate = document.getElementById("lucky-plot-rate");
-    if (rate) rate.textContent = `Passive Rent: $${rarity.rate}/s`;
+    if (rate) rate.textContent = `Passive Rent: RC ${rarity.rate}/s`;
     const modal = document.getElementById("lucky-plot-modal");
     if (modal) modal.classList.remove("hidden");
   }

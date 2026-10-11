@@ -764,7 +764,7 @@ const Citadels = (() => {
       if (forgeLockedNotice) {
         forgeLockedNotice.classList.remove("hidden");
         forgeLockedNotice.innerHTML = cashReq > 0
-          ? `💰 Upgrading consumes <strong>$${cashReq.toFixed(2)}</strong> Cash + ${costs.eb} EB or ${costs.diamonds} ◆`
+          ? `💰 Upgrading consumes <strong>RC ${cashReq.toFixed(2)}</strong> Cash + ${costs.eb} EB or ${costs.diamonds} ◆`
           : "";
         if (cashReq <= 0) forgeLockedNotice.classList.add("hidden");
       }
@@ -772,7 +772,7 @@ const Citadels = (() => {
       forgeBtns.forEach(b => b.style.display = "none");
       if (forgeLockedNotice) {
         forgeLockedNotice.classList.remove("hidden");
-        forgeLockedNotice.innerHTML = `🔒 Reach $${cashReq.toFixed(2)} Cash Balance to level up!`;
+        forgeLockedNotice.innerHTML = `🔒 Reach RC ${cashReq.toFixed(2)} Cash Balance to level up!`;
       }
     }
 
@@ -794,7 +794,7 @@ const Citadels = (() => {
     const cashBalance = Number(state?.cash) || 0;
     const cashReq = costs.cashRequired || 0;
     if (cashBalance < cashReq) {
-      showToast(`🔒 Reach $${cashReq.toFixed(2)} Cash Balance to level up!`);
+      showToast(`🔒 Reach RC ${cashReq.toFixed(2)} Cash Balance to level up!`);
       return;
     }
 
@@ -863,7 +863,7 @@ const Citadels = (() => {
 
     // Rule 1: Must have unlocked and planted your own Capsule first!
     if (!state.capsule || !state.capsule.planted) {
-      (window.showToast || alert)("🛡️ You must reach $0.01 balance and plant your own Realm Capsule before you can launch Sieges against other players!");
+      (window.showToast || alert)("🛡️ You must reach RC 0.01 balance and plant your own Realm Capsule before you can launch Sieges against other players!");
       return;
     }
 

@@ -189,8 +189,8 @@ const PlotAscension = (() => {
     }
     const fromRate = el("asc-from-rate");
     const toRate = el("asc-to-rate");
-    if (fromRate) fromRate.textContent = `$${formatIncome(fromConf.rate)} /s`;
-    if (toRate) toRate.textContent = `$${formatIncome(toConf.rate)} /s`;
+    if (fromRate) fromRate.textContent = `RC ${formatIncome(fromConf.rate)} /s`;
+    if (toRate) toRate.textContent = `RC ${formatIncome(toConf.rate)} /s`;
 
     // Slots
     const setSlot = (id, text, cls) => {
@@ -641,7 +641,7 @@ const PlotAscension = (() => {
       const outRate = toConf2.rate;
       const stepDelta = outRate - inRate;
       const stepPct = inRate > 0 ? (stepDelta / inRate) * 100 : 0;
-      forgeStepTxt = `Forge step: 3× ${fromConf.label} ($${formatIncome(inRate)}) → 1× ${toConf2.label} ($${formatIncome(outRate)}) = ${stepDelta >= 0 ? "+" : "−"}${formatDeltaPct(Math.abs(stepPct))} on those plots`;
+      forgeStepTxt = `Forge step: 3× ${fromConf.label} (RC ${formatIncome(inRate)}) → 1× ${toConf2.label} (RC ${formatIncome(outRate)}) = ${stepDelta >= 0 ? "+" : "−"}${formatDeltaPct(Math.abs(stepPct))} on those plots`;
     }
 
     const setTxt = (id, val) => { const n = el(id); if (n) n.textContent = val; };
@@ -652,10 +652,10 @@ const PlotAscension = (() => {
       rarityBadge.style.color = conf.color;
       rarityBadge.style.textShadow = `0 0 22px ${conf.color}`;
     }
-    setTxt("asc-complete-rate", `$${formatIncome(conf.rate)} /s per plot`);
+    setTxt("asc-complete-rate", `RC ${formatIncome(conf.rate)} /s per plot`);
     setTxt("asc-complete-sub", `A ${conf.label} plot has been reforged on the map.`);
-    setTxt("asc-before-income", `$${formatIncome(beforeIncome)}`);
-    setTxt("asc-after-income", `$${formatIncome(incomeAfter)}`);
+    setTxt("asc-before-income", `RC ${formatIncome(beforeIncome)}`);
+    setTxt("asc-after-income", `RC ${formatIncome(incomeAfter)}`);
     setTxt("asc-before-plots", String(plotsBefore));
     setTxt("asc-after-plots", String(plotsAfter));
 
@@ -664,10 +664,10 @@ const PlotAscension = (() => {
       deltaEl.classList.remove("up", "down", "flat");
       if (delta > 0) {
         deltaEl.classList.add("up");
-        deltaEl.textContent = `▲ Income up +$${formatIncome(delta)}/s · portfolio ${formatDeltaPct(deltaPct)}${forgeStepTxt ? " · " + forgeStepTxt : ""}`;
+        deltaEl.textContent = `▲ Income up +RC ${formatIncome(delta)}/s · portfolio ${formatDeltaPct(deltaPct)}${forgeStepTxt ? " · " + forgeStepTxt : ""}`;
       } else if (delta < 0) {
         deltaEl.classList.add("down");
-        deltaEl.textContent = `▼ Income −$${formatIncome(Math.abs(delta))}/s · Prestige & plot-cap gained`;
+        deltaEl.textContent = `▼ Income −RC ${formatIncome(Math.abs(delta))}/s · Prestige & plot-cap gained`;
       } else {
         deltaEl.classList.add("flat");
         deltaEl.textContent = forgeStepTxt || "◆ Income steady · Prestige unlocked";

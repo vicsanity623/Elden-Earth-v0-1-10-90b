@@ -222,7 +222,7 @@
       if (el("wheel-diamond-display")) el("wheel-diamond-display").innerHTML = `${currentDiamonds} <span class="hud-gem-icon"></span>`;
     }
 
-    const currentRate = "$" + Store.totalRate().toFixed(11) + "/s";
+    const currentRate = "RC " + Store.totalRate().toFixed(11) + "/s";
     if (currentRate !== lastRateVal) {
       lastRateVal = currentRate;
       if (el("stat-rate")) el("stat-rate").textContent = currentRate;
@@ -386,7 +386,7 @@
 
     // Initial Rent Display (Shows Lifetime Accrued Rent, NOT spendable balance)
     let rentVal = isOtherPlayer ? 0 : (state.lifetimeRent || state.cash || 0);
-    el("info-total-rent").textContent = "$" + Number(rentVal).toFixed(11);
+    el("info-total-rent").textContent = "RC " + Number(rentVal).toFixed(11);
 
     // REWARD POINTS — private. The block is hidden outright on another player's
     // profile, and their RP is never fetched in the first place: it lives in
@@ -445,7 +445,7 @@
             const offlineEarned = offlineSec * playerBaseRate;
             let lRent = (dData.lifetimeRent !== undefined ? dData.lifetimeRent : (dData.cash || 0)) + offlineEarned;
 
-            el("info-total-rent").textContent = "$" + Number(lRent).toFixed(11);
+            el("info-total-rent").textContent = "RC " + Number(lRent).toFixed(11);
           }
         } catch (e) {
           console.warn("[PlayerInfo] Error fetching player cash:", e);
@@ -495,7 +495,7 @@
       incomeRate = Multiplier.applyMultiplier(incomeRate, state, isOtherPlayer);
     }
     const incomeEl = el("info-income-rate");
-    if (incomeEl) incomeEl.textContent = `$${incomeRate.toFixed(11)} /s`;
+    if (incomeEl) incomeEl.textContent = `RC ${incomeRate.toFixed(11)} /s`;
 
     // --- Populate Mayorship & Dividends Card ---
     const mayorStatusEl = el("info-mayor-status");
@@ -3342,7 +3342,7 @@
       if (upgradeBtn && lockNotice) {
         if (hasReachedOneDollar) {
           upgradeBtn.style.display = "block";
-          upgradeBtn.textContent = `⚡ Upgrade ($${nextCost.toFixed(2)})`;
+          upgradeBtn.textContent = `⚡ Upgrade (RC ${nextCost.toFixed(2)})`;
           lockNotice.classList.add("hidden");
         } else {
           upgradeBtn.style.display = "none";
@@ -3404,7 +3404,7 @@
       const { nextCost } = getExtractorStats(lvl);
 
       if ((state.cash || 0) < nextCost) {
-        showToast(`You need $${nextCost.toFixed(2)} in Cash Balance to upgrade.`);
+        showToast(`You need RC ${nextCost.toFixed(2)} in Cash Balance to upgrade.`);
         return;
       }
       if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
@@ -3431,7 +3431,7 @@
       state.extractor.level = result.level;
       Store.save(true);
       updateTopbar();
-      showToast(`⚡ Extractor Upgraded to Level ${result.level}! ($${Number(result.cost).toFixed(2)} Cash)`);
+      showToast(`⚡ Extractor Upgraded to Level ${result.level}! (RC ${Number(result.cost).toFixed(2)} Cash)`);
       checkExtractorTick();
     });
 
@@ -4392,7 +4392,7 @@
       const result = await convertFn({ amount: cashoutConvertAmount });
 
       if (result.data?.ok) {
-        showToast(`✓ Converted $${cashoutConvertAmount} → +${result.data.ebReward} EB +${result.data.diamondReward} Diamonds!`, 4000);
+        showToast(`✓ Converted RC ${cashoutConvertAmount} → +${result.data.ebReward} EB +${result.data.diamondReward} Diamonds!`, 4000);
         // Update local state
         state.cash = result.data.newCash;
         state.eb = result.data.newEb;

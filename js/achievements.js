@@ -32,11 +32,14 @@ const Achievements = (() => {
     { id: "days_played",    cat: "dedication", stat: "daysPlayed",   title: "Play on {n} separate days",           tiers: [{t:7,eb:25,rp:2},{t:30,eb:100,rp:5},{t:90,eb:400,rp:10}] },
     { id: "quests_done",    cat: "dedication", stat: "questsCompleted", title: "Complete {n} daily quests",       tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:500,eb:400,rp:10}] },
     { id: "boosts_used",    cat: "dedication", stat: "boostsActivated", title: "Activate {n} boosts",            tiers: [{t:5,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
-    { id: "wheel_spins",    cat: "dedication", stat: "wheelSpins",   title: "Spin the Diamond Wheel {n} times",    tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:500,eb:400,rp:10}] },
+    // wheel_spins and the three plot tracks pay EB ONLY — no RP. Spinning is
+    // chance and plots cost EB from the wheel, so redeemable points here would
+    // reopen the chance -> money chain. Must match functions/index.js.
+    { id: "wheel_spins",    cat: "dedication", stat: "wheelSpins",   title: "Spin the Diamond Wheel {n} times",    tiers: [{t:10,eb:25,rp:0},{t:100,eb:100,rp:0},{t:500,eb:400,rp:0}] },
 
-    { id: "plots_purchased", cat: "land",     stat: "plotsPurchased", title: "Purchase {n} plots",                tiers: [{t:1,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
-    { id: "plots_owned",     cat: "land",     stat: "plotsOwned", derived: true, title: "Own {n} plots at once",  tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:500,eb:400,rp:10}] },
-    { id: "plots_ascended",  cat: "land",     stat: "plotsAscended", title: "Ascend {n} plots at the Forge",     tiers: [{t:1,eb:5,rp:5},{t:10,eb:10,rp:5},{t:100,eb:100,rp:5}] },
+    { id: "plots_purchased", cat: "land",     stat: "plotsPurchased", title: "Purchase {n} plots",                tiers: [{t:1,eb:25,rp:0},{t:25,eb:100,rp:0},{t:100,eb:400,rp:0}] },
+    { id: "plots_owned",     cat: "land",     stat: "plotsOwned", derived: true, title: "Own {n} plots at once",  tiers: [{t:10,eb:25,rp:0},{t:100,eb:100,rp:0},{t:500,eb:400,rp:0}] },
+    { id: "plots_ascended",  cat: "land",     stat: "plotsAscended", title: "Ascend {n} plots at the Forge",     tiers: [{t:1,eb:5,rp:0},{t:10,eb:10,rp:0},{t:100,eb:100,rp:0}] },
     { id: "legendary_owned", cat: "land",     stat: "legendaryOwned", derived: true, title: "Own {n} Legendary plots", tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
     { id: "lucky_owned",     cat: "land",     stat: "luckyOwned", derived: true, title: "Own {n} Lucky plots",     tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
     { id: "trades_done",     cat: "land",     stat: "tradesCompleted", title: "Complete {n} trades",             tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:50,eb:400,rp:10}] },

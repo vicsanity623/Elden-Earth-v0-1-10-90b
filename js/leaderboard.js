@@ -694,7 +694,7 @@ const Leaderboard = (() => {
       const badgeIcon = activeBadge ? activeBadge.icon : "🛡️";
       const badgeText = activeBadge ? activeBadge.title : "Citizen of the Realm";
       const rentDisplay = Number(p.lifetimeRent || p.cash) || 0;
-      const metricVal = currentTab === "plots" ? `${escapeHtml(displayCount)} <span class="lb-unit">Plots</span>` : `$${escapeHtml(rentDisplay.toFixed(6))}`;
+      const metricVal = currentTab === "plots" ? `${escapeHtml(displayCount)} <span class="lb-unit">Plots</span>` : `RC ${escapeHtml(rentDisplay.toFixed(6))}`;
 
       const row = document.createElement("div");
       row.className = "lb-row" + (isSelf ? " self-row" : "");
