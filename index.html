@@ -216,7 +216,7 @@
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
       <div class="hero-balance-value" id="stat-cash">
-        <span class="cash-dollar">$</span><span class="cash-point">.</span><span class="cash-decimal">000000000000000</span>
+        <span class="cash-dollar">RC</span><span class="cash-point">.</span><span class="cash-decimal">000000000000000</span>
       </div>
     </div>
 
@@ -241,7 +241,7 @@
 
       <div class="sub-stat">
         <span class="stat-label"></span>
-        <span class="stat-value" id="stat-rate">$-.--------/s</span>
+        <span class="stat-value" id="stat-rate">RC -.--------/s</span>
       </div>
 
       <button id="menu-btn" class="icon-btn menu-btn-wrap" aria-label="Menu">
@@ -516,10 +516,10 @@
       <div class="land-stat"><span id="land-rate">-.--------</span><label>EB / sec</label></div>
     </div>
     <div class="rarity-legend">
-      <div><i class="swatch common"></i>Common (<span id="count-common">-</span>) — <span id="weight-common">0</span>% — $<span id="rate-common">0</span>/s</div>
-      <div><i class="swatch rare"></i>Rare (<span id="count-rare">-</span>) — <span id="weight-rare">0</span>% — $<span id="rate-rare">0</span>/s</div>
-      <div><i class="swatch epic"></i>Epic (<span id="count-epic">-</span>) — <span id="weight-epic">0</span>% — $<span id="rate-epic">0</span>/s</div>
-      <div><i class="swatch legendary"></i>Legendary (<span id="count-legendary">-</span>) — <span id="weight-legendary">0</span>% — $<span id="rate-legendary">0</span>/s</div>
+      <div><i class="swatch common"></i>Common (<span id="count-common">-</span>) — <span id="weight-common">0</span>% — RC <span id="rate-common">0</span>/s</div>
+      <div><i class="swatch rare"></i>Rare (<span id="count-rare">-</span>) — <span id="weight-rare">0</span>% — RC <span id="rate-rare">0</span>/s</div>
+      <div><i class="swatch epic"></i>Epic (<span id="count-epic">-</span>) — <span id="weight-epic">0</span>% — RC <span id="rate-epic">0</span>/s</div>
+      <div><i class="swatch legendary"></i>Legendary (<span id="count-legendary">-</span>) — <span id="weight-legendary">0</span>% — RC <span id="rate-legendary">0</span>/s</div>
       <div class="hidden" id="lucky-stat-row"><i class="swatch lucky"></i>🍀 Lucky (<span id="count-lucky">0</span>) — earn ×1.1</div>
     </div>
     <button id="ascension-forge-btn" class="btn btn-primary" style="margin-bottom:12px;">⚒ Ascension Forge</button>
@@ -843,12 +843,12 @@
     <h2>How to Play</h2>
     <p class="modal-sub">Become the Lord of the Realm</p>
 
-    <!-- Cash Out Teaser Banner -->
+    <!-- Rewards Program teaser -->
     <div class="cashout-teaser-card">
-      <div class="cashout-icon">💵</div>
+      <div class="cashout-icon">🎁</div>
       <div class="cashout-info">
-        <strong>Cash Out Coming Soon!</strong>
-        <span>Real PayPal and other cashout options are self-funded by community game treasury ad revenue!</span>
+        <strong>Earn Real Rewards</strong>
+        <span>Redeem Reward Points for small PayPal rewards, funded by the Realm's community treasury. Earned through play only — never by chance.</span>
       </div>
     </div>
 
@@ -882,8 +882,8 @@
       <div class="guide-card">
         <div class="guide-card-icon">📈</div>
         <div class="guide-card-text">
-          <strong>4. Earn Passive Rent ($USD) Forever</strong>
-          <span>Every tile pays real-time cash every 0.5s — even when the app is closed. Hard-refresh your browser (search “hard refresh” for your browser) to see the latest balance.</span>
+          <strong>4. Earn Passive Rent (Realm Coins)</strong>
+          <span>Every tile pays Realm Coins every 0.5s — even when the app is closed. Hard-refresh your browser (search “hard refresh” for your browser) to see the latest balance.</span>
         </div>
       </div>
 
@@ -1163,23 +1163,23 @@
       <div class="pool-hero-stats">
         <div class="pool-stat-col">
           <span class="pool-stat-label">RENT EARNED THIS WEEK (LIVE)</span>
-          <strong id="modal-rent-earned-val" class="pool-stat-cash">$-.------</strong>
+          <strong id="modal-rent-earned-val" class="pool-stat-cash">RC -.------</strong>
         </div>
         <div class="pool-stat-divider"></div>
         <div class="pool-stat-col">
           <span class="pool-stat-label">WEEK PROJECTION AT THIS RATE</span>
-          <strong id="modal-global-rent-val" class="pool-stat-cash">$-.------</strong>
+          <strong id="modal-global-rent-val" class="pool-stat-cash">RC -.------</strong>
         </div>
         <div class="pool-stat-divider"></div>
         <div class="pool-stat-col">
           <span class="pool-stat-label">1% WEEKLY POOL (MIN RC 0.05)</span>
-          <strong id="modal-weekly-pool-val" class="pool-stat-pool">$-.------</strong>
+          <strong id="modal-weekly-pool-val" class="pool-stat-pool">RC -.------</strong>
         </div>
       </div>
       <!-- Global Velocity / Economy Rate -->
       <div class="pool-global-rate">
         <span class="rate-label">REALM ECONOMY VELOCITY:</span>
-        <strong id="modal-global-rate-val" class="rate-val">+$-.---------- / sec</strong>
+        <strong id="modal-global-rate-val" class="rate-val">+RC -.---------- / sec</strong>
       </div>
       <!-- Explains whether the pool is 1% of rent or sitting on the $0.05 floor -->
       <div class="pool-basis" id="modal-pool-basis"></div>
@@ -1960,16 +1960,16 @@
 
     <!-- Cash Balance Card -->
     <div class="cashout-balance-card">
-      <div class="cashout-balance-label">MY CASH BALANCE</div>
+      <div class="cashout-balance-label">MY REALM COINS BALANCE</div>
       <div class="cashout-balance-value">
-        <span class="cashout-dollar">$</span><span id="cashout-cash-amount">0.000000000000000</span>
+        <span class="cashout-dollar">RC</span><span id="cashout-cash-amount">0.000000000000000</span>
       </div>
     </div>
 
     <!-- Convert Section -->
     <div class="cashout-convert-section">
       <div class="cashout-convert-info">
-        <p>Every $1.00 you earn can be converted to Elden Bucks.<br>Use EB to buy more land and grow your empire!</p>
+        <p>Every RC 1 you earn can be converted to Elden Bucks.<br>Use EB to buy more land and grow your empire!</p>
       </div>
 
       <!-- Amount to Convert -->
@@ -1978,7 +1978,7 @@
         <div class="cashout-amount-controls">
           <button id="cashout-decrease-btn" class="cashout-arrow-btn">◀</button>
           <div class="cashout-amount-display">
-            <span class="cashout-amount-dollar">$</span><span id="cashout-convert-amount">1</span>
+            <span class="cashout-amount-dollar">RC</span><span id="cashout-convert-amount">1</span>
           </div>
           <button id="cashout-increase-btn" class="cashout-arrow-btn">▶</button>
         </div>

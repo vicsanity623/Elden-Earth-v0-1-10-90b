@@ -283,7 +283,9 @@ const Cashout = (() => {
           region_unverified: "🌍 We couldn't confirm your location. Open the game with location enabled and try again.",
           region_restricted: "Redemptions are not available in your region.",
           user_not_found: "Account not found. Please sign in again.",
-          treasury_locked: `🏛️ Redemptions are locked — the Realm has earned ${fmtCash(result.revenue)} of the ${fmtCash(result.threshold)} revenue goal.`,
+          // No dollar figures here: the revenue and the unlock threshold are
+          // business numbers. The progress bar already shows how close it is.
+          treasury_locked: "🏛️ Redemptions are locked until the Realm reaches its monthly revenue goal.",
           monthly_budget_exhausted: `🏛️ This month's program budget is spent (${fmtCash(result.monthPaid)} of ${fmtCash(result.budget)}). Try next month.`,
           yearly_budget_exhausted: `🏛️ This year's program budget is spent (${fmtCash(result.yearPaid)} of ${fmtCash(result.yearBudget)}). Try next year.`,
           age_verification_required: "🎂 Confirm your date of birth before redeeming rewards.",

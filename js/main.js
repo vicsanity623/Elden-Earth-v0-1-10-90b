@@ -199,7 +199,7 @@
         const whole = parseInt(parts[0], 10);
         const decimals = parts[1] || "000000000000000";
         const wholeHTML = whole > 0 ? `<span class="cash-whole">${whole}</span>` : "";
-        cashContainer.innerHTML = `<span class="cash-dollar">$</span>${wholeHTML}<span class="cash-point">.</span><span class="cash-decimal">${decimals}</span>`;
+        cashContainer.innerHTML = `<span class="cash-dollar">RC</span>${wholeHTML}<span class="cash-point">.</span><span class="cash-decimal">${decimals}</span>`;
       }
     }
 

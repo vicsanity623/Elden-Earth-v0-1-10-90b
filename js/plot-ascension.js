@@ -37,8 +37,10 @@ const PlotAscension = (() => {
     return s || "0";
   }
 
+  // Realm Coins (in-game). Deliberately NOT a "$" — a dollar sign here reads as
+  // real money to a reviewer. Real USD only appears on the redemption screen.
   function formatCash(val) {
-    return "$" + (Number(val) || 0).toFixed(2);
+    return "RC " + (Number(val) || 0).toFixed(2);
   }
 
   function tileCenter(tx, ty) {

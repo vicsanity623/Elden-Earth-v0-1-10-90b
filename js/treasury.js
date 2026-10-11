@@ -76,7 +76,10 @@ const Treasury = (() => {
       ? "The Realm's revenue figures are being updated — redemptions stay locked until they're current."
       : unlocked
         ? `Open this month · ${spentLine}`
-        : `${fmtUsd(status.revenue)} / ${fmtUsd(status.threshold)} monthly ad revenue needed to unlock redemptions`;
+        // Deliberately no dollar figures here: the ad revenue and the unlock
+        // threshold are business numbers, not player-facing ones. The progress
+        // bar above already communicates how close the Realm is.
+        : "Redemptions unlock for everyone once the Realm reaches its monthly revenue goal.";
 
     const label = !fresh ? "Redemptions Locked" : (unlocked ? "Redemptions Open" : "Redemptions Locked");
     const pctLabel = !fresh ? "Updating" : (unlocked ? "Goal met" : pct + "%");

@@ -358,7 +358,7 @@ const WeeklyPool = (() => {
       const floorApplied = onePct < 0.05;
       basisEl.textContent = `Pool = 1% of the rent earned this week (min RC 0.05). 1% of RC ${fmtCash(earnedRent)} earned so far = RC ${fmtCash(onePct)}`
         + (floorApplied
-          ? ` → the $0.05 floor applies until weekly rent passes $5.00.`
+          ? ` → the RC 0.05 floor applies until weekly rent passes RC 5.00.`
           : ` — above the floor.`)
         + ` Freezes and pays automatically at Monday 00:00 UTC.`;
     }
