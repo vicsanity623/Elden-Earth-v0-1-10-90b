@@ -351,6 +351,93 @@
       };
     }
 
+    // Staff Tools — visible only to GAME_ADMIN_UIDS, only on other players.
+    // Cosmetic gate only: banPlayer / purgePlayer both re-verify the caller
+    // server-side against ADMIN_UIDS in functions/index.js.
+    const adminBlock = el("admin-actions-block");
+    const adminBanBtn = el("admin-ban-btn");
+    const adminPurgeBtn = el("admin-purge-btn");
+    const adminStatusEl = el("admin-action-status");
+    const myUid = state.player?.id || firebase.auth().currentUser?.uid || "";
+    const isAdminUser = !!(myUid && (CONFIG.GAME_ADMIN_UIDS || []).includes(myUid));
+    const showAdmin = isOtherPlayer && isAdminUser && !!targetPlayerData?.ownerId;
+    if (adminBlock) adminBlock.classList.toggle("hidden", !showAdmin);
+    if (adminStatusEl && !showAdmin) {
+      adminStatusEl.classList.add("hidden");
+      adminStatusEl.textContent = "";
+    }
+
+    const setAdminBusy = (busy) => {
+      if (adminBanBtn) adminBanBtn.disabled = busy;
+      if (adminPurgeBtn) adminPurgeBtn.disabled = busy;
+    };
+    const setAdminStatus = (msg, isError) => {
+      if (!adminStatusEl) return;
+      adminStatusEl.textContent = msg || "";
+      adminStatusEl.classList.toggle("hidden", !msg);
+      adminStatusEl.style.color = isError ? "#f87171" : "var(--text-dim)";
+    };
+
+    if (adminBanBtn && showAdmin) {
+      adminBanBtn.onclick = () => {
+        const targetUid = targetPlayerData.ownerId;
+        const targetName = targetPlayerData.ownerName || "Traveler";
+        const reason = window.prompt(
+          `Ban ${targetName}?\n\nThey will be blocked on next login and their save will be zeroed.\nEnter a reason (recorded in banned_users):`,
+          "Admin ban"
+        );
+        if (reason === null) return;
+        setAdminBusy(true);
+        setAdminStatus("Banning…");
+        firebase.functions().httpsCallable("banPlayer")({ uid: targetUid, reason: reason || "Admin ban" })
+          .then((res) => {
+            const msg = res?.data?.message || `Player ${targetName} banned.`;
+            setAdminStatus("✅ " + msg, false);
+            showToast("⛔ " + msg, 4000);
+          })
+          .catch((err) => {
+            const msg = err?.message || "Ban failed.";
+            setAdminStatus("⚠️ " + msg, true);
+            showToast("⚠️ " + msg, 4000);
+          })
+          .finally(() => setAdminBusy(false));
+      };
+    }
+
+    if (adminPurgeBtn && showAdmin) {
+      adminPurgeBtn.onclick = () => {
+        const targetUid = targetPlayerData.ownerId;
+        const targetName = targetPlayerData.ownerName || "Traveler";
+        const confirmText = window.prompt(
+          `PERMANENTLY DELETE ${targetName}?\n\nThis removes every trace of this player across all collections (saves, saves_private, plots, referrals, chat, achievements, …).\nThis cannot be undone.\n\nType DELETE to confirm:`,
+          ""
+        );
+        if (confirmText === null) return;
+        if (confirmText.trim().toUpperCase() !== "DELETE") {
+          setAdminStatus("Cancelled — confirmation text did not match.", true);
+          return;
+        }
+        setAdminBusy(true);
+        setAdminStatus("Purging player data…");
+        firebase.functions().httpsCallable("purgePlayer")({ uid: targetUid })
+          .then((res) => {
+            const ok = res?.data?.ok !== false;
+            const deleted = res?.data?.deleted ?? res?.data?.totalDeleted;
+            const msg = ok
+              ? `✅ ${targetName} purged${deleted ? ` (${deleted} docs)` : ""}.`
+              : `⚠️ Purge returned not-ok: ${res?.data?.reason || "unknown"}`;
+            setAdminStatus(msg, !ok);
+            showToast(msg, 4500);
+          })
+          .catch((err) => {
+            const msg = err?.message || "Purge failed.";
+            setAdminStatus("⚠️ " + msg, true);
+            showToast("⚠️ " + msg, 4000);
+          })
+          .finally(() => setAdminBusy(false));
+      };
+    }
+
     // Hide "Sign in with Google" button — Google sign-in only, no guest mode
     const googleLinkSection = el("info-google-link-section");
     if (googleLinkSection) {

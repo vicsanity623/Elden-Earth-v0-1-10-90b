@@ -235,6 +235,15 @@ const CONFIG = {
     cooldownHours: 48,
   },
 
+  // UI-only: decides whether the admin buttons render on player profiles.
+  // The server re-checks against its own ADMIN_UIDS list in functions/index.js
+  // (banPlayer / purgePlayer both verify the caller), so hiding the buttons is
+  // cosmetic — editing this list grants nothing.
+  GAME_ADMIN_UIDS: [
+    "VBeRg8uy0AfB7EPt9KuytpsBHmb2",
+    "IEKX7RLnMQTqd1E6w1Ugd2s4AUl1",
+  ],
+
   // --- Regional Compliance (Server-Authoritative) ---
   // Players from these ISO 3166-1 alpha-2 country codes are BLOCKED from:
   // 1. Playing the game (login/registration blocked)

@@ -569,6 +569,19 @@
         <button id="report-player-btn" class="report-player-btn hidden" title="Report this player">🚨 Report</button>
       </div>
 
+      <!-- Admin actions — visible only to staff, only on other players' profiles.
+           Cosmetic gate: js/config.js GAME_ADMIN_UIDS. The server re-checks the
+           caller against its own ADMIN_UIDS list in functions/index.js, so hiding
+           these buttons grants nothing. -->
+      <div id="admin-actions-block" class="hidden" style="margin-top:12px;padding:10px 12px;border-radius:10px;border:1px dashed #f87171;background:rgba(248,113,113,0.10);">
+        <div style="font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:#f87171;font-weight:700;margin-bottom:8px;">🛡 Staff Tools</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="admin-ban-btn" class="btn" style="flex:1 1 130px;min-width:130px;background:rgba(248,113,113,0.18);border:1px solid #f87171;color:#f87171;font-size:12px;padding:8px 10px;">⛔ Ban Player</button>
+          <button id="admin-purge-btn" class="btn" style="flex:1 1 130px;min-width:130px;background:rgba(239,68,68,0.28);border:1px solid #ef4444;color:#fff;font-size:12px;padding:8px 10px;">🗑 Delete Player</button>
+        </div>
+        <div id="admin-action-status" class="hidden" style="margin-top:8px;font-size:11px;color:var(--text-dim);"></div>
+      </div>
+
       <!-- Phone Verification Status -->
       <div id="info-phone-verified" class="hidden" style="margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(74,222,128,0.15);border:1px solid #4ade80;text-align:center;">
         <span style="color:#4ade80;font-size:13px;font-weight:600;">✓ Phone Verified</span>
