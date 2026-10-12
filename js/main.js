@@ -201,7 +201,11 @@
         const parts = fixedStr.split(".");
         const whole = parseInt(parts[0], 10);
         const decimals = parts[1] || "000000";
-        const wholeHTML = `<span class="cash-whole">${Fmt.group(whole)}</span>`;
+        // Sub-1 balances drop the leading zero entirely ("RC .975801"), which is
+        // how Atlas Earth renders it — a big "0" crowds the digits that matter.
+        const wholeHTML = whole > 0
+          ? `<span class="cash-whole">${Fmt.group(whole)}</span>`
+          : `<span class="cash-whole cash-whole-zero">0</span>`;
         cashContainer.innerHTML = `<span class="cash-dollar">RC</span>${wholeHTML}<span class="cash-point">.</span><span class="cash-decimal">${decimals}</span>`;
       }
     }

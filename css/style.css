@@ -3,7 +3,12 @@
   --ink-2:      #131c2b;
   --panel:      #16202f;
   --panel-2:    #1c2a3d;
-  --line:       rgba(255,43,67,0.45);
+  /* --line is now a NEUTRAL hairline. It used to be red-tinted and was applied
+     to 79 borders, which is why every card glowed and nothing had hierarchy.
+     Red is reserved for --line-hot, used only on primary actions and alerts. */
+  --line:       rgba(255,255,255,0.10);
+  --line-subtle:rgba(255,255,255,0.06);
+  --line-hot:   rgba(255,43,67,0.45);
   --parchment:  #eef2f8;
   --gold:       #ff2b43;
   --gold-hi:    #ffffff;
@@ -17,6 +22,15 @@
   --r-color:    #e85f6a;
   --font-display: 'Cinzel', serif;
   --font-body: 'Manrope', sans-serif;
+
+  /* Surface fills — flat, no raster, scale cleanly at any size. */
+  --surface-1:  linear-gradient(180deg, #232f42 0%, #17212f 100%);
+  --surface-2:  linear-gradient(180deg, #2b3a52 0%, #1c2a3d 100%);
+  --surface-press: linear-gradient(180deg, #1a2433 0%, #121b28 100%);
+
+  /* One glow, applied only to the single primary action per screen. */
+  --glow-primary: 0 8px 22px rgba(255,0,40,0.45), 0 0 10px rgba(255,23,68,0.28);
+  --glow-soft:    0 2px 10px rgba(0,0,0,0.45);
 }
 
 *{box-sizing:border-box;}
@@ -118,10 +132,10 @@ html,body{
 }
 .btn:active{ transform:scale(0.97); }
 .btn-primary{
-  background:url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   color:#ffffff;
   border:none;
-  border-radius:0;
+  border-radius: 12px;
   font-family:var(--font-display);
   font-weight:800;
   letter-spacing:0.3px;
@@ -268,7 +282,7 @@ html,body{
 .toggle-input:checked::after {
   transform: translateX(18px);
   background: #ff1744;
-  box-shadow: 0 0 8px rgba(255, 23, 68, 0.7);
+  box-shadow: none;
 }
 
 .map-style-selector {
@@ -294,7 +308,7 @@ html,body{
   background: rgba(255, 23, 68, 0.18);
   border-color: #ff1744;
   color: #fff;
-  box-shadow: 0 0 10px rgba(255, 23, 68, 0.35);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45);
 }
 .fine-print {
   color: rgba(230, 235, 245, 0.75);
@@ -322,21 +336,19 @@ html,body{
   width: 100%;
   position: relative;
   box-sizing: border-box;
-  
-  /* 1. Remove old default borders */
+
+  /* Raster frame removed. It was a 1137x170 PNG stretched to fit, which
+     blurred the corners and painted the whole HUD red. Now: a dark panel with
+     a single red accent rule on top — brand signal without the shout. */
   border: none !important;
-  border-radius: 0 !important;
-  
-  /* 2. Apply your custom frame */
-  background: url('../assets/topbar-frame.png') no-repeat center center / 100% 100%;
-  
-  /* 3. Padding to keep the text inside the red lines */
+  border-radius: 14px !important;
+  background: rgba(10, 16, 26, 0.88);
+  border-top: 2px solid var(--gold) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+
   padding: clamp(6px, 2vw, 10px) clamp(12px, 4vw, 24px) clamp(8px, 2.5vw, 12px) clamp(12px, 4vw, 24px);
   text-align: center;
   pointer-events: auto;
-  
-  /* 4. Crimson ambient glow */
-  filter: drop-shadow(0 0 12px rgba(255, 0, 40, 0.45));
 }
 /* Elden Earth Brand Title */
 .hero-brand-title {
@@ -397,6 +409,16 @@ html,body{
   letter-spacing: 0.5px;
 }
 
+/* Sub-1 balances: the leading zero is noise, so it recedes to the size of the
+   prefix and the decimal point. "RC .975801" reads as one number instead of
+   "RC 0 975801". */
+.cash-whole-zero {
+  font-size: clamp(12px, 4vw, 16px);
+  font-weight: 700;
+  color: rgba(229, 231, 235, 0.35);
+  margin-right: 1px;
+}
+
 .cash-point {
   font-size: clamp(12px, 4vw, 16px);
   font-weight: 700;
@@ -440,16 +462,18 @@ html,body{
 }
 .sub-stat{
   flex:1;
-  background: url('../assets/substat-chip.png') no-repeat center center / 100% 100%;
-  border:none;
-  border-radius:0;
+  background: var(--surface-1);
+  border:1px solid var(--line-subtle);
+  border-radius:12px;
   padding:4px 6px;
   text-align:center;
 }
 .sub-stat .stat-label{
   display:block;
-  font-size:clamp(9px, 2.5vw, 12px); letter-spacing:0.3px;
+  font-size:clamp(8px, 2.2vw, 10px); letter-spacing:0.6px;
+  text-transform:uppercase;
   color:var(--text-dim);
+  opacity:0.75;
 }
 .sub-stat .stat-value{
   display:block;
@@ -462,15 +486,16 @@ html,body{
 
 /* 2. Player Chip (Avatar + Name on the left) */
 .player-chip {
-  background: url('../assets/substat-player-avatar.png') no-repeat center center / 100% 100%;
-  border: none !important;
-  border-radius: 0 !important;
+  /* Raster frame removed — it blurred at small sizes and added a red glow to
+     what is just a name chip. */
+  background: var(--surface-1);
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
   height: 38px;
   padding: 0 10px;
   display: flex;
   align-items: center;
   gap: 6px;
-  filter: drop-shadow(0 0 6px rgba(255, 0, 40, 0.3));
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
@@ -537,13 +562,13 @@ html,body{
   display:flex; gap:8px; margin:12px 0 10px;
 }
 .calendar-tab {
-  flex:1; padding:10px 12px; border-radius:0; border:none;
-  background:url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  flex:1; padding:10px 12px; border-radius: 12px; border:none;
+  background: var(--surface-1);
   color:var(--parchment); font-weight:700; cursor:pointer;
 }
 .calendar-tab.active {
-  background:url('../assets/button-frame-earn.png') no-repeat center center / 100% 100%, #000;
-  color:#fff; border:none;
+  background: var(--surface-2);
+  color:#fff; border:1px solid var(--line);
 }
 .calendar-panel.active { display:block; }
 /* Scrolls the same way the rewards tab does — the board is 13 quests now. */
@@ -663,13 +688,13 @@ html,body{
 .calendar-quest-item .quest-check { width:24px; height:24px; border-radius:50%; background:rgba(255,43,67,0.12); border:1px solid rgba(255,43,67,0.5); color:#ff5566; display:flex; align-items:center; justify-content:center; font-size:13px; }
 .calendar-quest-item .quest-check.done { background:rgba(255,43,67,0.25); border-color:#ff2b43; font-weight:800; }
 .quest-claim-btn {
-  background:url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color:#fff !important;
   font-family:var(--font-display) !important;
   font-weight:800 !important;
   font-size:11px !important;
   border:none !important;
-  border-radius:0 !important;
+  border-radius: 12px !important;
   padding:6px 12px !important;
   cursor:pointer !important;
   box-shadow:0 0 10px rgba(255,43,67,0.5) !important;
@@ -756,8 +781,11 @@ html,body{
   max-width: 105px;
   width: auto;
   padding: clamp(8px, 2.5vw, 11px) 6px;
-  border-radius: 0;
-  background: url('../assets/button-frame-earn.png') no-repeat center center / 100% 100%, linear-gradient(180deg, #ff5566, #a31226);
+  border-radius: 12px;
+  /* Secondary to BUY LAND — same surface, no red glow. Hierarchy is what
+     makes the screen scannable: one primary, everything else quiet. */
+  background: var(--surface-1);
+  border: 1px solid var(--line);
   color: #ffffff;
   font-family: var(--font-display);
   font-weight: 800;
@@ -765,7 +793,7 @@ html,body{
   letter-spacing: 0.3px;
   white-space: nowrap;
   text-align: center;
-  box-shadow: 0 8px 20px rgba(255,43,67,0.35);
+  box-shadow: var(--glow-soft);
 }
 
 /* ---------- Toast (Floats Cleanly Above Buttons) ---------- */
@@ -824,11 +852,9 @@ html,body{
 .modal-card{
   position:relative;
   width:100%; max-width:440px;
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%,
-              linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%);
-  border:none;
-  border-bottom:none;
-  border-radius:0;
+  background: var(--surface-1);
+  border:1px solid var(--line);
+  border-radius:16px;
   padding:28px 22px 28px;
   text-align:center;
   max-height:88vh; overflow-y:auto;
@@ -983,7 +1009,7 @@ html,body{
 
 .wheel-multiplier-row:hover {
   border-color: rgba(255, 0, 40, 0.8) !important;
-  box-shadow: 0 0 12px rgba(255, 0, 40, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45) !important;
 }
 
 .wheel-mult-info {
@@ -1051,13 +1077,13 @@ html,body{
 .cyber-switch input:checked + .cyber-switch-slider {
   background-color: rgba(255, 0, 40, 0.25);
   border-color: #ff1744;
-  box-shadow: 0 0 10px rgba(255, 23, 68, 0.6), inset 0 1px 3px rgba(255, 0, 40, 0.3);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,0.12);
 }
 
 .cyber-switch input:checked + .cyber-switch-slider .cyber-switch-knob {
   transform: translateX(23px);
   background-color: #ff1744;
-  box-shadow: 0 0 8px #ff002b;
+  box-shadow: none;
 }
 
 /* Spin Button & Result */
@@ -1066,8 +1092,8 @@ html,body{
   margin-top: 4px;
   width: 100%;
   border: none !important;
-  border-radius: 0 !important;
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100% !important;
+  border-radius: 12px !important;
+  background: var(--surface-1) !important;
   color: #fff !important;
   font-family: var(--font-display) !important;
   font-weight: 800 !important;
@@ -1112,7 +1138,7 @@ html,body{
 .modal-card.wheel-card::-webkit-scrollbar-thumb {
   background: #ff1744;
   border-radius: 4px;
-  box-shadow: 0 0 6px #ff002b;
+  box-shadow: none;
 }
 
 /* ---------- Live Balances in Diamond Wheel Modal ---------- */
@@ -1277,16 +1303,16 @@ html,body{
   flex: 1;
   padding: 13px 10px;
   font-size: 15px;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
 }
 .modal-actions .btn-primary {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #fff !important;
   border: none !important;
   box-shadow: 0 6px 18px rgba(255, 0, 43, 0.35) !important;
 }
 .modal-actions .btn-secondary {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: var(--parchment) !important;
   border: none !important;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45) !important;
@@ -1319,7 +1345,7 @@ html,body{
   
   /* 2. Cyber Angled Chamfer Corners */
   clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
-  border-radius: 0 !important;
+  border-radius: 12px !important;
   border: 1px solid #ff2a40;
   
   /* 3. Typography & Spacing */
@@ -1387,7 +1413,7 @@ html,body{
   color: var(--gold-hi);
   font-family: var(--font-display);
   cursor: pointer;
-  box-shadow: 0 0 18px rgba(255, 43, 67, 0.5), 0 4px 12px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   animation: multGlow 2s infinite ease-in-out;
 }
 .multiplier-btn:active { transform: scale(0.92); }
@@ -1969,7 +1995,7 @@ html,body{
   border-color: var(--gold-hi);
   background: linear-gradient(135deg, rgba(34, 48, 68, 0.95), rgba(20, 28, 42, 0.98));
   color: var(--gold-hi);
-  box-shadow: 0 0 10px rgba(255, 43, 67, 0.35);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .mayor-crown-pill strong {
@@ -2111,7 +2137,7 @@ html,body{
 .pi-tab.active {
   color: #fff;
   border-bottom-color: transparent;
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   font-weight: 800;
 }
 .pi-tab-panel {
@@ -3378,7 +3404,7 @@ html,body{
 .wardrobe-card:hover, .wardrobe-card.selected {
   border-color: var(--gold-hi);
   background: rgba(22, 32, 47, 0.95);
-  box-shadow: 0 0 12px rgba(255, 43, 67, 0.4);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   transform: translateY(-2px);
 }
 
@@ -3455,14 +3481,17 @@ html,body{
 }
 
 /* ---------- BUY LAND MODE CONTROLS ---------- */
+/* THE primary action on the game screen. One red element per screen — this is
+   it. Everything else on the HUD is --surface-1 with a neutral hairline. */
 .btn-buy-land {
   flex: 1.15 1 auto !important;
   min-width: 70px !important;
   max-width: 120px !important;
   width: auto !important;
   padding: clamp(8px, 2.5vw, 11px) 6px !important;
-  border-radius: 0 !important;
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, #ff3d52 0%, #b81228 100%) !important;
+  border: 1px solid var(--line-hot) !important;
   color: #ffffff !important;
   font-family: var(--font-display) !important;
   font-weight: 800 !important;
@@ -3470,7 +3499,7 @@ html,body{
   letter-spacing: 0.3px;
   white-space: nowrap !important;
   text-align: center;
-  box-shadow: 0 8px 22px rgba(255, 0, 40, 0.55), 0 0 10px rgba(255, 23, 68, 0.35) !important;
+  box-shadow: var(--glow-primary) !important;
 }
 .btn-buy-land:active { transform: scale(0.94); }
 
@@ -3483,12 +3512,12 @@ html,body{
   width: auto;
   z-index: 25;
   box-sizing: border-box;
-  background: rgba(6, 10, 18, 0.95) url('../assets/modal-frame.png') no-repeat center center / 100% 100%;
-  border: none;
-  border-radius: 0;
+  background: rgba(6, 10, 18, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   padding: 13px 15px;
   display: block;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 18px rgba(255, 43, 67, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   pointer-events: auto;
@@ -3531,10 +3560,10 @@ html,body{
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: rgba(6, 10, 18, 0.92) url('../assets/button-frame.png') no-repeat center center / 100% 100%;
+  background: rgba(6, 10, 18, 0.92);
   border: none;
-  border-radius: 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 12px rgba(255, 43, 67, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.7);
   pointer-events: none;
   animation: territoryFadeIn 0.3s ease-out;
 }
@@ -3710,12 +3739,12 @@ body.buy-mode #treasury-ad-container {
   font-family: var(--font-display) !important;
   font-size: 12.5px !important;
   font-weight: 800 !important;
-  border-radius: 0 !important;
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100% !important;
+  border-radius: 12px !important;
+  background: var(--surface-1) !important;
   color: #fff !important;
   border: none !important;
   cursor: pointer !important;
-  box-shadow: 0 2px 10px rgba(255, 43, 67, 0.5) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5) !important;
   transition: transform 0.15s ease !important;
   white-space: nowrap;
 }
@@ -3806,7 +3835,7 @@ body.buy-mode #treasury-ad-container {
 .cal-day-row.active {
   border: 1.5px solid var(--gold-hi);
   background: linear-gradient(135deg, rgba(34, 48, 68, 0.95), rgba(20, 28, 42, 0.98));
-  box-shadow: 0 0 14px rgba(255, 43, 67, 0.35);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .cal-day-row.claimed {
@@ -3838,13 +3867,13 @@ body.buy-mode #treasury-ad-container {
 }
 
 .cal-claim-btn {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   color: #fff;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 13px;
   border: none;
-  border-radius: 0;
+  border-radius: 12px;
   padding: 8px 16px;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(255, 43, 67, 0.4);
@@ -3928,7 +3957,7 @@ body.buy-mode #treasury-ad-container {
 
 /* ================= EXTRACTOR HUD BUTTON ================= */
 .extractor-hud-card {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none;
@@ -4085,7 +4114,7 @@ body.buy-mode #treasury-ad-container {
 
 /* Calendar Card */
 .calendar-icon-card {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none;
@@ -4167,13 +4196,13 @@ body.buy-mode #treasury-ad-container {
   font-size: 11px;
   font-weight: 700;
   padding: 8px 4px;
-  border-radius: 0;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .lb-tab-btn.active {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   color: #fff;
   border: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
@@ -4212,7 +4241,7 @@ body.buy-mode #treasury-ad-container {
 .lb-row.self-row {
   border: 1.5px solid var(--gold-hi);
   background: linear-gradient(135deg, rgba(34, 48, 68, 0.95), rgba(20, 28, 42, 0.98));
-  box-shadow: 0 0 14px rgba(255, 43, 67, 0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .lb-rank {
@@ -4440,7 +4469,7 @@ body.buy-mode #treasury-ad-container {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  box-shadow: 0 0 16px rgba(255, 43, 67, 0.25);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
 }
 .cashout-icon {
   font-size: 28px;
@@ -4652,10 +4681,10 @@ body.buy-mode #treasury-ad-container {
   height: 62vh;
   max-height: 100%;
   margin: 0 auto;
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%, rgba(13, 20, 32, 0.96);
-  border: none;
-  border-radius: 0;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 43, 67, 0.25);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.8);
   display: flex;
   flex-direction: column;
   animation: slideUpChat 0.3s cubic-bezier(0.18, 0.85, 0.32, 1);
@@ -4831,7 +4860,7 @@ body.buy-mode #treasury-ad-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 12px rgba(255, 43, 67, 0.45), inset 0 0 8px rgba(255, 43, 67, 0.25);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45);
   transition: transform 0.15s ease;
 }
 
@@ -4892,18 +4921,18 @@ div[aria-label="Advertisement"] {
   font-size: 11px;
   font-weight: 700;
   padding: 8px 2px;
-  border-radius: 0;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .lb-scope-btn.active {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   color: #fff;
   font-weight: 800;
   border: none;
-  box-shadow: 0 2px 10px rgba(255, 43, 67, 0.5);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .lb-title-glow {
@@ -5500,32 +5529,32 @@ div[aria-label="Advertisement"] {
 }
 
 .forge-btn-eb {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #ffffff !important;
   font-size: 14px !important;
   font-weight: 800 !important;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
 }
 
 .forge-btn-diamonds {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #ffffff !important;
   font-size: 14px !important;
   font-weight: 800 !important;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
   box-shadow: 0 0 12px rgba(79, 214, 196, 0.4) !important;
 }
 
 .btn-citadel-upgrade {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #ffffff !important;
   font-weight: 800 !important;
   font-size: 13px !important;
   margin-top: 8px !important;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
 }
 
 /* ================= PLOT ASCENSION FORGE ================= */
@@ -5653,7 +5682,7 @@ div[aria-label="Advertisement"] {
   border: 1px solid rgba(255, 43, 67, 0.55);
   border-radius: 16px;
   padding: 12px 14px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 43, 67, 0.15);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
   backdrop-filter: blur(8px);
   text-align: center;
 }
@@ -6011,7 +6040,7 @@ div[aria-label="Advertisement"] {
   width: 0%;
   border-radius: 999px;
   background: linear-gradient(90deg, #ff2b43 0%, #ff6b4a 50%, #e0a84f 100%);
-  box-shadow: 0 0 12px rgba(255, 43, 67, 0.55);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
   transition: width 0.45s ease;
 }
 
@@ -6261,7 +6290,7 @@ div[aria-label="Advertisement"] {
   padding: 4px 8px !important;
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: 0 0 8px rgba(255, 23, 68, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
   transition: transform 0.1s ease, background 0.15s ease;
 }
 
@@ -6273,10 +6302,10 @@ div[aria-label="Advertisement"] {
 /* Big round Collect All / Build Extractor buttons → custom frame */
 #collect-extractor-btn,
 #build-extractor-btn {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #fff !important;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
   font-family: var(--font-display) !important;
   font-weight: 800 !important;
   box-shadow: 0 6px 18px rgba(255, 0, 43, 0.4) !important;
@@ -6314,14 +6343,14 @@ div[aria-label="Advertisement"] {
   left: 14px;
   top: 715px;
   z-index: 22;
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000;
+  background: var(--surface-1);
   border: none;
-  border-radius: 0;
+  border-radius: 12px;
   padding: 6px 14px 6px 10px;
   display: flex;
   align-items: center;
   cursor: pointer;
-  box-shadow: 0 0 16px rgba(255, 43, 67, 0.4), 0 4px 12px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   animation: none;
   transition: transform 0.15s ease;
 }
@@ -6738,10 +6767,10 @@ div[aria-label="Advertisement"] {
 }
 
 #claim-weekly-reward-btn {
-  background: url('../assets/button-frame.png') no-repeat center center / 100% 100%, #000 !important;
+  background: var(--surface-1) !important;
   color: #fff !important;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
   font-family: var(--font-display) !important;
   font-weight: 800 !important;
   box-shadow: 0 6px 18px rgba(255, 0, 43, 0.4) !important;
@@ -6759,7 +6788,7 @@ div[aria-label="Advertisement"] {
   border-radius: 14px;
   padding: 16px;
   margin: 14px 0;
-  box-shadow: 0 0 20px rgba(255, 43, 67, 0.35);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -7020,7 +7049,7 @@ body.no-shake .boost-timer-badge.super-50x {
   .modal-card {
     max-width: 100% !important;
     padding: 20px 14px 20px !important;
-    border-radius: 0 !important;
+    border-radius: 12px !important;
     max-height: 85vh !important;
   }
 
@@ -7914,8 +7943,8 @@ body.birds-eye-mode #treasury-ad-container {
   z-index: 1000;
   padding: 14px 28px;
   border: none;
-  border-radius: 0;
-  background: #000 url('../assets/button-frame.png') no-repeat center center / 100% 100%;
+  border-radius: 12px;
+  background: var(--surface-1);
   color: #fff;
   font-family: var(--font-display, 'Cinzel', serif);
   font-weight: 800;
@@ -8065,7 +8094,7 @@ body:not(.birds-eye-mode) #exit-birds-eye-btn {
 .be-toggle:checked + .be-switch::after {
   transform: translateX(16px);
   background: #ffffff;
-  box-shadow: 0 0 6px rgba(255, 23, 68, 0.9);
+  box-shadow: none;
 }
 
 /* Hide toggled-off objects (normal view + Bird's Eye) */
@@ -8123,10 +8152,9 @@ body.birds-eye-mode .top-hud-row {
   position: relative;
   width: 100%;
   max-width: 440px;
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%,
-              linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%);
-  border: none;
-  border-radius: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 16px;
   padding: 28px 22px 28px;
   text-align: center;
   pointer-events: auto;
@@ -8571,7 +8599,7 @@ body.birds-eye-mode .top-hud-row {
 
 /* ===================== COMPANION PET SYSTEM ===================== */
 .pet-btn .side-hud-card {
-  background: #000 url('../assets/button-frame.png') no-repeat center center / 100% 100%;
+  background: var(--surface-1);
   border: none !important;
   border-radius: 0 !important;
   position: relative;
@@ -8622,10 +8650,9 @@ body.birds-eye-mode .top-hud-row {
 
 .pet-modal-card {
   max-width: 380px;
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%,
-              #000;
-  border: none !important;
-  border-radius: 0 !important;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
   padding: 28px 24px;
 }
 
@@ -8801,9 +8828,9 @@ body.birds-eye-mode .top-hud-row {
 
 .pet-stat-chip {
   flex: 1;
-  background: url('../assets/substat-chip.png') no-repeat center center / 100% 100%;
+  background: var(--surface-1);
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 12px !important;
   padding: 10px 8px;
   text-align: center;
   display: flex;
@@ -8838,9 +8865,9 @@ body.birds-eye-mode .top-hud-row {
 }
 
 .pet-feed-btn {
-  background: url('../assets/button-frame-earn.png') no-repeat center center / 100% 100%;
-  border: none !important;
-  border-radius: 0 !important;
+  background: var(--surface-1);
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
   color: #fff;
   font-size: 16px;
   font-weight: 800;
@@ -8937,7 +8964,9 @@ body.birds-eye-mode .top-hud-row {
 }
 
 .cashout-balance-card {
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   padding: 20px 24px;
   margin-bottom: 20px;
   text-align: center;
@@ -8964,7 +8993,9 @@ body.birds-eye-mode .top-hud-row {
 }
 
 .cashout-convert-section {
-  background: url('../assets/modal-frame.png') no-repeat center center / 100% 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   padding: 24px;
 }
 
@@ -9090,8 +9121,8 @@ body.birds-eye-mode .top-hud-row {
   width: 100%;
   padding: 16px;
   border: none;
-  border-radius: 0;
-  background: #000 url('../assets/button-frame.png') no-repeat center center / 100% 100%;
+  border-radius: 12px;
+  background: var(--surface-1);
   color: #fff;
   font-family: var(--font-display);
   font-size: 18px;
