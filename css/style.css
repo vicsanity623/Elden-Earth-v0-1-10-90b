@@ -33,12 +33,21 @@
   --glow-soft:    0 2px 10px rgba(0,0,0,0.45);
 
   /* Bottom stack heights. Everything that has to clear the bottom chrome
-     (sheets, CTA row, landlord pill, drawers) measures against these instead
-     of scattering magic pixel offsets that drift between screen sizes.
-     --nav-h must fit: icon 24 + gap 3 + label line ~12 + tab padding 8. */
-  --ad-h:  52px;                              /* ad banner slot            */
-  --nav-h: 58px;                              /* bottom tab bar            */
-  --bottom-stack: calc(var(--ad-h) + var(--nav-h) + 8px); /* safe zone above both */
+     (sheets, CTA row, landlord pill, drawers) measures against ONE origin so
+     the pieces stay glued together at any safe-area size.
+
+     On iOS PWA env(safe-area-inset-bottom) is ~34px. The old formula put the
+     tab bar at `ad-h + safe-area` but the CTA row at `ad-h + nav-h`, so the
+     CTA row and landlord pill ended up 34px BELOW the top of the tab bar —
+     buried behind it. --bottom-stack now includes the same safe-area term. */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --ad-h:  52px;                                  /* visible ad height       */
+  --nav-h: 58px;                                  /* bottom tab bar          */
+  /* The ad slot absorbs the home-indicator strip, so there is no dead gap
+     between the ad and the physical bottom of the device. */
+  --ad-slot: calc(var(--ad-h) + var(--safe-b));
+  --bottom-stack: calc(var(--ad-slot) + var(--nav-h) + 6px);
 }
 
 *{box-sizing:border-box;}
@@ -755,7 +764,9 @@ html,body{
    buttons, which gave no sense of where you could go. */
 .bottom-nav {
   position: absolute;
-  bottom: calc(var(--ad-h) + env(safe-area-inset-bottom, 0px));
+  /* Sits directly on top of the ad slot — both measure from bottom:0 with the
+     same --ad-slot, so they stay glued at any safe-area size. */
+  bottom: var(--ad-slot);
   left: 0;
   right: 0;
   /* Deliberately ABOVE every modal/sheet (see .modal z-index). The tab bar is
@@ -1538,8 +1549,8 @@ html,body{
 .multiplier-btn {
   position: absolute;
   left: 10px;
-  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
-  z-index: 999;
+  bottom: var(--bottom-stack);
+  z-index: 55;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1735,7 +1746,7 @@ html,body{
    transparent ticker) because a stack of lines over the map is unreadable
    without one — and the type is scaled up to match. */
 .live-feed-card:not(.collapsed) .feed-scroll-container {
-  max-height: 190px;
+  max-height: 260px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -1751,15 +1762,39 @@ html,body{
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* Expanded list: type is set explicitly on BOTH the row and the content
+   element so nothing upstream can shrink it. */
 .live-feed-card:not(.collapsed) .feed-item {
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 17px;
+  line-height: 1.5;
   align-items: baseline;
-  padding-bottom: 6px;
+  padding: 6px 0 8px;
+  gap: 10px;
+}
+
+.live-feed-card:not(.collapsed) .feed-item-content {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
+.live-feed-card:not(.collapsed) .feed-item-content strong {
+  font-size: inherit;
+  font-weight: 900;
+}
+
+.live-feed-card:not(.collapsed) .feed-item-content em {
+  font-size: inherit;
 }
 
 .live-feed-card:not(.collapsed) .feed-item-time {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .feed-scroll-container::-webkit-scrollbar { width: 3px; }
@@ -3631,7 +3666,8 @@ html,body{
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--ad-h);
+  height: var(--ad-slot);
+  padding-bottom: var(--safe-b);
   background: rgba(10, 15, 24, 0.98);
   border-top: 1px solid var(--line-subtle);
   display: flex;
@@ -3639,6 +3675,7 @@ html,body{
   justify-content: center;
   z-index: 18;
   overflow: hidden;
+  box-sizing: border-box;
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.8);
 }
 
@@ -5020,13 +5057,15 @@ body.buy-mode #treasury-ad-container {
 
 /* ---------- Game Treasury Bottom Ad Banner ---------- */
 /* Fixed ad slot — always the same height and position, so it never competes
-   with the CTA row. Separation comes from --bottom-stack above the nav. */
+   with the CTA row. The slot extends into the home-indicator strip (padding)
+   so there is no empty band below the ad on iOS PWA. */
 .treasury-ad-container {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--ad-h);
+  height: var(--ad-slot);
+  padding-bottom: var(--safe-b);
   background: rgba(10, 15, 24, 0.98);
   border-top: 1px solid var(--line-subtle);
   display: flex;
@@ -5034,6 +5073,7 @@ body.buy-mode #treasury-ad-container {
   justify-content: center;
   z-index: 18;
   overflow: hidden;
+  box-sizing: border-box;
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.8);
 }
 
@@ -5041,11 +5081,22 @@ body.buy-mode #treasury-ad-container {
   background: transparent !important;
 }
 
-/* ---------- Safe-Area Notch & Dynamic Island Guard for Fullscreen Vignette Ads ---------- */
+/* ---------- Safe-Area Notch & Dynamic Island Guard for Fullscreen Vignette Ads ----------
+   `apple-mobile-web-app-status-bar-style: black-translucent` + viewport-fit=cover
+   draws the app under the status bar, so AdMob's fullscreen overlay paints its
+   exit button behind the notch. padding-top does NOT help — the close control
+   is absolutely positioned and padding only offsets in-flow content. Shift the
+   whole overlay down with margin-top instead. */
 body > div[style*="2147483647"],
 body > ins[style*="2147483647"],
 .adsbygoogle-noablate,
-div[id*="google-ads-annotation"],
+div[id*="google-ads-annotation"] {
+  margin-top: calc(var(--safe-t) + 8px) !important;
+  padding-top: calc(var(--safe-t) + 12px) !important;
+  max-height: calc(100dvh - var(--safe-t) - 8px) !important;
+  box-sizing: border-box !important;
+}
+
 div[aria-label="Advertisement"] {
   padding-top: var(--ad-h) !important;
   box-sizing: border-box !important;

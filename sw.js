@@ -1,5 +1,8 @@
 // Bump this version string whenever you deploy an update!
-const CACHE_NAME = 'elden-EARTH-v32.15';
+// v32.16: dropped ./js/treasure.js (file does not exist). cache.addAll() rejects
+// the whole install on any 404, which left the PWA pinned to a stale cache —
+// every CSS/JS change since then was invisible on iOS homescreen.
+const CACHE_NAME = 'elden-EARTH-v32.17';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -25,6 +28,7 @@ const ASSETS_TO_CACHE = [
     './js/multiplier.js',
     './js/grid.js',
     './js/geo.js',
+    './js/treasury.js',
     './js/feed.js',
     './js/config.js',
     './js/character.js',
@@ -36,7 +40,6 @@ const ASSETS_TO_CACHE = [
     './js/server-anticheat.js',
     './js/pet.js',
     './js/profanity-filter.js',
-    './js/treasure.js',
     './js/format.js',
     './assets/trophy.png',
     './assets/mine-extractor.png',
