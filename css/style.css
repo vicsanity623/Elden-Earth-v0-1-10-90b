@@ -40,14 +40,26 @@
      tab bar at `ad-h + safe-area` but the CTA row at `ad-h + nav-h`, so the
      CTA row and landlord pill ended up 34px BELOW the top of the tab bar —
      buried behind it. --bottom-stack now includes the same safe-area term. */
-  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-b: min(env(safe-area-inset-bottom, 0px), 16px);
   --safe-t: env(safe-area-inset-top, 0px);
   --ad-h:  52px;                                  /* visible ad height       */
   --nav-h: 58px;                                  /* bottom tab bar          */
   /* The ad slot absorbs the home-indicator strip, so there is no dead gap
-     between the ad and the physical bottom of the device. */
+     between the ad and the physical bottom of the device.
+
+     NOTE: --safe-b is CAPPED at 16px. env(safe-area-inset-bottom) is ~59px on
+     modern iPhones — sized for the full reachability zone. The actual home
+     indicator pill is only ~5px tall ~8px up, so reserving the full inset left
+     a large dead band under the ad. Only tappable controls need real clearance
+     (the tab bar sits ABOVE the ad, so it is unaffected). */
   --ad-slot: calc(var(--ad-h) + var(--safe-b));
   --bottom-stack: calc(var(--ad-slot) + var(--nav-h) + 6px);
+  /* Top HUD stack (status bar + RC balance bar + sub-stats + feed row). Sheets
+     must not rise above this or their headers land behind the notch. */
+  --top-chrome: calc(var(--safe-t) + 168px);
+  /* Usable band for any bottom sheet. Every sheet max-height routes through
+     this so none of them can escape above the top HUD or below the tab bar. */
+  --sheet-h: calc(100dvh - var(--top-chrome) - var(--bottom-stack));
 }
 
 *{box-sizing:border-box;}
@@ -987,10 +999,10 @@ html,body{
   display:flex; align-items:flex-end; justify-content:center;
   background:rgba(6,10,16,0.6);
   backdrop-filter:blur(2px);
-  /* Sheets stop above the bottom chrome so the tab bar stays visible and
-     reachable. This is the "snap above the bottom nav" behaviour.
-     z-58 > the CTA row / landlord pill (55) so a nav-opened window covers
-     them, but < the tab bar (60) so MAP is never blocked. */
+  /* Sheets live in the band between the top HUD and the bottom chrome:
+     padding-bottom stops them above the tab bar, padding-top stops them from
+     rising into the RC balance bar / notch (the PWA player-info bug). */
+  padding-top: var(--top-chrome);
   padding-bottom: var(--bottom-stack);
   box-sizing: border-box;
 }
@@ -1006,8 +1018,9 @@ html,body{
   border-radius:16px;
   padding:28px 22px 28px;
   text-align:center;
-  /* Leaves room for the bottom chrome below the sheet's own padding. */
-  max-height: calc(88vh - var(--bottom-stack)); overflow-y:auto;
+  /* Exactly the band between the top HUD and the bottom chrome. */
+  max-height: var(--sheet-h);
+  overflow-y:auto;
 }
 .modal-card h2{
   font-family:var(--font-display);
@@ -1027,7 +1040,7 @@ html,body{
 
 /* ===================== DIAMOND WHEEL MODAL ===================== */
 .modal-card.wheel-card {
-  max-height: 88vh !important;
+  max-height: var(--sheet-h) !important;
   width: 95vw !important;
   max-width: 420px !important;
   display: flex !important;
@@ -1950,8 +1963,11 @@ html,body{
 }
 
 /* ---------- Player Info Modal ---------- */
+/* Was `max-height: 85vh !important`, which ignored the top HUD and the bottom
+   chrome entirely — on PWA the tab row ended up behind the notch. Now it fills
+   exactly the band .modal leaves between them. */
 .player-info-card {
-  max-height: 85vh !important;
+  max-height: var(--sheet-h) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
@@ -2238,12 +2254,14 @@ html,body{
 
 .pi-tab-panel.active {
   display: block;
+  /* Fill whatever the flex column leaves after the header + tabs, instead of
+     a fixed vh height that overflowed the card. */
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
-  max-height: calc(85vh - 140px);
   padding-right: 6px;
-  padding-bottom: 30px; /* Clean breathing room at the bottom */
+  padding-bottom: 20px;
   box-sizing: border-box;
 }
 
@@ -4651,7 +4669,7 @@ body.buy-mode #treasury-ad-container {
   max-width: 440px !important;
   display: flex;
   flex-direction: column;
-  max-height: min(88vh, calc(100dvh - 16px)) !important;
+  max-height: var(--sheet-h) !important;
   overflow: hidden !important;
   box-sizing: border-box;
   padding-top: 52px;
@@ -5362,7 +5380,7 @@ div[aria-label="Advertisement"] {
 
 /* ---------- Citadel Holographic Chamber Modal (Restored True 3D Sphere) ---------- */
 .citadel-chamber-card {
-  max-height: 88vh !important;       /* Fits cleanly inside mobile viewports */
+  max-height: var(--sheet-h) !important;       /* Fits cleanly inside mobile viewports */
   display: flex !important;
   flex-direction: column !important; /* Stacks header, content, and buttons */
   overflow: hidden !important;       /* Prevents the card from expanding outside */
@@ -6573,7 +6591,7 @@ div[aria-label="Advertisement"] {
   text-align: center;
   /* The card itself is the scroll container, and dvh keeps it inside the
      visible area when mobile browser chrome shrinks the viewport. */
-  max-height: min(88vh, calc(100dvh - 12px));
+  max-height: var(--sheet-h);
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -7227,11 +7245,11 @@ body.no-shake .boost-timer-badge.super-50x {
     max-width: 100% !important;
     padding: 20px 14px 20px !important;
     border-radius: 12px !important;
-    max-height: 85vh !important;
+    max-height: var(--sheet-h) !important;
   }
 
   .guide-modal-card {
-    max-height: min(85vh, calc(100dvh - 12px)) !important;
+    max-height: var(--sheet-h) !important;
     padding: 48px 14px 18px !important;
     overflow: hidden !important;
   }
@@ -7805,10 +7823,10 @@ body.no-shake .boost-timer-badge.super-50x {
 
 @media screen and (orientation: landscape) {
   .modal-card {
-    max-height: 92vh !important;
+    max-height: var(--sheet-h) !important;
   }
   .guide-modal-card {
-    max-height: min(92vh, calc(100dvh - 12px)) !important;
+    max-height: var(--sheet-h) !important;
   }
   #game-screen {
     height: 100vh;
@@ -9943,7 +9961,7 @@ body.birds-eye-mode .top-hud-row {
 .royalties-modal-card {
   max-width: 380px;
   width: 90vw;
-  max-height: 70vh;
+  max-height: var(--sheet-h);
   display: flex;
   flex-direction: column;
 }
