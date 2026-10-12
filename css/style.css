@@ -741,24 +741,154 @@ html,body{
   pointer-events:auto;
 }
 
-#bottombar {
-  position: absolute; 
+/* ---------- Bottom Navigation (5 labelled tabs) ----------
+   Same IA as Atlas Earth: a real tab bar with icon + label per slot, MAP
+   centred and marked active. Replaces the old row of unlabelled round
+   buttons, which gave no sense of where you could go. */
+.bottom-nav {
+  position: absolute;
   bottom: calc(52px + env(safe-area-inset-bottom, 0px));
-  left: 0; 
-  right: 0; 
+  left: 0;
+  right: 0;
   z-index: 20;
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  gap: clamp(4px, 1.5vw, 6px);
-  padding: 6px 8px;
-  background: transparent;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 2px;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: rgba(10, 16, 26, 0.92);
+  border-top: 1px solid var(--line-subtle);
   box-sizing: border-box;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
+.nav-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 2px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-tab:active { transform: scale(0.93); }
+
+.nav-tab-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.nav-tab-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Active tab — the one accent in the bar. */
+.nav-tab.is-active {
+  color: var(--gold-hi);
+  background: rgba(255, 43, 67, 0.12);
+}
+
+.nav-tab.is-active .nav-tab-label { color: var(--gold-hi); }
+
+/* Notification badge, shared by every tab. Empty = a plain dot (calendar);
+   with text = a numbered pill (unread chat count). */
+.nav-tab-dot {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--gold);
+  border: 1.5px solid var(--ink);
+  box-sizing: content-box;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 8px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.nav-tab-dot:not(:empty) {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  line-height: 14px;
+  top: -5px;
+  right: -8px;
+}
+
+.nav-tab-dot.hidden { display: none; }
+
+/* ---------- Floating CTA row (above the tab bar) ---------- */
+.bottom-cta {
+  position: absolute;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.bottom-cta > * { pointer-events: auto; }
+
+/* Side controls are quiet — BUY LAND is the only thing that shouts. */
+.cta-side-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(10, 16, 26, 0.88);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0 !important;
+  box-shadow: var(--glow-soft);
+}
+
+.cta-side-btn:active { transform: scale(0.93); }
+
 .round-btn {
-  width: clamp(32px, 9vw, 40px); 
-  height: clamp(32px, 9vw, 40px); 
+  width: clamp(32px, 9vw, 40px);
+  height: clamp(32px, 9vw, 40px);
   min-width: clamp(32px, 9vw, 40px);
   max-width: clamp(32px, 9vw, 40px);
   flex: 0 0 auto;
@@ -773,27 +903,6 @@ html,body{
   cursor: pointer;
   padding: 0 !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-}
-
-.btn-earn {
-  flex: 1 1 auto;
-  min-width: 60px;
-  max-width: 105px;
-  width: auto;
-  padding: clamp(8px, 2.5vw, 11px) 6px;
-  border-radius: 12px;
-  /* Secondary to BUY LAND — same surface, no red glow. Hierarchy is what
-     makes the screen scannable: one primary, everything else quiet. */
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  color: #ffffff;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(10px, 3vw, 13.5px);
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  text-align: center;
-  box-shadow: var(--glow-soft);
 }
 
 /* ---------- Toast (Floats Cleanly Above Buttons) ---------- */
@@ -3723,6 +3832,7 @@ html,body{
 /* Clean map while buying: hide every HUD element except the top banner */
 body.buy-mode #topbar,
 body.buy-mode #bottombar,
+body.buy-mode #bottom-cta,
 body.buy-mode .side-hud-stack,
 body.buy-mode .top-hud-row,
 body.buy-mode #boost-btn,
@@ -3751,48 +3861,6 @@ body.buy-mode #treasury-ad-container {
 
 .btn-exit-buy:active {
   transform: scale(0.92) !important;
-}
-
-
-
-@keyframes redPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.18); opacity: 0.8; }
-}
-
-/* Calendar Card Aesthetic */
-.calendar-icon-card {
-  width: 48px;
-  height: 52px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border: 1.5px solid rgba(255, 43, 67, 0.6);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-}
-
-.cal-card-top {
-  background: #d1495b;
-  color: #ffffff;
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-  padding: 2px 0;
-  letter-spacing: 0.5px;
-}
-
-.cal-card-body {
-  flex: 1;
-  color: #1a2230;
-  font-family: var(--font-body);
-  font-size: 20px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Calendar Modal Card */
@@ -4051,113 +4119,133 @@ body.buy-mode #treasury-ad-container {
   transform: scale(0.9);
 }
 
-/* Matching 48px width cards for pixel-perfect vertical alignment */
+/* ---------- Left Rail · one card system ----------
+   Was 7 competing styles (trophy-card, custom-hud-card, calendar-icon-card,
+   pool-card, boost-card, mult-card, global-event-card) plus emoji + PNG +
+   bare text. Now: one 44px surface card, one icon slot, one label, one badge. */
 .side-hud-card {
-  width: clamp(38px, 10vw, 48px);
-  height: clamp(40px, 11vw, 50px);
-  border-radius: 12px;
-  overflow: hidden;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
   box-sizing: border-box;
 }
 
-/* Trophy Button Card */
-.trophy-card {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-}
-
-.trophy-img {
-  width: clamp(30px, 8vw, 40px);
-  height: clamp(30px, 8vw, 40px);
-  object-fit: contain;
-  filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.2)) drop-shadow(0 0 4px rgba(255, 215, 0, 0.25));
-}
-
-@keyframes trophyGlow {
-  0%, 100% { filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.7)) drop-shadow(0 0 16px rgba(255, 215, 0, 0.4)); }
-  50% { filter: drop-shadow(0 0 14px rgba(255, 215, 0, 1)) drop-shadow(0 0 28px rgba(255, 215, 0, 0.6)); }
-}
-
-/* Custom Image HUD Buttons (Mine, Calendar, Pet) */
-.custom-hud-card {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-}
-
+/* Every rail icon shares one size and sits centred in the card. */
+.side-hud-card img,
+.trophy-img,
 .custom-hud-img {
-  width: clamp(32px, 9vw, 42px);
-  height: clamp(32px, 9vw, 42px);
+  width: 26px;
+  height: 26px;
   object-fit: contain;
+  display: block;
 }
 
-.side-hud-subtext {
-  font-family: var(--font-display);
-  font-size: clamp(7px, 2vw, 9px);
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  color: var(--gold-hi);
-  margin-top: 3px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-}
-
-/* Calendar Card */
-.calendar-icon-card {
-  background: var(--surface-1);
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none;
+/* Legacy modifier classes are collapsed onto the base card. */
+.trophy-card,
+.custom-hud-card,
+.calendar-icon-card,
+.pool-card,
+.boost-card,
+.mult-card,
+.global-event-card,
+.pet-btn .side-hud-card {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--line-subtle) !important;
+  border-radius: 13px !important;
+  box-shadow: none !important;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
-.cal-card-top {
-  background: #d1495b;
-  color: #ffffff;
-  font-family: var(--font-display);
+/* One label style, matching the bottom nav labels. */
+.side-hud-subtext {
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 3px;
+  max-width: 52px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* One badge slot, top-right of every rail card. */
+.side-hud-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gold);
+  border: 1.5px solid var(--ink);
+  box-sizing: content-box;
+  font-family: var(--font-body);
   font-size: 9px;
   font-weight: 800;
-  text-align: center;
-  padding: 2px 0;
-  letter-spacing: 0.5px;
-}
-
-.cal-card-body {
-  flex: 1;
-  color: #ffd7de;
-  font-family: var(--font-body);
-  font-size: 19px;
-  font-weight: 800;
+  line-height: 15px;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
+  pointer-events: none;
 }
 
-/* Glowing Red Notification Dot (Anchored to top-right of Calendar) */
-.calendar-red-dot {
-  position: absolute;
+.side-hud-badge.hidden { display: none; }
+
+/* Bare notification dot — same slot, no text. */
+.side-hud-badge-dot {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
   top: -3px;
   right: -3px;
-  width: 13px;
-  height: 13px;
-  background: #ff3b30;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #ff3b30, 0 0 16px rgba(255, 59, 48, 0.8);
-  z-index: 23;
-  animation: redPulse 1.6s infinite alternate ease-in-out;
+  font-size: 0;
 }
+
+.side-hud-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Thin progress strip under the event label. */
+.side-hud-progress {
+  width: 44px;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.side-hud-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--teal);
+  transition: width 0.4s ease;
+}
+
+/* Calendar card + red dot are gone — Daily lives in the bottom tab bar
+   (Events tab) and uses the shared .nav-tab-dot badge. */
 
 /* Leaderboard Modal Card */
 .leaderboard-modal-card {
@@ -4618,35 +4706,9 @@ body.buy-mode #treasury-ad-container {
   transform: translateX(3px);
 }
 
-/* ================= GLOBAL COMMUNITY CHAT DRAWER ================= */
-.chat-hud-btn {
-  position: relative;
-  background: var(--panel-2) !important;
-  border-color: rgba(255, 43, 67, 0.5) !important;
-}
-
-/* Live Unread Chat Message Counter Badge */
-.chat-unread-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #ff4757;
-  color: #ffffff;
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  box-shadow: 0 0 10px rgba(255, 71, 87, 0.85);
-  pointer-events: none;
-  animation: badgePulse 1.5s infinite alternate ease-in-out;
-  letter-spacing: -0.2px;
-}
+/* ================= GLOBAL COMMUNITY CHAT DRAWER =================
+   The chat entry point is now a bottom nav tab (#chat-hud-btn.nav-tab);
+   the old round button + red badge styling is obsolete. */
 
 .chat-unread-badge.hidden {
   display: none !important;
@@ -5956,49 +6018,7 @@ div[aria-label="Advertisement"] {
   justify-content: center;
 }
 
-.global-event-icon {
-  font-size: 44px;
-  line-height: 1;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 0 6px rgba(255, 211, 138, 0.7));
-}
-
-.global-event-chip {
-  position: absolute;
-  top: 0;
-  right: 0;
-  font-size: 9px;
-  font-weight: 800;
-  font-family: var(--font-display);
-  color: #fff;
-  background: rgba(255, 43, 67, 0.9);
-  border-radius: 999px;
-  padding: 1px 5px;
-  line-height: 1.2;
-  z-index: 2;
-}
-
-.global-event-mini-bar {
-  width: clamp(38px, 10vw, 48px);
-  height: 3px;
-  margin-top: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-}
-
-.global-event-mini-bar-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #ff2b43, #ff2b43 40%, #e0a84f);
-  box-shadow: 0 0 8px rgba(255, 43, 67, 0.6);
-  transition: width 0.4s ease;
-}
+/* Event chip and mini-bar use the shared badge/progress slots above. */
 
 .global-event-card-modal {
   max-width: 420px;
@@ -7922,6 +7942,7 @@ body.map-culled-far .custom-plot-icon {
    BIRD'S EYE MODE — top bar + exit button only
    ============================================================ */
 body.birds-eye-mode #bottombar,
+body.birds-eye-mode #bottom-cta,
 body.birds-eye-mode .side-hud-stack,
 body.birds-eye-mode #live-feed-card,
 body.birds-eye-mode #boost-btn,
@@ -8624,24 +8645,35 @@ body.birds-eye-mode .top-hud-row {
   height: 100% !important;
 }
 
+/* Mood badge — pet.js resets className to this alone, so it carries the full
+   unified badge style. Mood variants only tint it. */
 .pet-mood-badge {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 5px;
-  border-radius: 8px;
-  background: rgba(13, 20, 32, 0.9);
-  border: 1px solid var(--teal);
-  color: var(--teal);
+  top: -5px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--ink-2);
+  border: 1.5px solid var(--teal);
+  box-sizing: content-box;
   font-family: var(--font-body);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 15px;
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
 }
 
-.pet-mood-badge.mood-happy { border-color: #4fd6c4; color: #4fd6c4; }
-.pet-mood-badge.mood-content { border-color: #f0d38a; color: #f0d38a; }
-.pet-mood-badge.mood-sad { border-color: #ff9800; color: #ff9800; }
-.pet-mood-badge.mood-angry { border-color: #ff1744; color: #ff1744; animation: petAngryPulse 1.5s infinite; }
+.pet-mood-badge.mood-happy  { border-color: #4fd6c4; color: #4fd6c4; }
+.pet-mood-badge.mood-content{ border-color: #f0d38a; color: #f0d38a; }
+.pet-mood-badge.mood-sad    { border-color: #ff9800; color: #ff9800; }
+.pet-mood-badge.mood-angry  { border-color: #ff1744; color: #ff1744; animation: petAngryPulse 1.5s infinite; }
 
 @keyframes petAngryPulse {
   0%, 100% { transform: scale(1); }
@@ -9581,11 +9613,12 @@ body.birds-eye-mode .top-hud-row {
   background: transparent !important;
 }
 
+/* Multiplier tag sits in the same badge slot as everything else. */
 .mult-tag {
-  font-family: var(--font-display);
-  font-size: 11px;
+  font-family: var(--font-body);
+  font-size: 8px;
   font-weight: 800;
-  color: var(--gold);
+  letter-spacing: 0.3px;
 }
 
 /* ============================================================

@@ -267,80 +267,71 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- Unified Side HUD Stack (All buttons in one collapsible stack) -->
+  <!-- Unified Side HUD Stack — one card, one icon, one label, one badge slot -->
   <div class="side-hud-stack" id="side-hud-stack">
     <button class="side-hud-collapse-btn" id="side-hud-collapse" aria-label="Toggle HUD stack">
       <span class="collapse-icon">◀</span>
     </button>
 
-    <!-- GLOBAL EVENT: Global Challenge (top priority) -->
+    <!-- GLOBAL EVENT -->
     <button id="global-event-hud-btn" class="side-hud-btn global-event-btn" aria-label="Global Event">
-      <div class="side-hud-card custom-hud-card global-event-card">
-        <span class="global-event-icon">🌍</span>
-        <span id="global-event-hud-chip" class="global-event-chip">0%</span>
+      <div class="side-hud-card">
+        <img src="assets/pool.png" alt="" class="side-hud-img">
+        <span id="global-event-hud-chip" class="side-hud-badge">0%</span>
       </div>
-      <span class="side-hud-subtext" id="global-event-hud-label">EVENT</span>
-      <div class="global-event-mini-bar"><div id="global-event-hud-bar" class="global-event-mini-bar-fill"></div></div>
+      <span class="side-hud-subtext" id="global-event-hud-label">Event</span>
+      <div class="side-hud-progress"><div id="global-event-hud-bar" class="side-hud-progress-fill"></div></div>
     </button>
 
-    <!-- Diamond Extractor Quick Button -->
+    <!-- Diamond Extractor -->
     <button id="extractor-hud-btn" class="side-hud-btn extractor-btn hidden" aria-label="Diamond Extractor">
-      <div id="extractor-unread-dot" class="calendar-red-dot hidden"></div>
-      <div class="side-hud-card custom-hud-card">
-        <img src="assets/mine-extractor.png" alt="Mine" class="custom-hud-img">
+      <div class="side-hud-card">
+        <img src="assets/mine-extractor.png" alt="" class="side-hud-img">
+        <span id="extractor-unread-dot" class="side-hud-badge side-hud-badge-dot hidden"></span>
       </div>
       <span class="side-hud-subtext">Mine</span>
     </button>
 
-    <!-- Leaderboard Button -->
+    <!-- Leaderboards -->
     <button id="leaderboard-btn" class="side-hud-btn leaderboard-btn" aria-label="Leaderboards">
-      <div class="side-hud-card trophy-card">
-        <img src="assets/trophy.png" alt="Ranks" class="trophy-img">
+      <div class="side-hud-card">
+        <img src="assets/trophy.png" alt="" class="side-hud-img">
       </div>
       <span class="side-hud-subtext">Ranks</span>
     </button>
 
-    <!-- Daily Login Calendar Button -->
-    <button id="calendar-btn" class="side-hud-btn calendar-btn" aria-label="Daily Calendar">
-      <div id="calendar-unread-dot" class="calendar-red-dot hidden"></div>
-      <div class="side-hud-card custom-hud-card">
-        <img src="assets/daily.png" alt="Calendar" class="custom-hud-img">
-      </div>
-      <span class="side-hud-subtext">Daily</span>
-    </button>
-
-    <!-- Companion Pet Button -->
+    <!-- Companion Pet -->
     <button id="pet-hud-btn" class="side-hud-btn pet-btn hidden" aria-label="Companion Pet">
-      <div class="side-hud-card custom-hud-card">
-        <img src="assets/pet-hud.png" alt="Pet" class="custom-hud-img">
-        <span id="pet-mood-badge" class="pet-mood-badge mood-happy">100%</span>
+      <div class="side-hud-card">
+        <img src="assets/pet-hud.png" alt="" class="side-hud-img">
+        <span id="pet-mood-badge" class="side-hud-badge pet-mood-badge mood-happy">100%</span>
       </div>
-      <span class="side-hud-subtext">Pet:🍓 <span id="pet-berry-count">0</span></span>
+      <span class="side-hud-subtext">Pet · <span id="pet-berry-count">0</span></span>
     </button>
 
-    <!-- Weekly Pool Button (moved into stack) -->
+    <!-- Weekly Pool -->
     <button id="weekly-pool-hud-btn" class="side-hud-btn weekly-pool-btn" aria-label="Weekly Dividend Pool">
-      <div class="side-hud-card custom-hud-card pool-card">
-        <img src="assets/pool.png" alt="Pool" class="custom-hud-img">
+      <div class="side-hud-card">
+        <img src="assets/pool.png" alt="" class="side-hud-img">
       </div>
-      <span class="side-hud-subtext" id="hud-pool-countdown">POOL 0D</span>
+      <span class="side-hud-subtext" id="hud-pool-countdown">Pool 0d</span>
     </button>
 
-    <!-- +2 EB Boost Button (moved into stack) -->
+    <!-- +2 EB Boost -->
     <button id="boost-btn" class="side-hud-btn boost-btn-stack hidden" aria-label="Boost">
-      <div class="side-hud-card custom-hud-card boost-card">
-        <img src="assets/2eb-boost.png" alt="+2 EB Boost" class="custom-hud-img">
+      <div class="side-hud-card">
+        <img src="assets/2eb-boost.png" alt="" class="side-hud-img">
       </div>
       <span class="side-hud-subtext">+2 EB</span>
     </button>
 
-    <!-- 20X/50X Multiplier Button (moved into stack) -->
+    <!-- 20X/50X Multiplier -->
     <button id="multiplier-btn" class="side-hud-btn multiplier-btn-stack" aria-label="Multiplier Boost">
-      <div class="side-hud-card custom-hud-card mult-card">
-        <img id="mult-img" src="assets/20x.png" alt="20X Boost" class="custom-hud-img">
-        <span class="mult-tag hidden" id="mult-label">20X</span>
+      <div class="side-hud-card">
+        <img id="mult-img" src="assets/20x.png" alt="" class="side-hud-img">
+        <span class="side-hud-badge mult-tag hidden" id="mult-label">20X</span>
       </div>
-      <span class="side-hud-subtext">BOOST</span>
+      <span class="side-hud-subtext">Boost</span>
     </button>
   </div>
 
@@ -418,21 +409,59 @@
     <span class="territory-text" id="territory-text">Scanning location...</span>
   </div>
 
-  <!-- Bottom bar with Community Chat Button -->
-  <div id="bottombar">
-    <button id="royalties-btn" class="round-btn royalties-btn hidden" aria-label="Pending Royalties">
+  <!-- Floating primary CTA + map controls, sitting just above the tab bar -->
+  <div id="bottom-cta" class="bottom-cta">
+    <button id="recenter-btn" class="round-btn cta-side-btn" aria-label="Reset North">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5 10.8 10.8 8.5 15.5l4.7-2.3z" fill="currentColor"/></svg>
+    </button>
+
+    <button id="buy-land-mode-btn" class="btn btn-buy-land">Buy Land</button>
+
+    <button id="royalties-btn" class="round-btn cta-side-btn royalties-btn hidden" aria-label="Pending Royalties">
       👑
       <span id="royalties-badge" class="royalties-badge"></span>
     </button>
-    <button id="recenter-btn" class="round-btn" aria-label="Reset North">🧭</button>
-    <button id="buy-land-mode-btn" class="btn btn-buy-land">Buy Land</button>
-    <button id="earn-btn" class="btn btn-earn">Earn</button>
-    <button id="land-btn" class="round-btn" aria-label="My Land">▦</button>
-    <button id="chat-hud-btn" class="round-btn chat-hud-btn" aria-label="Community Chat">
-      💬
-      <span id="chat-unread-badge" class="chat-unread-badge hidden"></span>
-    </button>
   </div>
+
+  <!-- Primary bottom navigation — 5 labelled tabs, MAP centred as home -->
+  <nav id="bottombar" class="bottom-nav" aria-label="Main navigation">
+    <button id="land-btn" class="nav-tab" aria-label="My Land">
+      <span class="nav-tab-icon">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" fill="currentColor"/></svg>
+      </span>
+      <span class="nav-tab-label">Land</span>
+    </button>
+
+    <button id="earn-btn" class="nav-tab" aria-label="Earn">
+      <span class="nav-tab-icon">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><ellipse cx="12" cy="7" rx="7.5" ry="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 7v10c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2V7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 12c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+      </span>
+      <span class="nav-tab-label">Earn</span>
+    </button>
+
+    <button id="map-tab-btn" class="nav-tab is-active" aria-label="Map" aria-current="page">
+      <span class="nav-tab-icon">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path d="M12 21.5s7-5.6 7-11.2A7 7 0 0 0 5 10.3c0 5.6 7 11.2 7 11.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+      </span>
+      <span class="nav-tab-label">Map</span>
+    </button>
+
+    <button id="calendar-btn" class="nav-tab" aria-label="Events">
+      <span class="nav-tab-icon">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3.2v3.4M16 3.2v3.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span id="calendar-unread-dot" class="nav-tab-dot hidden"></span>
+      </span>
+      <span class="nav-tab-label">Events</span>
+    </button>
+
+    <button id="chat-hud-btn" class="nav-tab" aria-label="Community">
+      <span class="nav-tab-icon">
+        <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2-1 0-2-.15-2.9-.42L4 20.5l1.6-3.6C4.25 15.7 3.5 14.05 3.5 12.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <span id="chat-unread-badge" class="nav-tab-dot hidden"></span>
+      </span>
+      <span class="nav-tab-label">Chat</span>
+    </button>
+  </nav>
 
   <!-- Game Treasury Bottom Ad Banner (Loaded First & Visible on Boot!) -->
   <div id="treasury-ad-container" class="treasury-ad-container">
