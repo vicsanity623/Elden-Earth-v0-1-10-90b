@@ -904,7 +904,9 @@ html,body{
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 0 14px;
+  /* Reserve the landlord pill's fixed zone on the right. Without this the
+     centred BUY LAND / royalties row overlapped the pill on narrow screens. */
+  padding: 0 128px 0 14px;
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -1701,7 +1703,7 @@ html,body{
 /* Bold lettering over the map — no fill behind it. */
 .feed-badge {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--gold-hi);
   letter-spacing: 1px;
@@ -1759,7 +1761,7 @@ html,body{
    transparent ticker) because a stack of lines over the map is unreadable
    without one — and the type is scaled up to match. */
 .live-feed-card:not(.collapsed) .feed-scroll-container {
-  max-height: 260px;
+  max-height: 186px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -1775,20 +1777,20 @@ html,body{
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* Expanded list: type is set explicitly on BOTH the row and the content
-   element so nothing upstream can shrink it. */
+/* Expanded list. Sized to match the pre-ticker feed the screenshots showed as
+   "decent" — 17px was an overcorrection from the clipping bug. */
 .live-feed-card:not(.collapsed) .feed-item {
-  font-size: 17px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
   align-items: baseline;
-  padding: 6px 0 8px;
-  gap: 10px;
+  padding: 4px 0 5px;
+  gap: 8px;
 }
 
 .live-feed-card:not(.collapsed) .feed-item-content {
-  font-size: 17px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1.5;
+  line-height: 1.45;
   min-width: 0;
   flex: 1 1 auto;
   white-space: normal;
@@ -1799,7 +1801,7 @@ html,body{
 
 .live-feed-card:not(.collapsed) .feed-item-content strong {
   font-size: inherit;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .live-feed-card:not(.collapsed) .feed-item-content em {
@@ -1807,7 +1809,7 @@ html,body{
 }
 
 .live-feed-card:not(.collapsed) .feed-item-time {
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .feed-scroll-container::-webkit-scrollbar { width: 3px; }
@@ -1824,9 +1826,9 @@ html,body{
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
-  line-height: 1.5;
+  line-height: 1.45;
   color: #ffffff;
   text-shadow:
     0 1px 2px rgba(0, 0, 0, 1),
@@ -1844,8 +1846,8 @@ html,body{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .feed-item:last-child { border-bottom: none; padding-bottom: 0; }
@@ -1865,7 +1867,7 @@ html,body{
 .feed-item-content em { font-style: normal; color: var(--teal); }
 
 .feed-item-time {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: var(--text-dim);
   white-space: nowrap;
@@ -3744,24 +3746,28 @@ html,body{
   display: none;
 }
 
-/* Compact pill: a 32px avatar plus a two-line title. Replaces the old 130px
-   red frame, which read as a second primary button competing with BUY LAND. */
+/* Compact pill: a small avatar plus a two-line title. FIXED width — it used to
+   size to its text, so "IN UNITED STATES" pushed it across the BUY LAND button
+   on narrow screens. Long text now marquees inside the pill instead. */
 .landlord-ruler-bg {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 12px 5px 5px;
+  gap: 7px;
+  padding: 5px 10px 5px 5px;
   border-radius: 999px;
-  background: rgba(10, 16, 26, 0.9);
+  background: rgba(10, 16, 26, 0.92);
   border: 1px solid var(--line);
   box-shadow: var(--glow-soft);
-  max-width: 190px;
+  width: 118px;
+  max-width: 118px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .landlord-ruler-avatar {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -3770,7 +3776,7 @@ html,body{
   justify-content: center;
   overflow: hidden;
   box-sizing: border-box;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .landlord-ruler-avatar img {
@@ -3780,19 +3786,22 @@ html,body{
   border-radius: 50%;
 }
 
+/* Clips whatever will not fit, so the marquee only shows through here. */
 .landlord-ruler-text {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
   text-align: left;
+  overflow: hidden;
 }
 
 .landlord-ruler-title {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--gold);
   overflow: hidden;
@@ -3801,29 +3810,68 @@ html,body{
   pointer-events: none;
 }
 
+/* Left-aligned, then scrolls right-to-left when it does not fit. The JS sets
+   --marquee-shift to the exact overflow distance (see updateLandlordPill).
+   Clipping lives on .landlord-ruler-text — this element is the one that moves. */
 .landlord-ruler-location {
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   color: var(--text-dim);
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
   display: block;
+  width: 100%;
 }
 
 .landlord-ruler-location.marquee-active {
   display: inline-block;
-  animation: landlordMarquee 7s ease-in-out infinite alternate;
+  width: auto;
+  /* One direction: starts left-aligned, scrolls right-to-left, then repeats. */
+  animation: landlordMarquee 6s linear infinite;
 }
 
 @keyframes landlordMarquee {
-  0%, 20% {
+  0%, 12% {
     transform: translateX(0);
   }
-  80%, 100% {
+  88%, 100% {
     transform: translateX(var(--marquee-shift, -35%));
+  }
+}
+
+/* Narrow phones: shrink the pill and the CTA row together so they still clear
+   each other at 320px. */
+@media (max-width: 350px) {
+  .landlord-ruler-bg {
+    width: 100px;
+    max-width: 100px;
+    padding: 4px 8px 4px 4px;
+    gap: 5px;
+  }
+  .landlord-ruler-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+  .landlord-ruler-title { font-size: 8.5px; letter-spacing: 0.4px; }
+  .landlord-ruler-location { font-size: 8px; }
+
+  .bottom-cta {
+    gap: 6px;
+    padding: 0 110px 0 10px;
+  }
+  .cta-side-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    max-width: 34px;
+  }
+  .btn-buy-land {
+    max-width: 96px !important;
+    min-width: 60px !important;
   }
 }
 
