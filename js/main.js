@@ -2424,13 +2424,34 @@
       // login reward, a finished quest, or an unlocked achievement. It used to
       // gate on claimedDays < 30, which silently hid it at the top of the
       // ladder, exactly when a player should claim to start the next cycle.
+      //
+      // It now covers EVERYTHING behind the Events tab (Global Challenge,
+      // Daily Progress and Weekly Treasury Pool), and each row in the hub
+      // carries its own dot so the player knows which one is asking.
       const claimableQuest = hasClaimableQuest();
       const claimableBadge = typeof Achievements !== "undefined" && Achievements.hasClaimable
         ? Achievements.hasClaimable()
         : false;
+      const dailyReady = ready || claimableQuest || claimableBadge;
+
+      let challengePending = false;
+      let poolPending = false;
+      if (typeof hubSignals === "function") {
+        const sig = hubSignals();
+        challengePending = sig.challengePending;
+        poolPending = sig.poolPending;
+      } else {
+        challengePending = (typeof GlobalEvent !== "undefined" && GlobalEvent.getState)
+          ? (() => { const g = GlobalEvent.getState(); return !!g.event && !g.settled; })()
+          : false;
+        poolPending = (typeof WeeklyPool !== "undefined" && WeeklyPool.hasPending)
+          ? !!WeeklyPool.hasPending()
+          : false;
+      }
+
       const unreadDot = el("calendar-unread-dot");
       if (unreadDot) {
-        if (ready || claimableQuest || claimableBadge) unreadDot.classList.remove("hidden");
+        if (dailyReady || challengePending || poolPending) unreadDot.classList.remove("hidden");
         else unreadDot.classList.add("hidden");
       }
     }
@@ -2706,16 +2727,17 @@
         }
       });
       // The login quest is auto-completed and auto-claimed together with the
-      // calendar reward (the server pays it inside claimDailyReward). It used
-      // to force `login.completed = true` whenever claimedDays > 0 — which is
-      // permanently true after the first ever claim — so any sync that dropped
-      // the `claimed` flag re-opened the claim button and re-lit the red dot
-      // for the rest of the day. Anchor both flags to the actual claim date.
+      // calendar reward — claimDailyReward writes `quests.login = {completed:
+      // true, claimed: true}` and `calendar.lastClaimDate = today` in the SAME
+      // transaction. So a calendar claim today IS proof the login quest was
+      // paid. (Reliying on a separate `loginClaimedDate` stamp left older saves
+      // showing the quest as still claimable, with a red highlight.)
       const cal = getCalendarState();
       const loginQuest = state.dailyQuests.quests.login;
       if (loginQuest && cal && cal.lastClaimDate === today) {
         loginQuest.completed = true;
-        if (state.loginClaimedDate === today) loginQuest.claimed = true;
+        loginQuest.claimed = true;
+        state.loginClaimedDate = today;
       }
       return state.dailyQuests;
     }
@@ -2838,8 +2860,12 @@
             </div>`;
         }
 
+        // `login` is settled server-side and has no claim action, so it must
+        // never get the red "ready to claim" highlight.
+        const readyToClaim = q.id !== "login" && item.completed && !item.claimed;
+
         return `
-          <div class="calendar-quest-item ${item.completed && !item.claimed ? 'ready-claim' : ''}" data-quest-id="${q.id}" style="${!item.completed || !item.claimed ? 'cursor:pointer;' : ''}">
+          <div class="calendar-quest-item ${readyToClaim ? 'ready-claim' : ''} ${q.id === 'login' && item.claimed ? 'quest-auto' : ''}" data-quest-id="${q.id}" style="${readyToClaim ? 'cursor:pointer;' : ''}">
             <div>
               <div class="quest-title">${q.title}</div>
               <div class="quest-reward">${q.rewardText}${q.rp ? ` <span class="quest-rp">+${q.rp}RP</span>` : ""}</div>
@@ -2947,6 +2973,35 @@
       return `${d}d ${h}h ${m}m`;
     }
 
+    // Per-row "something to claim" signals. The Events tab dot is the union of
+    // these, and each row carries its own dot so the player can see WHICH event
+    // is asking for attention before opening the hub.
+    function hubSignals() {
+      const claimableQuest = hasClaimableQuest();
+      const claimableBadge = typeof Achievements !== "undefined" && Achievements.hasClaimable
+        ? Achievements.hasClaimable()
+        : false;
+      const dailyReady = isRewardReady() || claimableQuest || claimableBadge;
+
+      const ge = (typeof GlobalEvent !== "undefined" && GlobalEvent.getState)
+        ? GlobalEvent.getState()
+        : { event: null, expired: true, settled: true };
+      const challengeLive = !!ge.event && !ge.expired && !ge.settled;
+      // Unclaimed prize from a finished round also counts.
+      const challengePending = !!ge.event && !ge.settled;
+
+      const poolPending = (typeof WeeklyPool !== "undefined" && WeeklyPool.hasPending)
+        ? !!WeeklyPool.hasPending()
+        : false;
+
+      return { dailyReady, challengeLive, challengePending, poolPending };
+    }
+    window.hubSignals = hubSignals;
+
+    function hubDot(show) {
+      return show ? `<span class="events-hub-row-dot"></span>` : "";
+    }
+
     function renderEventsHub() {
       const liveList = document.getElementById("events-hub-list");
       const upList = document.getElementById("events-hub-upcoming-list");
@@ -2954,6 +3009,7 @@
       const upLabel = document.getElementById("events-hub-upcoming-label");
       if (!liveList || !upList) return;
 
+      const sig = hubSignals();
       const ge = (typeof GlobalEvent !== "undefined" && GlobalEvent.getState)
         ? GlobalEvent.getState()
         : { event: null, expired: true, settled: true };
@@ -2963,7 +3019,7 @@
       // Daily Progress — always available.
       const dailyBtn = `
         <button class="events-hub-row" data-hub-action="daily">
-          <span class="events-hub-row-icon">📅</span>
+          <span class="events-hub-row-icon">📅${hubDot(sig.dailyReady)}</span>
           <span class="events-hub-row-body">
             <span class="events-hub-row-title">Daily Progress</span>
             <span class="events-hub-row-sub">Login rewards, quests &amp; badges</span>
@@ -2974,7 +3030,7 @@
       // Weekly Treasury Pool — always available.
       const poolBtn = `
         <button class="events-hub-row" data-hub-action="pool">
-          <span class="events-hub-row-icon">👑</span>
+          <span class="events-hub-row-icon">👑${hubDot(sig.poolPending)}</span>
           <span class="events-hub-row-body">
             <span class="events-hub-row-title">Weekly Treasury Pool</span>
             <span class="events-hub-row-sub">Top 10 landlords split the weekly pool</span>
@@ -2988,7 +3044,7 @@
         const pct = Math.max(0, Math.min(100, Number(ev.pct) || 0));
         challengeRow = `
           <button class="events-hub-row is-live" data-hub-action="challenge">
-            <span class="events-hub-row-icon">🌍</span>
+            <span class="events-hub-row-icon">🌍${hubDot(sig.challengePending)}</span>
             <span class="events-hub-row-body">
               <span class="events-hub-row-title">Global Challenge</span>
               <span class="events-hub-row-sub">Spin the wheel — help the Realm hit the goal</span>
@@ -3000,7 +3056,7 @@
         const ms = Math.max(0, nextGlobalChallengeStart() - Date.now());
         challengeRow = `
           <div class="events-hub-row is-disabled" aria-disabled="true">
-            <span class="events-hub-row-icon">🌍</span>
+            <span class="events-hub-row-icon">🌍${hubDot(sig.challengePending)}</span>
             <span class="events-hub-row-body">
               <span class="events-hub-row-title">Global Challenge</span>
               <span class="events-hub-row-sub">Returns in ${fmtHubCountdown(ms)}</span>

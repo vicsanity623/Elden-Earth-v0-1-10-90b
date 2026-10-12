@@ -514,5 +514,17 @@ const WeeklyPool = (() => {
     setTimeout(checkMondayDistribution, 2500);
   }
 
-  return { init, open, calculateGlobalPool, checkMondayDistribution };
+  return {
+    init,
+    open,
+    calculateGlobalPool,
+    checkMondayDistribution,
+    /**
+     * True while a Monday payout is sitting unclaimed. Used to badge the
+     * Weekly Treasury Pool row in the Events hub.
+     */
+    hasPending() {
+      return pendingRewardAmount > 0;
+    },
+  };
 })();
