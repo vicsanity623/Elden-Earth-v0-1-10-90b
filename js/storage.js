@@ -699,6 +699,7 @@ const Store = (() => {
           const prevBerries = Number(state.berries) || 0;
           const prevBoostExpiry = Number(state.boostExpiry) || 0;
           const prevBoostMultiplier = Number(state.boostMultiplier) || 30;
+          const prevLoginClaimedDate = state.loginClaimedDate || null;
           state = Object.assign(defaultState(), cloudData);
           state._gameVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
           state.calendar = mergedCalendar;
@@ -746,6 +747,13 @@ const Store = (() => {
           if (prevBoostExpiry > cloudBoostExpiry) {
             state.boostExpiry = prevBoostExpiry;
             state.boostMultiplier = prevBoostMultiplier;
+          }
+
+          // Same idea as berries: an older cloud save may not carry this field
+          // yet. Keeping the local copy stops the login quest re-opening after
+          // it has already been claimed today.
+          if (cloudData.loginClaimedDate === undefined && prevLoginClaimedDate) {
+            state.loginClaimedDate = prevLoginClaimedDate;
           }
 
           localStorage.setItem(KEY, JSON.stringify(state));

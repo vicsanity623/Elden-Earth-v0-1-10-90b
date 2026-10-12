@@ -524,5 +524,18 @@ const GlobalEvent = (() => {
     openModal,
     notifySpinContributed,
     refresh: fetchEvent,
+    /**
+     * Snapshot for the Events hub list. Lets the hub show the live challenge
+     * at the top when running, and drop it to the bottom with a disabled
+     * countdown once it ends — without reaching into this module's internals.
+     */
+    getState() {
+      return {
+        event: lastEvent ? { ...lastEvent } : null,
+        me: lastMe ? { ...lastMe } : null,
+        expired: lastEvent ? isExpired(lastEvent) : false,
+        settled: isSettled(lastEvent, lastMe),
+      };
+    },
   };
 })();

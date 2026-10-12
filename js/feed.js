@@ -6,7 +6,9 @@ const Feed = (() => {
   let feedList = null;
   let toggleBtn = null;
   let unreadBadge = null;
-  let isCollapsed = false;
+  // Starts collapsed: the resting state is a single-line ticker, and tapping
+  // the header expands it into the scrollable list.
+  let isCollapsed = true;
   let unreadCount = 0;
   const MAX_EVENTS = 50;
   const events = [];

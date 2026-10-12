@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.62b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.70b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -249,6 +249,55 @@
         <span id="menu-unread-dot" class="menu-unread-dot hidden"></span>
       </button>
     </div>
+
+    <!-- Feed ticker + VIEW hub — lives INSIDE #topbar so it flows directly
+         beneath the sub-stats instead of being pinned at a magic offset. -->
+    <div class="top-hud-row">
+      <div id="live-feed-card" class="live-feed-card collapsed">
+        <div id="feed-interactive-header" class="feed-header-line" title="Tap to expand the feed">
+          <div class="feed-title-wrap">
+            <span class="feed-badge">FEED</span>
+            <span class="feed-dot"></span>
+            <span id="feed-unread-badge" class="feed-unread-pill hidden">0</span>
+          </div>
+          <button id="feed-toggle-icon" class="feed-toggle-btn" aria-label="Toggle Feed">▴</button>
+        </div>
+        <div id="feed-scroll-container" class="feed-scroll-container">
+          <div class="feed-empty-msg">Connecting to live feed...</div>
+        </div>
+      </div>
+
+      <!-- Permanent object visibility hub (works in normal + Bird's Eye) -->
+      <aside id="be-visibility-hub" class="be-visibility-hub" aria-label="Object visibility">
+        <button type="button" id="be-hub-header" class="be-hub-header" aria-expanded="false">
+          <span class="be-hub-title">VIEW</span>
+          <span class="be-hub-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="be-hub-body" id="be-hub-body">
+          <label class="be-toggle-row"><span>Player</span>
+            <input type="checkbox" class="be-toggle" data-be="player" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Diamonds</span>
+            <input type="checkbox" class="be-toggle" data-be="diamonds" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Mine</span>
+            <input type="checkbox" class="be-toggle" data-be="mine" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Citadel</span>
+            <input type="checkbox" class="be-toggle" data-be="citadel" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Foliage</span>
+            <input type="checkbox" class="be-toggle" data-be="foliage" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Stops</span>
+            <input type="checkbox" class="be-toggle" data-be="stops" checked><i class="be-switch"></i>
+          </label>
+          <label class="be-toggle-row"><span>Plots</span>
+            <input type="checkbox" class="be-toggle" data-be="plots" checked><i class="be-switch"></i>
+          </label>
+        </div>
+      </aside>
+    </div>
   </div>
 
   <!-- Map -->
@@ -271,16 +320,6 @@
   <div class="side-hud-stack" id="side-hud-stack">
     <button class="side-hud-collapse-btn" id="side-hud-collapse" aria-label="Toggle HUD stack">
       <span class="collapse-icon">◀</span>
-    </button>
-
-    <!-- GLOBAL EVENT -->
-    <button id="global-event-hud-btn" class="side-hud-btn global-event-btn" aria-label="Global Event">
-      <div class="side-hud-card">
-        <img src="assets/pool.png" alt="" class="side-hud-img">
-        <span id="global-event-hud-chip" class="side-hud-badge">0%</span>
-      </div>
-      <span class="side-hud-subtext" id="global-event-hud-label">Event</span>
-      <div class="side-hud-progress"><div id="global-event-hud-bar" class="side-hud-progress-fill"></div></div>
     </button>
 
     <!-- Diamond Extractor -->
@@ -309,13 +348,8 @@
       <span class="side-hud-subtext">Pet · <span id="pet-berry-count">0</span></span>
     </button>
 
-    <!-- Weekly Pool -->
-    <button id="weekly-pool-hud-btn" class="side-hud-btn weekly-pool-btn" aria-label="Weekly Dividend Pool">
-      <div class="side-hud-card">
-        <img src="assets/pool.png" alt="" class="side-hud-img">
-      </div>
-      <span class="side-hud-subtext" id="hud-pool-countdown">Pool 0d</span>
-    </button>
+    <!-- Global Challenge and Weekly Treasury Pool live in the Events tab now.
+         The rail keeps only Ranks, Pet and Mine (plus conditional boosts). -->
 
     <!-- +2 EB Boost -->
     <button id="boost-btn" class="side-hud-btn boost-btn-stack hidden" aria-label="Boost">
@@ -335,63 +369,19 @@
     </button>
   </div>
 
+</div>
+
+  <!-- Bottom chrome lives OUTSIDE #game-screen on purpose: .screen is a
+     stacking context (z-index:10) which would cap these below modal z-40. -->
   <!-- Landlord Title Pill (Cycles Mayor / Governor / President) -->
   <div id="landlord-pill" class="landlord-pill hidden">
     <div class="landlord-ruler-bg">
-      <img src="assets/ruler.png" alt="" class="landlord-ruler-img">
       <div class="landlord-ruler-avatar" id="landlord-ruler-avatar">👤</div>
-      <div class="landlord-ruler-title" id="landlord-ruler-title">MAYOR</div>
-      <div class="landlord-ruler-location" id="landlord-ruler-location">IN ---</div>
-    </div>
-  </div>
-
-  <!-- Feed + permanent View hub row (hub collapses to 👁 VIEW) -->
-  <div class="top-hud-row">
-    <!-- Permanent Collapsable Worldwide Feed Card -->
-    <div id="live-feed-card" class="live-feed-card">
-      <div id="feed-interactive-header" class="feed-header-line" title="Tap to toggle feed">
-        <div class="feed-title-wrap">
-          <span class="feed-badge">Feed:</span>
-          <span class="feed-dot"></span>
-          <span id="feed-unread-badge" class="feed-unread-pill hidden">0</span>
-        </div>
-        <button id="feed-toggle-icon" class="feed-toggle-btn" aria-label="Toggle Feed">▴</button>
-      </div>
-      <div id="feed-scroll-container" class="feed-scroll-container">
-        <div class="feed-empty-msg">Connecting to live feed...</div>
+      <div class="landlord-ruler-text">
+        <div class="landlord-ruler-title" id="landlord-ruler-title">MAYOR</div>
+        <div class="landlord-ruler-location" id="landlord-ruler-location">IN ---</div>
       </div>
     </div>
-
-    <!-- Permanent object visibility hub (works in normal + Bird's Eye) -->
-    <aside id="be-visibility-hub" class="be-visibility-hub" aria-label="Object visibility">
-      <button type="button" id="be-hub-header" class="be-hub-header" aria-expanded="false">
-        <span class="be-hub-title">👁 VIEW</span>
-        <span class="be-hub-chevron" aria-hidden="true">▾</span>
-      </button>
-      <div class="be-hub-body" id="be-hub-body">
-        <label class="be-toggle-row"><span>Player</span>
-          <input type="checkbox" class="be-toggle" data-be="player" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Diamonds</span>
-          <input type="checkbox" class="be-toggle" data-be="diamonds" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Mine</span>
-          <input type="checkbox" class="be-toggle" data-be="mine" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Citadel</span>
-          <input type="checkbox" class="be-toggle" data-be="citadel" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Foliage</span>
-          <input type="checkbox" class="be-toggle" data-be="foliage" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Stops</span>
-          <input type="checkbox" class="be-toggle" data-be="stops" checked><i class="be-switch"></i>
-        </label>
-        <label class="be-toggle-row"><span>Plots</span>
-          <input type="checkbox" class="be-toggle" data-be="plots" checked><i class="be-switch"></i>
-        </label>
-      </div>
-    </aside>
   </div>
 
   <!-- Framed Top Instruction Banner (Appears while in Buy Land / Place Plot mode) -->
@@ -473,7 +463,6 @@
 
   <!-- Buy Land Mode Ad Banner (Empty on boot, injected dynamically by JS!) -->
   <div id="buy-mode-ad-container" class="buy-mode-ad hidden"></div>
-</div>
 
 
 
@@ -1358,6 +1347,25 @@
   </div>
 </div>
 
+<!-- ===================== EVENTS HUB (bottom-nav "Events" tab) =====================
+     Sectional list like Atlas Earth: the live Global Challenge pins to the top,
+     and once it ends it drops to the bottom as a disabled row with a countdown. -->
+<div id="events-hub-modal" class="modal hidden">
+  <div class="modal-card events-hub-card">
+    <button class="close-btn" data-close="events-hub-modal">✕</button>
+    <div class="events-hub-header">
+      <h2>Events</h2>
+      <p class="modal-sub">Live challenges and your daily progress</p>
+    </div>
+
+    <div class="events-hub-section-label" id="events-hub-live-label">Live now</div>
+    <div class="events-hub-list" id="events-hub-list"><!-- rendered by main.js --></div>
+
+    <div class="events-hub-section-label" id="events-hub-upcoming-label">Upcoming</div>
+    <div class="events-hub-list" id="events-hub-upcoming-list"></div>
+  </div>
+</div>
+
 <div id="friendship-detail-modal" class="modal hidden">
   <div class="modal-card friendship-detail-card">
     <button class="close-btn" data-close="friendship-detail-modal">✕</button>
@@ -2019,7 +2027,7 @@
     <div class="cashout-balance-card">
       <div class="cashout-balance-label">MY REALM COINS BALANCE</div>
       <div class="cashout-balance-value">
-        <span class="cashout-dollar">RC</span><span id="cashout-cash-amount">0.000000000000000</span>
+        <span class="cashout-dollar"></span><span id="cashout-cash-amount">0.000000000000000</span>
       </div>
     </div>
 

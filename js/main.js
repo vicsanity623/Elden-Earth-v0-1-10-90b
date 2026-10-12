@@ -2578,6 +2578,10 @@
       cal.cycle = serverResult.calendar.cycle || 1;
       cal.graceAvailable = serverResult.calendar.graceAvailable !== false;
       state.dailyQuests = serverResult.dailyQuests;
+      // Stamp the day the login quest was paid so getDailyQuestsState() can
+      // keep it claimed even if a later sync drops the per-quest flag.
+      state.loginClaimedDate = serverResult.calendar.lastClaimDate
+        || new Date().toISOString().slice(0, 10);
       state.eb = serverResult.nextEb;
       state.diamonds = serverResult.nextDiamonds;
       if (serverResult.nextRewardPoints !== undefined) {
@@ -2701,10 +2705,17 @@
           state.dailyQuests.quests[q.id] = { completed: false, claimed: false };
         }
       });
-      // If calendar reward was claimed, ensure login quest is marked completed
+      // The login quest is auto-completed and auto-claimed together with the
+      // calendar reward (the server pays it inside claimDailyReward). It used
+      // to force `login.completed = true` whenever claimedDays > 0 — which is
+      // permanently true after the first ever claim — so any sync that dropped
+      // the `claimed` flag re-opened the claim button and re-lit the red dot
+      // for the rest of the day. Anchor both flags to the actual claim date.
       const cal = getCalendarState();
-      if (cal && cal.claimedDays > 0) {
-        state.dailyQuests.quests.login.completed = true;
+      const loginQuest = state.dailyQuests.quests.login;
+      if (loginQuest && cal && cal.lastClaimDate === today) {
+        loginQuest.completed = true;
+        if (state.loginClaimedDate === today) loginQuest.claimed = true;
       }
       return state.dailyQuests;
     }
@@ -2798,7 +2809,15 @@
       questList.innerHTML = activeQuestDefs().map(q => {
         const item = qState.quests[q.id] || { completed: false, claimed: false };
         let actionHtml = "";
-        if (item.claimed) {
+        // The `login` quest is auto-claimed by claimDailyReward and deliberately
+        // has NO QUEST_REWARDS entry on the server (it cannot be claimed twice).
+        // Rendering a Claim button for it sends claimQuestReward("login"), which
+        // the server rejects with invalid-argument — a 400 in the console.
+        if (q.id === "login") {
+          actionHtml = item.claimed
+            ? `<div class="quest-check done" title="Claimed with your daily reward">✓</div>`
+            : `<div class="quest-check" title="Claimed automatically with your daily login reward">⟳</div>`;
+        } else if (item.claimed) {
           actionHtml = `<div class="quest-check done" title="Claimed">✓</div>`;
         } else if (item.completed) {
           const rpBit = q.rp ? ` +${q.rp}RP` : "";
@@ -2849,7 +2868,9 @@
           if (e.target.closest(".quest-claim-btn")) return;
           const qId = row.getAttribute("data-quest-id");
           const item = qState.quests[qId];
-          if (item && item.completed && !item.claimed) {
+          // `login` is settled by claimDailyReward and has no server reward
+          // entry — never route it through claimQuestReward (it 400s).
+          if (qId !== "login" && item && item.completed && !item.claimed) {
             const rect = row.getBoundingClientRect();
             claimQuestReward(qId, rect.left + rect.width / 2, rect.top + rect.height / 2);
             return;
@@ -2903,11 +2924,185 @@
       });
     });
 
+    // ---- Events hub (the bottom-nav "Events" tab) ----
+    // Sectional list like Atlas Earth: the live Global Challenge pins to the
+    // top while it runs, then drops to the bottom as a disabled row with a
+    // countdown to the next round. Daily Progress and Weekly Treasury Pool are
+    // always in the list and open their own screens.
+    function nextGlobalChallengeStart() {
+      // Future rounds run Mon–Wed. Countdown targets the next Monday 00:00 UTC.
+      const now = new Date();
+      const day = now.getUTCDay(); // 0 = Sun
+      const daysToMonday = day === 0 ? 1 : 8 - day;
+      const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToMonday);
+      return next;
+    }
+
+    function fmtHubCountdown(ms) {
+      if (ms <= 0) return "0d 0h 0m";
+      const s = Math.floor(ms / 1000);
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return `${d}d ${h}h ${m}m`;
+    }
+
+    function renderEventsHub() {
+      const liveList = document.getElementById("events-hub-list");
+      const upList = document.getElementById("events-hub-upcoming-list");
+      const liveLabel = document.getElementById("events-hub-live-label");
+      const upLabel = document.getElementById("events-hub-upcoming-label");
+      if (!liveList || !upList) return;
+
+      const ge = (typeof GlobalEvent !== "undefined" && GlobalEvent.getState)
+        ? GlobalEvent.getState()
+        : { event: null, expired: true, settled: true };
+      const ev = ge.event;
+      const challengeLive = !!ev && !ge.expired && !ge.settled;
+
+      // Daily Progress — always available.
+      const dailyBtn = `
+        <button class="events-hub-row" data-hub-action="daily">
+          <span class="events-hub-row-icon">📅</span>
+          <span class="events-hub-row-body">
+            <span class="events-hub-row-title">Daily Progress</span>
+            <span class="events-hub-row-sub">Login rewards, quests &amp; badges</span>
+          </span>
+          <span class="events-hub-row-go">›</span>
+        </button>`;
+
+      // Weekly Treasury Pool — always available.
+      const poolBtn = `
+        <button class="events-hub-row" data-hub-action="pool">
+          <span class="events-hub-row-icon">👑</span>
+          <span class="events-hub-row-body">
+            <span class="events-hub-row-title">Weekly Treasury Pool</span>
+            <span class="events-hub-row-sub">Top 10 landlords split the weekly pool</span>
+          </span>
+          <span class="events-hub-row-go">›</span>
+        </button>`;
+
+      // Global Challenge — live row, or a disabled row with a countdown.
+      let challengeRow;
+      if (challengeLive) {
+        const pct = Math.max(0, Math.min(100, Number(ev.pct) || 0));
+        challengeRow = `
+          <button class="events-hub-row is-live" data-hub-action="challenge">
+            <span class="events-hub-row-icon">🌍</span>
+            <span class="events-hub-row-body">
+              <span class="events-hub-row-title">Global Challenge</span>
+              <span class="events-hub-row-sub">Spin the wheel — help the Realm hit the goal</span>
+              <span class="events-hub-row-bar"><i style="width:${pct}%"></i></span>
+            </span>
+            <span class="events-hub-row-go">›</span>
+          </button>`;
+      } else {
+        const ms = Math.max(0, nextGlobalChallengeStart() - Date.now());
+        challengeRow = `
+          <div class="events-hub-row is-disabled" aria-disabled="true">
+            <span class="events-hub-row-icon">🌍</span>
+            <span class="events-hub-row-body">
+              <span class="events-hub-row-title">Global Challenge</span>
+              <span class="events-hub-row-sub">Returns in ${fmtHubCountdown(ms)}</span>
+            </span>
+            <span class="events-hub-row-go events-hub-row-go-disabled">⏱</span>
+          </div>`;
+      }
+
+      if (challengeLive) {
+        liveList.innerHTML = challengeRow;
+        upList.innerHTML = dailyBtn + poolBtn;
+        if (liveLabel) liveLabel.classList.remove("hidden");
+        if (upLabel) upLabel.textContent = "More events";
+      } else {
+        liveList.innerHTML = dailyBtn + poolBtn;
+        upList.innerHTML = challengeRow;
+        if (liveLabel) liveLabel.textContent = "Available now";
+        if (upLabel) upLabel.textContent = "Upcoming";
+      }
+
+      liveList.querySelectorAll("[data-hub-action]").forEach((b) => {
+        b.addEventListener("click", () => onHubAction(b.getAttribute("data-hub-action")));
+      });
+      upList.querySelectorAll("[data-hub-action]").forEach((b) => {
+        b.addEventListener("click", () => onHubAction(b.getAttribute("data-hub-action")));
+      });
+    }
+
+    function onHubAction(action) {
+      if (action === "daily") {
+        closeModal("events-hub-modal");
+        renderCalendarModal();
+        renderDailyQuests();
+        if (typeof Achievements !== "undefined") Achievements.renderAll();
+        openModal("calendar-modal");
+      } else if (action === "pool") {
+        closeModal("events-hub-modal");
+        // Module is WeeklyPool (see js/pool.js) — the old name `Pool` silently
+        // no-op'd, which is why the Treasury window never opened.
+        if (typeof WeeklyPool !== "undefined" && WeeklyPool.open) WeeklyPool.open();
+      } else if (action === "challenge") {
+        closeModal("events-hub-modal");
+        if (typeof GlobalEvent !== "undefined" && GlobalEvent.openModal) GlobalEvent.openModal();
+      }
+    }
+
+    // Keep the countdown ticking while the hub is open.
+    setInterval(() => {
+      const hub = document.getElementById("events-hub-modal");
+      if (hub && !hub.classList.contains("hidden")) renderEventsHub();
+    }, 30000);
+
+    // ---- Bottom-nav panel management ----
+    // Switching tabs must never stack windows: whatever is open is dismissed
+    // first, then the tapped tab opens its own (or nothing, for MAP).
+    function closeAllPanels() {
+      document.querySelectorAll(".modal:not(.hidden)").forEach((m) => {
+        m.classList.add("hidden");
+        if (typeof deactivateMapObjectAnimations === "function") {
+          deactivateMapObjectAnimations(m.id);
+        }
+      });
+      // The chat drawer is not a .modal — it is its own slide-up container.
+      const drawer = document.getElementById("chat-drawer");
+      if (drawer && !drawer.classList.contains("hidden")) {
+        drawer.classList.add("hidden");
+        if (typeof Chat !== "undefined" && Chat.close) Chat.close();
+      }
+    }
+    window.closeAllPanels = closeAllPanels;
+
+    function setActiveTab(tabId) {
+      document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("is-active"));
+      el(tabId)?.classList.add("is-active");
+    }
+
     el("calendar-btn")?.addEventListener("click", () => {
-      renderCalendarModal();
-      renderDailyQuests();
-      if (typeof Achievements !== "undefined") Achievements.renderAll();
-      openModal("calendar-modal");
+      closeAllPanels();
+      setActiveTab("calendar-btn");
+      renderEventsHub();
+      openModal("events-hub-modal");
+    });
+
+    // MAP is the escape hatch: with the tab bar layered above every sheet, a
+    // tap here must dismiss whatever is open and drop back to the map.
+    el("map-tab-btn")?.addEventListener("click", () => {
+      closeAllPanels();
+      setActiveTab("map-tab-btn");
+    });
+
+    // Land / Earn / Chat handlers live further down next to the modals they
+    // open — each calls closeAllPanels() + setActiveTab() first (see those).
+    el("chat-hud-btn")?.addEventListener("click", () => {
+      // The chat drawer is opened by its own module (js/chat.js); just clear
+      // any modal so it never stacks on top of another window.
+      document.querySelectorAll(".modal:not(.hidden)").forEach((m) => {
+        m.classList.add("hidden");
+        if (typeof deactivateMapObjectAnimations === "function") {
+          deactivateMapObjectAnimations(m.id);
+        }
+      });
+      setActiveTab("chat-hud-btn");
     });
 
     updateCalendarHUD();
@@ -3807,6 +4002,9 @@
     });
 
     el("earn-btn").addEventListener("click", () => {
+      // Never stack windows — dismiss whatever the previous tab opened.
+      closeAllPanels();
+      setActiveTab("earn-btn");
       // Safety unlock in case modal was closed mid-spin
       const spinBtn = el("spin-btn");
       if (spinBtn && !el("wheel-result").textContent.includes("Spinning")) {
@@ -3827,7 +4025,12 @@
         updateSpinButtonState();
       }
     });
-    el("land-btn").addEventListener("click", () => { updateLandModal(); openModal("land-modal"); });
+    el("land-btn").addEventListener("click", () => {
+      closeAllPanels();
+      setActiveTab("land-btn");
+      updateLandModal();
+      openModal("land-modal");
+    });
     el("ascension-forge-btn")?.addEventListener("click", () => {
       if (typeof PlotAscension !== "undefined") PlotAscension.openForge(null);
     });
@@ -4482,7 +4685,11 @@
 
     try {
       const convertFn = firebase.functions().httpsCallable("convertCash");
-      const result = await convertFn({ amount: cashoutConvertAmount });
+      // Clamp server-side tolerance here too: the callable rejects anything
+      // outside 1..1000 with invalid-argument (a 400 in the console).
+      const amount = Math.max(1, Math.min(1000, Math.floor(Number(cashoutConvertAmount) || 1)));
+      cashoutConvertAmount = amount;
+      const result = await convertFn({ amount });
 
       if (result.data?.ok) {
         showToast(`✓ Converted RC ${cashoutConvertAmount} → +${result.data.ebReward} EB +${result.data.diamondReward} Diamonds!`, 4000);

@@ -1,5 +1,5 @@
 // Bump this version string whenever you deploy an update!
-const CACHE_NAME = 'elden-EARTH-v32.14';
+const CACHE_NAME = 'elden-EARTH-v32.15';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -37,7 +37,7 @@ const ASSETS_TO_CACHE = [
     './js/pet.js',
     './js/profanity-filter.js',
     './js/treasure.js',
-    '.js/format.js',
+    './js/format.js',
     './assets/trophy.png',
     './assets/mine-extractor.png',
     './assets/daily.png',

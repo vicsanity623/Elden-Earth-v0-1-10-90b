@@ -31,6 +31,14 @@
   /* One glow, applied only to the single primary action per screen. */
   --glow-primary: 0 8px 22px rgba(255,0,40,0.45), 0 0 10px rgba(255,23,68,0.28);
   --glow-soft:    0 2px 10px rgba(0,0,0,0.45);
+
+  /* Bottom stack heights. Everything that has to clear the bottom chrome
+     (sheets, CTA row, landlord pill, drawers) measures against these instead
+     of scattering magic pixel offsets that drift between screen sizes.
+     --nav-h must fit: icon 24 + gap 3 + label line ~12 + tab padding 8. */
+  --ad-h:  52px;                              /* ad banner slot            */
+  --nav-h: 58px;                              /* bottom tab bar            */
+  --bottom-stack: calc(var(--ad-h) + var(--nav-h) + 8px); /* safe zone above both */
 }
 
 *{box-sizing:border-box;}
@@ -747,20 +755,35 @@ html,body{
    buttons, which gave no sense of where you could go. */
 .bottom-nav {
   position: absolute;
-  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--ad-h) + env(safe-area-inset-bottom, 0px));
   left: 0;
   right: 0;
-  z-index: 20;
+  /* Deliberately ABOVE every modal/sheet (see .modal z-index). The tab bar is
+     the one piece of chrome that must stay reachable at all times — pressing
+     MAP has to work even with a panel open. */
+  z-index: 60;
+  height: var(--nav-h);
   display: flex;
   align-items: stretch;
   justify-content: space-around;
   gap: 2px;
-  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
-  background: rgba(10, 16, 26, 0.92);
+  padding: 4px 6px;
+  background: rgba(10, 16, 26, 0.96);
   border-top: 1px solid var(--line-subtle);
   box-sizing: border-box;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* Bottom chrome is body-level (outside #game-screen's stacking context) so its
+   z-index can beat modals. That also means it would show on the sign-in
+   screen, so gate it on the game screen being mounted. */
+#game-screen.hidden ~ #bottombar,
+#game-screen.hidden ~ #bottom-cta,
+#game-screen.hidden ~ #landlord-pill,
+#game-screen.hidden ~ #treasury-ad-container,
+#game-screen.hidden ~ #buy-mode-ad-container {
+  display: none !important;
 }
 
 .nav-tab {
@@ -771,7 +794,7 @@ html,body{
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 6px 2px;
+  padding: 4px 2px;
   border: none;
   border-radius: 12px;
   background: transparent;
@@ -847,13 +870,13 @@ html,body{
 
 .nav-tab-dot.hidden { display: none; }
 
-/* ---------- Floating CTA row (above the tab bar) ---------- */
+/* ---------- Floating CTA row (snaps just above the tab bar) ---------- */
 .bottom-cta {
   position: absolute;
-  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--bottom-stack);
   left: 0;
   right: 0;
-  z-index: 21;
+  z-index: 55;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -949,10 +972,16 @@ html,body{
 
 /* ---------- Modals ---------- */
 .modal{
-  position:fixed; inset:0; z-index:30;
+  position:fixed; inset:0; z-index:58;
   display:flex; align-items:flex-end; justify-content:center;
   background:rgba(6,10,16,0.6);
   backdrop-filter:blur(2px);
+  /* Sheets stop above the bottom chrome so the tab bar stays visible and
+     reachable. This is the "snap above the bottom nav" behaviour.
+     z-58 > the CTA row / landlord pill (55) so a nav-opened window covers
+     them, but < the tab bar (60) so MAP is never blocked. */
+  padding-bottom: var(--bottom-stack);
+  box-sizing: border-box;
 }
 .game-confirm-center{
   align-items:center;
@@ -966,7 +995,8 @@ html,body{
   border-radius:16px;
   padding:28px 22px 28px;
   text-align:center;
-  max-height:88vh; overflow-y:auto;
+  /* Leaves room for the bottom chrome below the sheet's own padding. */
+  max-height: calc(88vh - var(--bottom-stack)); overflow-y:auto;
 }
 .modal-card h2{
   font-family:var(--font-display);
@@ -1592,16 +1622,14 @@ html,body{
 }
 
 /* ================= PERMANENT COLLAPSABLE FEED HUD ================= */
+/* Feed + VIEW sit INSIDE #topbar's flex column, so they flow directly under
+   the sub-stats at any device height. The old `top: ... + 142px` pin is gone. */
 .top-hud-row {
-  position: absolute;
-  /* Same anchor as old feed — clear the red substats frame */
-  top: calc(max(14px, env(safe-area-inset-top)) + 142px);
-  left: 14px;
-  right: 14px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 6px;
   z-index: 20;
   pointer-events: none;
 }
@@ -1610,36 +1638,33 @@ html,body{
   pointer-events: auto;
 }
 
+/* Transparent ticker — only the lettering is visible, like Atlas Earth.
+   No panel, no blur, no border: the map stays the surface underneath. */
 .live-feed-card {
   position: relative;
-  top: auto;
-  left: auto;
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
   max-width: 360px;
   z-index: 20;
-  /* Almost entirely transparent frosted glass */
-  background: rgba(10, 15, 24, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 12px rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 12px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 8px;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto !important;
 }
 
-/* Interactive Header Bar (Ultra Transparent) */
 .feed-header-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 12px;
+  padding: 0 2px;
   cursor: pointer;
-  background: rgba(13, 20, 32, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  border: none;
   user-select: none;
 }
 
@@ -1649,13 +1674,18 @@ html,body{
   gap: 6px;
 }
 
+/* Bold lettering over the map — no fill behind it. */
 .feed-badge {
-  font-family: var(--font-display);
-  font-size: clamp(9px, 2.5vw, 11.5px);
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
   color: var(--gold-hi);
-  letter-spacing: 0.8px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.95),
+    0 0 2px rgba(0, 0, 0, 1);
 }
 
 .feed-dot {
@@ -1663,231 +1693,149 @@ html,body{
   height: 5px;
   background: var(--teal);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--teal);
+  box-shadow: 0 0 6px var(--teal);
   animation: feedPulse 1.8s infinite alternate;
 }
 
 .feed-unread-pill {
   background: var(--teal);
   color: #0b1118;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   border-radius: 8px;
   padding: 1px 5px;
-  box-shadow: 0 0 6px rgba(79, 214, 196, 0.8);
 }
 
 .feed-toggle-btn {
   background: none;
   border: none;
   color: var(--gold-hi);
-  font-size: 12px;
+  font-size: 11px;
   padding: 0 2px;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.9;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
 
-/* Scrollable Container */
+/* Collapsed (the resting state) = exactly one line of ticker text. */
 .feed-scroll-container {
-  max-height: 72px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  max-height: 20px;
+  overflow: hidden;
+  padding: 1px 2px 0;
+  display: block;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
-/* Styled Minimal Scrollbar */
-.feed-scroll-container::-webkit-scrollbar {
-  width: 3px;
-}
-.feed-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 43, 67, 0.4);
-  border-radius: 3px;
-}
-
-/* Feed List Items (Bright, Sharp Typography on Transparent BG) */
-.feed-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: clamp(9px, 2.5vw, 11px);
-  line-height: 1.35;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.8);
-  padding-bottom: 3px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.feed-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.feed-item-content strong {
-  color: var(--gold-hi);
-  font-weight: 700;
-  text-shadow: 0 0 6px rgba(240, 211, 138, 0.4);
-}
-
-.feed-item-content em {
-  font-style: normal;
-  color: #7ef5e6;
-  font-weight: 600;
-  text-shadow: 0 0 6px rgba(126, 245, 230, 0.4);
-}
-
-.feed-item-time {
-  font-size: 9px;
-  color: #c0cedf;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-
-.feed-empty-msg {
-  font-size: 10.5px;
-  color: #c0cedf;
-  text-align: center;
-  padding: 8px 0;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-}
-
-/* Collapsed State (Compact Minimal Bar) */
-.live-feed-card.collapsed {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(10, 15, 24, 0.18);
-}
-
-.live-feed-card.collapsed .feed-header-line {
-  border-bottom: none;
-}
-
-.live-feed-card.collapsed .feed-scroll-container {
+.live-feed-card.collapsed .feed-item:not(:first-child),
+.live-feed-card.collapsed .feed-empty-msg + .feed-item {
   display: none;
 }
 
-.feed-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.feed-badge {
-  font-family: var(--font-display);
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--gold-hi);
-  letter-spacing: 0.5px;
-}
-
-.feed-dot {
-  width: 7px;
-  height: 7px;
-  background: var(--teal);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--teal);
-  animation: feedPulse 1.8s infinite alternate;
-}
-
-.feed-unread-pill {
-  background: var(--teal);
-  color: #0b1118;
-  font-size: 10px;
-  font-weight: 800;
-  border-radius: 10px;
-  padding: 1px 6px;
-  box-shadow: 0 0 6px rgba(79, 214, 196, 0.7);
-}
-
-.feed-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--gold-hi);
-  font-size: 14px;
-  padding: 0 4px;
-  cursor: pointer;
-}
-
-/* Scrollable Container */
-.feed-scroll-container {
-  max-height: 82px;
+/* Expanded = the scrollable list. Gets a real panel here (unlike the
+   transparent ticker) because a stack of lines over the map is unreadable
+   without one — and the type is scaled up to match. */
+.live-feed-card:not(.collapsed) .feed-scroll-container {
+  max-height: 190px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  overscroll-behavior: contain;
+  gap: 8px;
+  padding: 8px 10px 10px;
   -webkit-overflow-scrolling: touch;
+  background: rgba(10, 16, 26, 0.94);
+  border: 1px solid var(--line-subtle);
+  border-radius: 10px;
+  margin-top: 4px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-/* Styled Minimal Scrollbar */
-.feed-scroll-container::-webkit-scrollbar {
-  width: 4px;
+.live-feed-card:not(.collapsed) .feed-item {
+  font-size: 15px;
+  line-height: 1.55;
+  align-items: baseline;
+  padding-bottom: 6px;
 }
+
+.live-feed-card:not(.collapsed) .feed-item-time {
+  font-size: 11px;
+}
+
+.feed-scroll-container::-webkit-scrollbar { width: 3px; }
 .feed-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 43, 67, 0.3);
+  background: rgba(255, 255, 255, 0.22);
   border-radius: 4px;
 }
 
-/* Feed List Items */
+/* Ticker rows. Clipping (nowrap + ellipsis) applies ONLY to the collapsed
+   one-line ticker — leaving it on the base rule meant the expanded list
+   inherited it and squeezed every line down to nothing. */
 .feed-item {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--parchment);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #ffffff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.95),
+    0 0 14px rgba(0, 0, 0, 0.85),
+    0 0 2px rgba(0, 0, 0, 1);
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(42, 59, 82, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.feed-item:last-child {
+/* Collapsed = one ellipsised ticker line. */
+.live-feed-card.collapsed .feed-item {
   border-bottom: none;
   padding-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.feed-item-content strong {
-  color: var(--gold-hi);
-  font-weight: 700;
+.feed-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+.feed-item-content {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.feed-item-content em {
-  font-style: normal;
-  color: var(--teal);
+.live-feed-card.collapsed .feed-item-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.feed-item-content strong { color: var(--gold-hi); font-weight: 800; }
+.feed-item-content em { font-style: normal; color: var(--teal); }
 
 .feed-item-time {
-  font-size: 9.5px;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-dim);
   white-space: nowrap;
-  opacity: 0.8;
+  opacity: 0.85;
+  flex: 0 0 auto;
 }
+
+.live-feed-card.collapsed .feed-item-time { display: none; }
 
 .feed-empty-msg {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-dim);
-  text-align: center;
-  padding: 12px 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  padding: 2px 0;
 }
 
-/* Collapsed State */
-.live-feed-card.collapsed {
-  border-color: rgba(255, 43, 67, 0.3);
-}
-
-.live-feed-card.collapsed .feed-header-line {
-  border-bottom: none;
-}
-
-.live-feed-card.collapsed .feed-scroll-container {
-  display: none;
-}
+.live-feed-card.collapsed { border-color: transparent; }
 
 /* ================= EDIT NAME BADGE & WRAPPER ================= */
 .info-name-box {
@@ -3683,13 +3631,13 @@ html,body{
   bottom: 0;
   left: 0;
   right: 0;
-  height: 56px;
+  height: var(--ad-h);
   background: rgba(10, 15, 24, 0.98);
-  border-top: 1px solid rgba(255, 43, 67, 0.25);
+  border-top: 1px solid var(--line-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 25;
+  z-index: 18;
   overflow: hidden;
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.8);
 }
@@ -3729,9 +3677,10 @@ html,body{
 /* --- Landlord Title Pill (Mayor / Governor / President) --- */
 .landlord-pill {
   position: fixed;
-  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
-  right: 4px;
-  z-index: 20;
+  /* Snaps to the top edge of the bottom chrome, flush right. */
+  bottom: var(--bottom-stack);
+  right: 8px;
+  z-index: 55;
   pointer-events: none;
   animation: territoryFadeIn 0.4s ease-out;
 }
@@ -3740,37 +3689,33 @@ html,body{
   display: none;
 }
 
+/* Compact pill: a 32px avatar plus a two-line title. Replaces the old 130px
+   red frame, which read as a second primary button competing with BUY LAND. */
 .landlord-ruler-bg {
-  position: relative;
-  width: clamp(110px, 26vw, 130px);
-  aspect-ratio: 120 / 136;
-  height: auto;
-  overflow: visible;
-}
-
-.landlord-ruler-img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: fill;
-  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 999px;
+  background: rgba(10, 16, 26, 0.9);
+  border: 1px solid var(--line);
+  box-shadow: var(--glow-soft);
+  max-width: 190px;
 }
 
 .landlord-ruler-avatar {
-  position: absolute;
-  top: 4.8%;
-  right: 13.2%;
-  width: 54.5%;
-  aspect-ratio: 1 / 1;
-  height: auto;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   box-sizing: border-box;
+  font-size: 16px;
 }
 
 .landlord-ruler-avatar img {
@@ -3780,18 +3725,21 @@ html,body{
   border-radius: 50%;
 }
 
+.landlord-ruler-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+
 .landlord-ruler-title {
-  position: absolute;
-  top: 54%;
-  left: 12%;
-  right: 12%;
-  font-family: var(--font-display, 'Cinzel', serif);
-  font-size: clamp(8px, 2.2vw, 10px);
-  font-weight: 700;
-  letter-spacing: 0.7px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--gold);
-  text-align: left;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -3799,17 +3747,13 @@ html,body{
 }
 
 .landlord-ruler-location {
-  position: absolute;
-  bottom: 12%;
-  left: 8%;
-  width: 84%; /* Pinned strictly between the left and right red borders */
-  font-size: clamp(7px, 2.0vw, 9px);
+  font-size: 9px;
   font-weight: 700;
-  color: #ffffff;
-  text-align: left;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden; /* Clips text strictly inside the box */
+  overflow: hidden;
   pointer-events: none;
   display: block;
 }
@@ -3824,7 +3768,6 @@ html,body{
     transform: translateX(0);
   }
   80%, 100% {
-    /* Shifts text to the left so the end of the long name and flag become fully visible */
     transform: translateX(var(--marquee-shift, -35%));
   }
 }
@@ -3870,6 +3813,139 @@ body.buy-mode #treasury-ad-container {
 
 .calendar-modal-header {
   margin-bottom: 12px;
+}
+
+/* ---------- Events Hub (bottom-nav "Events" tab) ---------- */
+.events-hub-card {
+  max-width: 420px;
+  text-align: left;
+}
+
+.events-hub-header {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.events-hub-section-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 12px 2px 6px;
+}
+
+.events-hub-section-label.hidden { display: none; }
+
+.events-hub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One row per event. Live rows get the accent edge; the ended challenge is a
+   disabled row carrying its own countdown. */
+.events-hub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-subtle);
+  color: var(--parchment);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.events-hub-row:active { transform: scale(0.98); }
+
+.events-hub-row.is-live {
+  border-color: var(--line-hot);
+  box-shadow: 0 0 0 1px rgba(255, 43, 67, 0.12);
+}
+
+.events-hub-row.is-disabled {
+  cursor: default;
+  opacity: 0.55;
+  background: rgba(13, 20, 32, 0.6);
+}
+
+.events-hub-row.is-disabled:active { transform: none; }
+
+.events-hub-row-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border-radius: 11px;
+  background: var(--surface-2);
+}
+
+.events-hub-row-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.events-hub-row-title {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--gold-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.events-hub-row-sub {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Live challenge progress strip. */
+.events-hub-row-bar {
+  display: block;
+  height: 4px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.events-hub-row-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--teal), var(--legendary));
+  transition: width 0.4s ease;
+}
+
+.events-hub-row-go {
+  flex: 0 0 auto;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.events-hub-row-go-disabled {
+  font-size: 15px;
+  opacity: 0.8;
 }
 
 .cal-modal-icon {
@@ -4050,7 +4126,7 @@ body.buy-mode #treasury-ad-container {
   position: fixed;
   left: clamp(6px, 2vw, 14px);
   top: clamp(200px, 45vw, 300px);
-  bottom: calc(clamp(90px, 25vw, 120px) + env(safe-area-inset-bottom, 0px));
+  bottom: var(--bottom-stack);
   z-index: 22;
   display: flex;
   flex-direction: column;
@@ -4059,6 +4135,9 @@ body.buy-mode #treasury-ad-container {
   pointer-events: none;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Horizontal room for the badge, which the old overflow-x:hidden clipped
+     — that is why the pet mood meter was cut off. */
+  padding: 4px 6px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   transition: opacity 0.3s ease, transform 0.3s ease, top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -4167,26 +4246,34 @@ body.buy-mode #treasury-ad-container {
 }
 
 /* One label style, matching the bottom nav labels. */
+/* Labels sit over live map tiles — without a shadow 8px grey type is
+   unreadable against cyan/purple plots. */
 .side-hud-subtext {
   font-family: var(--font-body);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--gold-hi);
   margin-top: 3px;
-  max-width: 52px;
+  max-width: 56px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.98),
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 0 2px rgba(0, 0, 0, 1);
 }
 
 /* One badge slot, top-right of every rail card. */
+/* Badge sits INSIDE the card corner — anything hanging outside the card is
+   clipped by .side-hud-stack's overflow-x:hidden. */
 .side-hud-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -3px;
+  right: -3px;
   min-width: 15px;
   height: 15px;
   padding: 0 4px;
@@ -4195,7 +4282,7 @@ body.buy-mode #treasury-ad-container {
   border: 1.5px solid var(--ink);
   box-sizing: content-box;
   font-family: var(--font-body);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   line-height: 15px;
   color: #fff;
@@ -4718,15 +4805,16 @@ body.buy-mode #treasury-ad-container {
 .chat-drawer {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  /* Same band as .modal: above the CTA row / landlord pill (55), below the
+     tab bar (60). */
+  z-index: 57;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   /* Android keyboard: js/chat.js pads the drawer above the soft keyboard
-     (--kb-inset). The safe-area term matches every other bottom window so the
-     input clears the gesture bar — the chat used to sit flush at the edge. */
-  padding-bottom: var(--kb-inset, 0px);
-  padding-bottom: max(var(--kb-inset, 0px), env(safe-area-inset-bottom, 0px));
+     (--kb-inset). --bottom-stack keeps the panel clear of the bottom tab bar,
+     which sits above every drawer so MAP stays reachable. */
+  padding-bottom: max(calc(var(--kb-inset, 0px) + var(--bottom-stack)), calc(env(safe-area-inset-bottom, 0px) + var(--bottom-stack)));
 }
 
 .chat-drawer-overlay {
@@ -4931,14 +5019,16 @@ body.buy-mode #treasury-ad-container {
 }
 
 /* ---------- Game Treasury Bottom Ad Banner ---------- */
+/* Fixed ad slot — always the same height and position, so it never competes
+   with the CTA row. Separation comes from --bottom-stack above the nav. */
 .treasury-ad-container {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 52px;
+  height: var(--ad-h);
   background: rgba(10, 15, 24, 0.98);
-  border-top: 1px solid rgba(255, 43, 67, 0.25);
+  border-top: 1px solid var(--line-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4957,7 +5047,7 @@ body > ins[style*="2147483647"],
 .adsbygoogle-noablate,
 div[id*="google-ads-annotation"],
 div[aria-label="Advertisement"] {
-  padding-top: 52px !important;
+  padding-top: var(--ad-h) !important;
   box-sizing: border-box !important;
 }
 
@@ -8649,8 +8739,8 @@ body.birds-eye-mode .top-hud-row {
    unified badge style. Mood variants only tint it. */
 .pet-mood-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -3px;
+  right: -3px;
   min-width: 15px;
   height: 15px;
   padding: 0 4px;

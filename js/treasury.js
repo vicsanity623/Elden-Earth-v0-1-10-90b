@@ -26,6 +26,23 @@ const Treasury = (() => {
     inFlight = (async () => {
       try {
         if (typeof firebase === "undefined" || !firebase.functions) return cached;
+        // Wait for an authenticated user. Calling the callable with no auth
+        // token is a guaranteed 401 on every cold start, which shows up in the
+        // console as a failed request even though the UI tolerates it.
+        const auth = firebase.auth ? firebase.auth() : null;
+        if (!auth) return cached;
+        if (!auth.currentUser) {
+          try {
+            await new Promise((resolve) => {
+              const unsub = auth.onAuthStateChanged((u) => {
+                if (u) { unsub(); resolve(); }
+              });
+              setTimeout(() => { try { unsub(); } catch (e) {} resolve(); }, 4000);
+            });
+          } catch (e) {}
+        }
+        if (!auth.currentUser) return cached;
+
         const fn = firebase.functions().httpsCallable("getTreasuryStatus");
         const res = (await fn()).data;
         if (res && res.ok) {
