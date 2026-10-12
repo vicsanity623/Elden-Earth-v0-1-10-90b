@@ -30,17 +30,13 @@ const PlotAscension = (() => {
   }
 
   function formatIncome(val) {
-    if (!Number.isFinite(val)) return "0";
-    if (val === 0) return "0";
-    // Show enough precision for micro-rent rates
-    const s = val.toFixed(12).replace(/\.?0+$/, "");
-    return s || "0";
+    return Fmt.rate(val, { bare: true, perSec: false });
   }
 
   // Realm Coins (in-game). Deliberately NOT a "$" — a dollar sign here reads as
   // real money to a reviewer. Real USD only appears on the redemption screen.
   function formatCash(val) {
-    return "RC " + (Number(val) || 0).toFixed(2);
+    return Fmt.rc(val);
   }
 
   function tileCenter(tx, ty) {
@@ -226,7 +222,7 @@ const PlotAscension = (() => {
     if (costEb) costEb.textContent = `${costs.eb} EB`;
     if (costCash) costCash.textContent = formatCash(costs.cashRequired);
     if (costBal) {
-      costBal.textContent = `${formatIncome(state.eb)} EB · ${formatCash(state.cash)}`;
+      costBal.textContent = `${Fmt.int(state.eb)} EB · ${formatCash(state.cash)}`;
     }
 
     // Gates

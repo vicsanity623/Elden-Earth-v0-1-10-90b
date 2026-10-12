@@ -35,9 +35,7 @@ const Trade = (() => {
   }
 
   function formatIncome(val) {
-    if (!Number.isFinite(val) || val === 0) return "0";
-    const s = val.toFixed(12).replace(/\.?0+$/, "");
-    return s || "0";
+    return Fmt.rate(val, { bare: true, perSec: false });
   }
 
   // ---------- OPEN / CLOSE ----------
@@ -424,7 +422,7 @@ const Trade = (() => {
       badge.style.color = gotConf.color;
       badge.style.textShadow = `0 0 22px ${gotConf.color}`;
     }
-    setTxt("trade-result-rate", `$${formatIncome(rate)} /s per plot`);
+    setTxt("trade-result-rate", `RC ${formatIncome(rate)} /s per plot`);
     setTxt("trade-result-sub", `A ${gotConf.label} plot has arrived in your bag.`);
 
     const sentEl = el("trade-result-sent");

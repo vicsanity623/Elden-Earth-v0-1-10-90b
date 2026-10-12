@@ -375,15 +375,21 @@ html,body{
   text-shadow: 0 0 10px rgba(255, 0, 40, 0.7), 0 2px 4px #000;
   line-height: 1;
   margin-top: 4px;
+  /* Every live figure uses tabular digits so the row doesn't shimmy
+     sideways as the balance ticks. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .cash-dollar {
   font-size: clamp(12px, 4vw, 16px);
   font-weight: 700;
   color: #ff2b43;
-  margin-right: 1px;
+  margin-right: 2px;
 }
 
+/* Whole part now always renders (even when 0) with thousands separators,
+   so "RC.9553..." never happens again — it's "RC 955,369.55...". */
 .cash-whole {
   font-size: clamp(22px, 7vw, 32px);
   font-weight: 800;
@@ -6413,6 +6419,8 @@ div[aria-label="Advertisement"] {
   font-size: 15px;
   font-weight: 800;
   color: var(--parchment);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .pool-stat-pool {
@@ -6421,6 +6429,16 @@ div[aria-label="Advertisement"] {
   font-weight: 800;
   color: var(--gold-hi);
   text-shadow: 0 0 10px rgba(240, 211, 138, 0.4);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.pool-stat-label em {
+  font-style: normal;
+  opacity: 0.7;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .pool-countdown-card {
@@ -6431,52 +6449,118 @@ div[aria-label="Advertisement"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   font-size: 12px;
   color: var(--parchment);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .pool-countdown-card strong {
   color: var(--teal);
   font-family: var(--font-display);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
 }
 
-.pool-tiers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align: left;
-  margin-bottom: 12px;
+/* ---------- Treasury Modal · Section Rhythm ---------- */
+.pool-section { margin: 0 0 18px; }
+
+.pool-section-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.pool-tier-item {
+/* Distribution split — one table instead of two stacked cards. */
+.pool-tier-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 18px;
   background: rgba(13, 20, 32, 0.85);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px 12px;
+  overflow: hidden;
 }
 
-.pool-tier-item.tier-top3 {
-  border-color: rgba(255, 43, 67, 0.5);
-  background: linear-gradient(135deg, rgba(34, 48, 68, 0.7), rgba(20, 28, 42, 0.9));
+.pool-tier-table th,
+.pool-tier-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.tier-badge {
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--gold-hi);
-  margin-bottom: 3px;
-}
-
-.tier-desc {
-  font-size: 11px;
+.pool-tier-table th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--text-dim);
+  background: rgba(13, 20, 32, 0.95);
 }
 
-.tier-desc strong {
+.pool-tier-table td:last-child,
+.pool-tier-table th:last-child {
+  text-align: right;
+}
+
+.pool-tier-table tbody td:last-child {
   color: var(--teal);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pool-tier-table tr:last-child td { border-bottom: none; }
+
+/* Formula expander — collapsed by default so the modal stays scannable. */
+.pool-basis-details {
+  margin-top: 10px;
+  background: rgba(13, 20, 32, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.pool-basis-details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pool-basis-details > summary::-webkit-details-marker { display: none; }
+
+.pool-basis-details > summary::after {
+  content: "▾";
+  font-size: 10px;
+  transition: transform 0.18s ease;
+}
+
+.pool-basis-details[open] > summary::after { transform: rotate(180deg); }
+
+.pool-basis {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 0;
 }
 
 /* ---------- Live Top 10 Landlords (Treasury Modal) ---------- */
@@ -6487,15 +6571,6 @@ div[aria-label="Advertisement"] {
   padding: 10px 8px 8px;
   margin-bottom: 12px;
   text-align: left;
-}
-
-.pool-top10-title {
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--gold-hi);
-  text-align: center;
-  margin-bottom: 6px;
 }
 
 .pool-top10-my {
@@ -6542,15 +6617,6 @@ div[aria-label="Advertisement"] {
   border-radius: 3px;
 }
 
-.pool-basis {
-  font-size: 10px;
-  color: var(--text-dim);
-  text-align: center;
-  background: rgba(13, 20, 32, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 6px 16px 8px;
-}
-
 .pool-top10-row {
   display: flex;
   align-items: center;
@@ -6561,6 +6627,8 @@ div[aria-label="Advertisement"] {
   border: 1px solid var(--line);
   font-size: 11px;
   color: var(--parchment);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .pool-top10-row.is-me {
@@ -6851,6 +6919,7 @@ div[aria-label="Advertisement"] {
   font-weight: 700;
   color: var(--text-dim);
   letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .pool-global-rate .rate-val {
@@ -6859,6 +6928,8 @@ div[aria-label="Advertisement"] {
   font-weight: 800;
   color: var(--teal);
   text-shadow: 0 0 10px rgba(79, 214, 196, 0.4);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 /* Hardened Calm Mode (Accessibility: No Shaking, No Pulsing) */
@@ -6883,6 +6954,7 @@ body.no-shake .boost-timer-badge.super-50x {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   background: rgba(13, 20, 32, 0.8);
   border: 1px solid var(--line);
   padding: 10px 14px;
@@ -6894,13 +6966,51 @@ body.no-shake .boost-timer-badge.super-50x {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-dim);
+  cursor: pointer;
 }
 
+/* Real switch: track + thumb, with a legible off state. The bare
+   `accent-color` checkbox read as an unstyled white square on dark. */
 .toggle-switch-input {
-  width: 40px;
-  height: 22px;
-  accent-color: var(--teal);
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.toggle-switch-input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #b6c2d4;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.toggle-switch-input:checked {
+  background: rgba(79, 214, 196, 0.32);
+  border-color: rgba(79, 214, 196, 0.6);
+}
+
+.toggle-switch-input:checked::after {
+  transform: translateX(18px);
+  background: var(--teal);
+}
+
+.toggle-switch-input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 /* ================= RESPONSIVE MOBILE MODAL OPTIMIZATIONS ================= */

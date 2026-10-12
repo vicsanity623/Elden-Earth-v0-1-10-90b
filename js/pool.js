@@ -217,7 +217,7 @@ const WeeklyPool = (() => {
       const rankIcon = myRank === 1 ? "🥇" : myRank === 2 ? "🥈" : myRank === 3 ? "🥉" : "🏅";
       if (rankBadgeEl) rankBadgeEl.textContent = `${rankIcon} Rank #${myRank} Global Landlord`;
       if (cashValEl) {
-        cashValEl.textContent = `+RC ${pendingRewardAmount >= 0.01 ? pendingRewardAmount.toFixed(4) : pendingRewardAmount.toFixed(6)}`;
+        cashValEl.textContent = `+${Fmt.rcPrecise(pendingRewardAmount)}`;
       }
 
       if (modalEl) modalEl.classList.remove("hidden");
@@ -264,7 +264,7 @@ const WeeklyPool = (() => {
 
     document.getElementById("weekly-reward-modal")?.classList.add("hidden");
     if (typeof showToast === "function") {
-      showToast(`👑 Claimed +RC ${paidAmount.toFixed(6)} from the Weekly Dividend Pool!`, 4000);
+      showToast(`👑 Claimed +${Fmt.rcPrecise(paidAmount)} from the Weekly Dividend Pool!`, 4000);
     }
     pendingRewardAmount = 0;
   }
@@ -306,8 +306,8 @@ const WeeklyPool = (() => {
         const earnedNow = earnTick.earnedAt + earnTick.rateAt * ((now - earnTick.fetchedAt) / 1000);
         const earnedEl = document.getElementById("modal-rent-earned-val");
         const poolValEl = document.getElementById("modal-weekly-pool-val");
-        if (earnedEl) earnedEl.textContent = `RC ${earnedNow.toFixed(6)}`;
-        if (poolValEl) poolValEl.textContent = `RC ${fmtCash(Math.max(0.05, earnedNow * 0.01))}`;
+        if (earnedEl) earnedEl.textContent = Fmt.rcPrecise(earnedNow);
+        if (poolValEl) poolValEl.textContent = fmtCash(Math.max(0.05, earnedNow * 0.01));
       }
 
       // 4. Real-Time 50X Super Boost Countdown (Delegated to Multiplier module)
@@ -330,12 +330,10 @@ const WeeklyPool = (() => {
     }
   }
 
+  // Formatting lives in js/format.js so the HUD, this modal and the cashout
+  // screen all render the same figure the same way.
   function fmtCash(value) {
-    const n = Number(value) || 0;
-    const abs = Math.abs(n);
-    if (abs >= 1) return n.toFixed(2);
-    if (abs >= 0.01) return n.toFixed(4);
-    return n.toFixed(6);
+    return Fmt.rc(value, { bare: true });
   }
 
   // Hero stats for the running week. `earnedRent` is the live accumulation
@@ -348,10 +346,10 @@ const WeeklyPool = (() => {
     const poolEl = document.getElementById("modal-weekly-pool-val");
     const rateEl = document.getElementById("modal-global-rate-val");
     const basisEl = document.getElementById("modal-pool-basis");
-    if (earnedEl) earnedEl.textContent = `RC ${(Number(earnedRent) || 0).toFixed(6)}`;
-    if (rentEl) rentEl.textContent = `RC ${fmtCash(projectedRent)}`;
-    if (poolEl) poolEl.textContent = `RC ${fmtCash(pool)}`;
-    if (rateEl) rateEl.textContent = `+RC ${Number(liveRate || 0).toFixed(10)} / sec`;
+    if (earnedEl) earnedEl.textContent = Fmt.rcPrecise(earnedRent);
+    if (rentEl) rentEl.textContent = fmtCash(projectedRent);
+    if (poolEl) poolEl.textContent = fmtCash(pool);
+    if (rateEl) rateEl.textContent = "+ " + Fmt.rate(liveRate);
     if (basisEl) {
       // Make the $0.05 floor visible instead of silently reporting "1%".
       const onePct = (Number(earnedRent) || 0) * 0.01;
@@ -377,7 +375,7 @@ const WeeklyPool = (() => {
     const icons = ["🥇", "🥈", "🥉"];
     listEl.innerHTML = top10.map(p => {
       const rank = Number(p.rank) || 0;
-      const share = (Number(p.sharePct || 0) * 100).toFixed(2).replace(/\.00$/, "");
+      const share = Fmt.pct((Number(p.sharePct || 0) * 100));
       const prize = fmtCash(p.prize);
       const isMe = !!myUid && (p.uid === myUid || p.id === myUid);
       return `<li class="pool-top10-row${isMe ? " is-me" : ""}">

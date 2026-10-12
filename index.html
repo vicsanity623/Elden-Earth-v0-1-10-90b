@@ -1164,84 +1164,98 @@
 <div id="weekly-pool-modal" class="modal hidden">
   <div class="modal-card weekly-pool-card">
     <button class="close-btn" data-close="weekly-pool-modal">✕</button>
-    
+
     <div class="pool-header">
       <div class="pool-glow-crown">👑</div>
       <h2>Weekly Realm Treasury</h2>
       <p class="modal-sub">1% of all Global Rent distributed every Monday at 12:00 AM</p>
     </div>
 
-    <!-- Live Global Rent & Pool Stats -->
-    <div class="pool-hero-stats-wrap">
-      <div class="pool-hero-stats">
-        <div class="pool-stat-col">
-          <span class="pool-stat-label">RENT EARNED THIS WEEK (LIVE)</span>
-          <strong id="modal-rent-earned-val" class="pool-stat-cash">RC -.------</strong>
+    <!-- ============ SECTION 1 · THE POOL ============ -->
+    <section class="pool-section">
+      <h3 class="pool-section-title">The Pool</h3>
+
+      <div class="pool-hero-stats-wrap">
+        <div class="pool-hero-stats">
+          <div class="pool-stat-col">
+            <span class="pool-stat-label">Rent earned this week</span>
+            <strong id="modal-rent-earned-val" class="pool-stat-cash">RC -.------</strong>
+          </div>
+          <div class="pool-stat-divider"></div>
+          <div class="pool-stat-col">
+            <span class="pool-stat-label">Week projection</span>
+            <strong id="modal-global-rent-val" class="pool-stat-cash">RC -.------</strong>
+          </div>
+          <div class="pool-stat-divider"></div>
+          <div class="pool-stat-col">
+            <span class="pool-stat-label">Weekly pool <em>(min RC 0.05)</em></span>
+            <strong id="modal-weekly-pool-val" class="pool-stat-pool">RC -.------</strong>
+          </div>
         </div>
-        <div class="pool-stat-divider"></div>
-        <div class="pool-stat-col">
-          <span class="pool-stat-label">WEEK PROJECTION AT THIS RATE</span>
-          <strong id="modal-global-rent-val" class="pool-stat-cash">RC -.------</strong>
+
+        <div class="pool-global-rate">
+          <span class="rate-label">Realm velocity</span>
+          <strong id="modal-global-rate-val" class="rate-val">+ RC -.----------/s</strong>
         </div>
-        <div class="pool-stat-divider"></div>
-        <div class="pool-stat-col">
-          <span class="pool-stat-label">1% WEEKLY POOL (MIN RC 0.05)</span>
-          <strong id="modal-weekly-pool-val" class="pool-stat-pool">RC -.------</strong>
-        </div>
+
+        <div id="pool-treasury-bar" class="treasury-bar hidden"></div>
       </div>
-      <!-- Global Velocity / Economy Rate -->
-      <div class="pool-global-rate">
-        <span class="rate-label">REALM ECONOMY VELOCITY:</span>
-        <strong id="modal-global-rate-val" class="rate-val">+RC -.---------- / sec</strong>
+
+      <!-- Formula collapsed by default: most players only need the number. -->
+      <details class="pool-basis-details">
+        <summary>How the pool is calculated</summary>
+        <div class="pool-basis" id="modal-pool-basis"></div>
+      </details>
+    </section>
+
+    <!-- ============ SECTION 2 · TIMERS & SETTINGS ============ -->
+    <section class="pool-section">
+      <h3 class="pool-section-title">Timers</h3>
+
+      <div class="pool-countdown-card">
+        <span>⏳ Next distribution</span>
+        <strong id="modal-pool-countdown-timer">--D : --H : --M : --s</strong>
       </div>
-      <!-- Explains whether the pool is 1% of rent or sitting on the $0.05 floor -->
-      <div class="pool-basis" id="modal-pool-basis"></div>
-      <!-- Same treasury gate the cashout screen shows, so players see the goal
-           wherever they already look weekly -->
-      <div id="pool-treasury-bar" class="treasury-bar hidden"></div>
-    </div>
 
-    <!-- Live Countdown Bars -->
-    <div class="pool-countdown-card">
-      <span>⏳ Next Distribution In:</span>
-      <strong id="modal-pool-countdown-timer">--D : --H : --M : --s</strong>
-    </div>
-
-    <!-- 50X Super Boost Event Live Countdown Card -->
-    <div class="pool-countdown-card event-50x-countdown-card">
-      <span id="modal-50x-label">🔥 Next 50X Super Boost In:</span>
-      <strong id="modal-50x-countdown-timer">00D : 00H : 00M : 00s</strong>
-    </div>
-
-    <!-- 50X Motion Sensitivity Accessibility Toggle -->
-    <div class="shake-toggle-row">
-      <span class="shake-toggle-label">⚡ 50X Screen Shake Effect</span>
-      <input type="checkbox" id="toggle-shake-fx-pool" class="toggle-switch-input" checked />
-    </div>
-
-    <!-- Distribution Tier Breakdown -->
-    <div class="pool-tiers-list">
-      <div class="pool-tier-item tier-top3">
-        <div class="tier-badge">🥇 1st – 🥉 3rd (50% Split)</div>
-        <div class="tier-desc">1st: <strong>25%</strong> | 2nd: <strong>15%</strong> | 3rd: <strong>10%</strong> of Weekly Pool</div>
+      <div class="pool-countdown-card event-50x-countdown-card">
+        <span id="modal-50x-label">🔥 Next 50X Super Boost</span>
+        <strong id="modal-50x-countdown-timer">00D : 00H : 00M : 00s</strong>
       </div>
-      <div class="pool-tier-item tier-top10">
-        <div class="tier-badge">🏅 4th – 10th Place (50% Split)</div>
-        <div class="tier-desc">The remaining 7 Top Landlords split the other 50% (~7.14% each)</div>
+
+      <div class="shake-toggle-row">
+        <label class="shake-toggle-label" for="toggle-shake-fx-pool">⚡ 50X Screen Shake Effect</label>
+        <input type="checkbox" id="toggle-shake-fx-pool" class="toggle-switch-input" checked />
       </div>
-    </div>
+    </section>
 
-    <!-- Live Top 10 Landlords + exact prize each rank will receive -->
-    <div class="pool-top10-card">
-      <div class="pool-top10-title">👑 Top 10 Landlords This Week</div>
-      <div class="pool-top10-my" id="modal-pool-my-standing">Your standing: —</div>
-      <ol class="pool-top10-list" id="modal-top10-list">
-        <li class="pool-top10-empty">Loading rankings…</li>
-      </ol>
-      <div class="pool-top10-note" id="modal-top10-note">Standings are live and keep accumulating until Monday 00:00 UTC; the Top 10 are paid automatically.</div>
-    </div>
+    <!-- ============ SECTION 3 · STANDINGS ============ -->
+    <section class="pool-section">
+      <h3 class="pool-section-title">How it splits</h3>
 
-    <p class="fine-print">Rent accumulates all week — Top 10 standings and prizes freeze at Monday 00:00 UTC and pay out automatically, then the next week starts accumulating.</p>
+      <table class="pool-tier-table">
+        <thead>
+          <tr><th>Rank</th><th>Share of the weekly pool</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>🥇 1st</td><td>25%</td></tr>
+          <tr><td>🥈 2nd</td><td>15%</td></tr>
+          <tr><td>🥉 3rd</td><td>10%</td></tr>
+          <tr><td>🏅 4th – 10th</td><td>7.14% each</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="pool-section-title">Top 10 this week</h3>
+
+      <div class="pool-top10-card">
+        <div class="pool-top10-my" id="modal-pool-my-standing">Your standing: —</div>
+        <ol class="pool-top10-list" id="modal-top10-list">
+          <li class="pool-top10-empty">Loading rankings…</li>
+        </ol>
+        <div class="pool-top10-note" id="modal-top10-note">Standings are live and keep accumulating until Monday 00:00 UTC; the Top 10 are paid automatically.</div>
+      </div>
+    </section>
+
+    <p class="fine-print">Rewards are activity-based and are never awarded for watching ads or by chance. Rent accumulates all week — standings freeze at Monday 00:00 UTC and pay out automatically.</p>
   </div>
 </div>
 
@@ -1801,6 +1815,7 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-storage-compat.js" integrity="sha384-nTT69180wF6j2ZwBDbXzByFz0TFsSjMChXkzK9o1gUzu9o6WopS8RN0utzpRIcj9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <script defer src="js/config.js"></script>
+<script defer src="js/format.js"></script>
 <script defer src="js/native-bridge.js"></script>
 <script defer src="js/geo.js"></script>
 <script defer src="js/anticheat.js"></script>

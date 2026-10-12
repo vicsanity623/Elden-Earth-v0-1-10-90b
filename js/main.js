@@ -192,13 +192,16 @@
     const cashContainer = el("stat-cash");
     if (cashContainer) {
       const val = Number(state.cash) || 0;
-      const fixedStr = val.toFixed(15);
+      // 6 dp is enough for the counter to visibly tick at any realistic rate
+      // without printing 15 meaningless digits. Full precision lives in the
+      // player info modal (info-total-rent), not on the HUD.
+      const fixedStr = val.toFixed(6);
       if (fixedStr !== lastCashStr) {
         lastCashStr = fixedStr;
         const parts = fixedStr.split(".");
         const whole = parseInt(parts[0], 10);
-        const decimals = parts[1] || "000000000000000";
-        const wholeHTML = whole > 0 ? `<span class="cash-whole">${whole}</span>` : "";
+        const decimals = parts[1] || "000000";
+        const wholeHTML = `<span class="cash-whole">${Fmt.group(whole)}</span>`;
         cashContainer.innerHTML = `<span class="cash-dollar">RC</span>${wholeHTML}<span class="cash-point">.</span><span class="cash-decimal">${decimals}</span>`;
       }
     }
@@ -222,7 +225,7 @@
       if (el("wheel-diamond-display")) el("wheel-diamond-display").innerHTML = `${currentDiamonds} <span class="hud-gem-icon"></span>`;
     }
 
-    const currentRate = "RC " + Store.totalRate().toFixed(11) + "/s";
+    const currentRate = Fmt.rate(Store.totalRate(), { bare: false, perSec: true });
     if (currentRate !== lastRateVal) {
       lastRateVal = currentRate;
       if (el("stat-rate")) el("stat-rate").textContent = currentRate;
@@ -256,14 +259,13 @@
   }
 
   function formatRate(val) {
-    if (!val) return "0";
-    return val.toFixed(12).replace(/\.?0+$/, "");
+    return Fmt.rate(val, { bare: true, perSec: false });
   }
 
   function updateLandModal() {
     const state = Store.get();
-    el("land-count").textContent = Object.keys(state.plots).length;
-    el("land-rate").textContent = Store.totalRate().toFixed(11);
+    el("land-count").textContent = Fmt.int(Object.keys(state.plots).length);
+    el("land-rate").textContent = Fmt.rate(Store.totalRate());
 
     // Count plots by rarity
     const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
@@ -473,7 +475,7 @@
 
     // Initial Rent Display (Shows Lifetime Accrued Rent, NOT spendable balance)
     let rentVal = isOtherPlayer ? 0 : (state.lifetimeRent || state.cash || 0);
-    el("info-total-rent").textContent = "RC " + Number(rentVal).toFixed(11);
+    el("info-total-rent").textContent = Fmt.rcPrecise(rentVal);
 
     // REWARD POINTS — private. The block is hidden outright on another player's
     // profile, and their RP is never fetched in the first place: it lives in
@@ -485,7 +487,7 @@
       if (!isOtherPlayer) {
         const rp = Number(state.rewardPoints) || 0;
         const rpValEl = el("info-rp-balance");
-        if (rpValEl) rpValEl.textContent = `${Number.isFinite(rp) ? rp.toLocaleString() : 0} RP`;
+        if (rpValEl) rpValEl.textContent = `${Fmt.int(rp)} RP`;
         const hint = el("info-rp-hint");
         if (hint) {
           const usd = (rp / 100).toFixed(2);
@@ -532,7 +534,7 @@
             const offlineEarned = offlineSec * playerBaseRate;
             let lRent = (dData.lifetimeRent !== undefined ? dData.lifetimeRent : (dData.cash || 0)) + offlineEarned;
 
-            el("info-total-rent").textContent = "RC " + Number(lRent).toFixed(11);
+            el("info-total-rent").textContent = Fmt.rcPrecise(lRent);
           }
         } catch (e) {
           console.warn("[PlayerInfo] Error fetching player cash:", e);
@@ -582,7 +584,7 @@
       incomeRate = Multiplier.applyMultiplier(incomeRate, state, isOtherPlayer);
     }
     const incomeEl = el("info-income-rate");
-    if (incomeEl) incomeEl.textContent = `RC ${incomeRate.toFixed(11)} /s`;
+    if (incomeEl) incomeEl.textContent = Fmt.rate(incomeRate);
 
     // --- Populate Mayorship & Dividends Card ---
     const mayorStatusEl = el("info-mayor-status");
@@ -4405,7 +4407,7 @@
   function openCashoutPage() {
     const state = Store.get();
     const cashBalance = state.cash || 0;
-    el("cashout-cash-amount").textContent = cashBalance.toFixed(11);
+    el("cashout-cash-amount").textContent = Fmt.rcPrecise(cashBalance);
     cashoutConvertAmount = 1;
     updateCashoutDisplay();
     el("cashout-page").classList.remove("hidden");
