@@ -2,7 +2,7 @@
 // v32.16: dropped ./js/treasure.js (file does not exist). cache.addAll() rejects
 // the whole install on any 404, which left the PWA pinned to a stale cache —
 // every CSS/JS change since then was invisible on iOS homescreen.
-const CACHE_NAME = 'elden-EARTH-v34.23';
+const CACHE_NAME = 'elden-EARTH-v34.24';
 
 const ASSETS_TO_CACHE = [
     './',

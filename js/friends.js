@@ -436,8 +436,17 @@ const Friends = (() => {
       }
       // Only announce when something actually landed — this also runs on a
       // timer, and a zero-amount toast every few minutes would be noise.
-      if (result.giftsEb > 0) {
-        toast(`🎁 Claimed ${result.giftsEb} EB from friend gift${result.giftsEb > 1 ? 's' : ''}!`, 4000);
+      //
+      // claimMailbox sweeps BOTH pipes in one call: friend gifts AND political
+      // dividends (Mayor/Governor/President royalties). Report both, otherwise
+      // the credited total looks like a bug — a first claim here can clear many
+      // weeks of never-claimed mail at once.
+      const parts = [];
+      if (result.giftsEb > 0) parts.push(`${result.giftsEb} EB in friend gifts`);
+      if (result.dividendsEb > 0) parts.push(`${result.dividendsEb} EB in royalties`);
+      if (parts.length > 0) {
+        const giftBit = result.claimed > 1 ? ` (${result.claimed} items)` : "";
+        toast(`🎁 Claimed ${parts.join(" + ")}${giftBit}!`, 5000);
       }
     } catch (e) {
       console.warn("[Friends] Claim gifts error:", e);
