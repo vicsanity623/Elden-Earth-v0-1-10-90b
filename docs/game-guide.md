@@ -7,30 +7,31 @@ A comprehensive guide to every feature, currency, progression system, and gamepl
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Currencies](#currencies)
-3. [Land Claiming](#land-claiming)
-4. [Passive Income](#passive-income)
-5. [Diamonds](#diamonds)
-6. [The Spin Wheel](#the-spin-wheel)
-7. [30X/50X Boost Multiplier](#boost-multiplier)
-8. [+2EB Boost Claim](#2eb-boost-claim)
-9. [Diamond Extractor](#diamond-extractor)
-10. [Realm Citadels](#realm-citadels)
-11. [Elden Stops (POI Beacons)](#elden-stops)
-12. [Companion Pet](#companion-pet)
-13. [Political Titles & Royalties](#political-titles)
-14. [Weekly Treasury Pool](#weekly-treasury-pool)
-15. [Friends System](#friends-system)
-16. [Referral System](#referral-system)
-17. [Leaderboards](#leaderboards)
-18. [Daily Calendar & Quests](#daily-calendar--quests)
-19. [50X Super Boost Events](#50x-super-boost-events)
-20. [Global Chat](#global-chat)
-21. [Activity Feed](#activity-feed)
-22. [3D Character & Wardrobe](#character--wardrobe)
-23. [Bird's Eye View](#birds-eye-view)
-24. [Map Controls](#map-controls)
-25. [Progression Roadmap](#progression-roadmap)
+2. [Navigation](#navigation)
+3. [Currencies](#currencies)
+4. [Land Claiming](#land-claiming)
+5. [Passive Income](#passive-income)
+6. [Diamonds](#diamonds)
+7. [The Spin Wheel](#the-spin-wheel)
+8. [30X/50X Boost Multiplier](#boost-multiplier)
+9. [+2EB Boost Claim](#2eb-boost-claim)
+10. [Diamond Extractor](#diamond-extractor)
+11. [Realm Citadels](#realm-citadels)
+12. [Elden Stops (POI Beacons)](#elden-stops)
+13. [Companion Pet](#companion-pet)
+14. [Political Titles & Royalties](#political-titles)
+15. [Weekly Treasury Pool](#weekly-treasury-pool)
+16. [Friends System](#friends-system)
+17. [Referral System](#referral-system)
+18. [Leaderboards](#leaderboards)
+19. [Daily Calendar & Quests](#daily-calendar--quests)
+20. [50X Super Boost Events](#50x-super-boost-events)
+21. [Global Chat](#global-chat)
+22. [Activity Feed](#activity-feed)
+23. [3D Character & Wardrobe](#character--wardrobe)
+24. [Bird's Eye View](#birds-eye-view)
+25. [Map Controls](#map-controls)
+26. [Progression Roadmap](#progression-roadmap)
 
 ---
 
@@ -61,6 +62,70 @@ Elden Earth runs as a **Progressive Web App (PWA)**. No app store download neede
 
 ---
 
+## Navigation
+
+### Bottom Tab Bar
+
+Five labelled tabs sit along the bottom of the screen and stay reachable at all
+times -- even when a panel is open, so you can always tap **MAP** to get back to
+the game.
+
+| Tab | What it opens |
+|---|---|
+| **LAND** | Your plots, rarity breakdown and total income rate |
+| **EARN** | The Diamond Wheel |
+| **MAP** | Closes whatever is open and returns to the map |
+| **EVENTS** | The Events hub (see below) |
+| **CHAT** | The global chat drawer |
+
+Tapping a tab closes the previous one first, so panels never stack on top of
+each other.
+
+### Action Row
+
+Just above the tab bar:
+
+- **Compass** -- re-centres the camera and resets north
+- **BUY LAND** -- the game's primary action; drops into flat 2D view for claiming tiles
+- **Royalties crown** -- appears when you have political royalties to collect
+
+The title pill on the right shows your current political rank (Mayor, Governor
+or President) and the territory it applies to. Long names scroll inside the pill
+rather than pushing it across the buttons.
+
+### Events Hub
+
+The **EVENTS** tab opens a list rather than a single screen:
+
+- **Global Challenge** -- pinned to the top while it is running, with a live
+  progress bar. Once it ends it drops to the bottom as a greyed-out row showing
+  how long until the next round.
+- **Daily Progress** -- the 30-day login calendar, daily quests and badges
+- **Weekly Treasury Pool** -- the top-10 weekly dividend
+
+Each row shows its own notification dot when there is something to claim, so you
+can tell which event is asking before you open anything.
+
+### Left Rail
+
+Stacked along the left edge:
+
+| Item | What it is |
+|---|---|
+| **MINE** | Your Diamond Extractor, with a dot when it is ready to collect |
+| **RANKS** | Leaderboards |
+| **PET** | Your companion, with a mood percentage and berry count |
+
+Global Challenge, the Weekly Pool and the daily calendar all live in **EVENTS**
+now rather than here.
+
+### Activity Ticker
+
+A single line under the stats bar shows the latest worldwide event. Tap it to
+expand the full list; tap again to collapse it back to one line.
+
+---
+
 ## Currencies
 
 ### Elden Bucks (EB)
@@ -79,12 +144,13 @@ Elden Earth runs as a **Progressive Web App (PWA)**. No app store download neede
 - **Starting amount:** 0
 - **Cannot be purchased** -- earned entirely through walking and gameplay
 
-### Simulated Cash ($)
+### Realm Coins (RC)
 
-- **Symbol:** Dollar sign ($)
-- **Primary use:** Display only -- shows your passive income accumulation
+- **Symbol:** RC
+- **Primary use:** Display of your passive income accumulation; convertible to EB and Diamonds on the Rewards screen
 - **Generated from:** Owned land tiles every second based on rarity
-- **Can be spent** -- Display of your earnings, can be spent on unlocking game features e.g. cupgrades for Extractor Mine or Citadel
+- **Can be spent** -- Convert RC → EB + Diamonds, or spend it on unlocking game features e.g. upgrades for the Extractor Mine or Citadel
+- **Not money.** RC is an in-game figure with no monetary value. Only Reward Points (RP) are redeemable, and only through the Rewards Program -- see [Rewards Program Terms](../rewards-terms.html).
 
 ### Lifetime Accrued Rent
 
@@ -427,7 +493,7 @@ Hold all 3 titles simultaneously for a **+6 EB (6%) Triple Crown Royalty** depos
 
 ### What Is It?
 
-Every **Monday at 00:00 UTC**, the game distributes **1% of global lifetime rent** to the top 10 players.
+Every **Monday at 00:00 UTC**, the game distributes **1% of global lifetime rent** to the top 10 players. Opened from **EVENTS > Weekly Treasury Pool**.
 
 ### Distribution
 
@@ -443,7 +509,10 @@ Every **Monday at 00:00 UTC**, the game distributes **1% of global lifetime rent
 - Earn passive rent from owned land
 - Climb the **Lifetime Rent leaderboard**
 - Higher rank = larger share of the pool
-- Rewards auto-claim on Monday -- check the Treasury Pool modal
+- Rewards auto-claim on Monday -- the Events hub row shows a dot while yours is
+  waiting
+- Rewards are **activity-based**. They are never awarded for watching ads or by
+  chance, and are an in-game bonus rather than earnings
 
 ### Anti-Duplicate Protection
 
@@ -540,6 +609,8 @@ Players with political titles show their rank:
 
 ## Daily Calendar & Quests
 
+Opened from **EVENTS > Daily Progress** in the bottom tab bar.
+
 ### 30-Day Login Calendar
 
 Log in daily to claim escalating rewards:
@@ -559,17 +630,31 @@ Log in daily to claim escalating rewards:
 
 ### Daily Quests
 
-Actionable goals that reset daily:
+Actionable goals that reset at 00:00 UTC:
 
-| Quest | Task | Reward |
-|---|---|---|
-| **Wheel Spin** | Spin the diamond wheel | EB bonus |
-| **Gift a Friend** | Send a daily gift | EB bonus |
-| **Survey Realm** | Use Bird's Eye View | EB bonus |
-| **Land Claim** | Buy a new land plot | EB bonus |
+| Quest | Task |
+|---|---|
+| **Claim daily login bonus** | Settled automatically with your daily calendar claim |
+| **Spin the Diamond Wheel** | Spin the wheel |
+| **Send a gift to a friend** | Send a daily gift |
+| **Check Mayoralship & Dividends** | Open your political titles |
+| **Explore & survey 1 new area** | Claim a plot in a new location |
+| **Recall a defender from a Citadel** | Recall one defender |
+| **Recall 5 defenders from Citadels** | Recall five in one day |
+| **Convert Cash to EB** | Use the Rewards screen convert action |
+| **Spin an Elden Stop** | Spin a POI disc |
+| **Feed a berry to Buddy** | Feed your companion pet |
+| **Purchase 5 plots today** | Buy five plots |
+| **Ascension quest** | One tier-specific ascend quest per day |
 
-- Quests track completion in real-time
-- Claim rewards from the Calendar modal (Daily Quests tab)
+- Quests track completion in real-time and show progress for repeat-count goals
+- Claim rewards from the Calendar modal (Quests tab)
+- **The daily login quest cannot be claimed by hand.** It is settled in the same
+  action as your calendar reward and shows a completed check rather than a
+  claim button
+- Reward Points are awarded on some quests; the wheel and plot-purchase quests
+  deliberately pay EB only, because chance and purchased land cannot mint
+  redeemable value
 
 ---
 
@@ -634,11 +719,13 @@ A live ticker of worldwide game events:
 
 ### Features
 
-- **50-event buffer** (scrollable)
+- **One-line ticker** under the stats bar showing the most recent event
+- **Tap to expand** into a scrollable list; tap again to collapse
+- **50-event buffer**
 - **Country flag emojis** for each player
 - **City geocoding** for location context
 - **Timestamps** showing how long ago
-- **Unread badge** on the VIEW button when new events arrive
+- **Unread badge** on the ticker when new events arrive while it is collapsed
 
 ---
 

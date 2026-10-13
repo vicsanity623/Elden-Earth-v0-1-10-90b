@@ -44,10 +44,11 @@ EE/
 ├── android/                # WebView shell APK (Gradle project)
 │
 ├── css/
-│   └── style.css           # Cyberpunk dark theme, responsive, animations
+│   └── style.css           # Design tokens, dark theme, responsive, animations
 │
-├── js/                     # 33 IIFE singleton modules
+├── js/                     # 34 IIFE singleton modules
 │   ├── config.js           # Central tuning (rates, costs, Firebase keys)
+│   ├── format.js           # Shared currency/number formatter (Fmt.*)
 │   ├── auth.js             # Google OAuth, session blocking, ban checks
 │   ├── storage.js          # localStorage + Firestore cloud sync, session locks
 │   ├── main.js             # Game loop, GPS, camera, UI wiring, boot (4513 lines)
@@ -64,7 +65,7 @@ EE/
 │   ├── plot-ascension.js   # Plot Ascension Forge (3 same-rarity -> 1 next-rarity)
 │   ├── wheel.js            # CSPRNG spin wheel (Web Crypto API)
 │   ├── trade.js            # Player-to-player plot trades
-│   ├── feed.js             # Live 50-event activity feed with geocoding
+│   ├── feed.js             # Transparent one-line activity ticker (expandable)
 │   ├── leaderboard.js      # 4-tier scoped leaderboards (global/country/state/city)
 │   ├── chat.js             # Real-time global chat with profanity filter
 │   ├── friends.js          # Friend requests, daily gifts, relationship tracking
@@ -185,6 +186,58 @@ Real-time Snapshot -> All Connected Clients
 | Flash Wear Reduction | Debounced localStorage writes |
 | Low-Power WebGL | No MSAA, `powerPreference: "low-power"` |
 | Map Culling | Below zoom 14, all 3D/DOM objects hidden |
+
+### UI Architecture
+
+Every screen reads from one set of tokens in `css/style.css` `:root`, so a change
+there moves the whole app. Numbered layout offsets are deliberately avoided —
+anything that must clear the bottom chrome measures against a token.
+
+**Typography & figures.** `js/format.js` is the only place numbers are shaped.
+`Fmt.rc` / `rcPrecise` / `rcCompact` / `rate` / `usd` / `int` / `pct`. Live
+figures use `font-variant-numeric: tabular-nums` so rows do not shift as they
+tick. Do not call `toFixed()` for display — that is what produced `RC.955369559209686`.
+
+**Surfaces.** `--surface-1/2` are flat gradients that scale to any size. No
+raster frames: `button-frame.png` et al. were stretched with
+`background-size: 100% 100%` and distorted at small sizes. Icons are inline SVG
+(bottom nav) or small PNGs on a 26px slot (left rail).
+
+**Signal.** `--line` is a neutral hairline. Red (`--line-hot`, `--gold`) is
+reserved for *primary actions and live alerts only*. If everything glows,
+nothing is important — check a new element against `BUY LAND` before giving it
+an accent.
+
+**Bottom chrome & stacking.** All bottom chrome is body-level, outside
+`#game-screen`, because `.screen` is `z-index: 10` and would cap anything
+inside it below a modal. The fixed layer order:
+
+| layer | z-index |
+|---|---|
+| toast | 9999999 |
+| bottom nav | 60 |
+| modal / elden-overlay | 58 |
+| chat drawer | 57 |
+| CTA row, landlord pill | 55 |
+| `#game-screen` | 10 |
+
+**Layout tokens.** `--safe-b` is capped at 16px (the raw iOS inset is the full
+reachability zone, far larger than the home indicator). `--ad-slot`,
+`--bottom-stack`, `--top-chrome` and `--sheet-h` derive from it, so sheets snap
+between the top HUD and the tab bar at any device size. Every sheet
+`max-height` routes through `--sheet-h` — do not reintroduce a raw `85vh`.
+
+```
+┌─────────────────────────── ← --top-chrome
+│  top HUD (RC bar, sub-stats, feed)
+├───────────────────────────
+│                             ← sheet band (--sheet-h)
+├───────────────────────────
+│  CTA row · landlord pill    ← --bottom-stack
+│  bottom nav (5 tabs)        ← --nav-h
+│  ad slot                    ← --ad-slot (absorbs --safe-b)
+└─────────────────────────── ← bottom: 0
+```
 
 ---
 

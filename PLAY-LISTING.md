@@ -56,6 +56,13 @@ words.
 - One panel is worth a plain "Free to play · No purchase necessary" card.
 - If the rewards screen is shown at all, show the Reward Points balance and the
   progress bar — not a cash amount.
+- **Compose against the current chrome.** The game now has a five-tab bottom bar
+  (Land · Earn · Map · Events · Chat) and an Events hub listing the Global
+  Challenge, Daily Progress and Weekly Treasury Pool. The cleanest shot is the
+  map with the tab bar visible — it reads as a finished product and makes the
+  navigation legible at thumbnail size.
+- Avoid screenshots of the map at extreme zoom, where tile colours dominate and
+  the HUD looks cluttered.
 
 ---
 
