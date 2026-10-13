@@ -2240,7 +2240,89 @@
   }
 
   // ---------------- UI wiring ----------------
+  /**
+   * Pin modal titles and the ✕ button so they stay put while the body scrolls.
+   *
+   * .modal-card is the scroll container, so everything inside it — including
+   * the header — scrolled away. This moves the header chrome out of the scroll
+   * flow into a .modal-head and wraps the remainder in .modal-scroll. Purely
+   * structural: no markup changes, so it works across every modal including
+   * ones added later.
+   *
+   * Cards that already manage their own scrolling are left alone — they have an
+   * inner scroll region and already keep their chrome in place.
+   */
+  function pinModalHeaders() {
+    const SELF_MANAGED = /player-info-card|citadel-chamber-card|guide-modal-card|wheel-card/;
+    const HEADISH = /(header|head|icon|glow|badge|halo|burst)/i;
+
+    document.querySelectorAll(".modal-card").forEach((card) => {
+      if (card.dataset.headPinned === "1") return;
+      const cls = card.className || "";
+      if (SELF_MANAGED.test(cls)) return;
+
+      const kids = Array.from(card.children);
+      if (kids.length < 2) return;
+
+      const head = [];
+      let sawAnchor = false;
+
+      for (const k of kids) {
+        const isClose = k.classList && k.classList.contains("close-btn");
+        const tag = k.tagName;
+        // A *header* div almost always contains the title + subtitle.
+        const isHeaderDiv = k.classList && /header|head/i.test(k.className || "");
+        const isTitle = tag === "H2" || tag === "H3";
+        const isPara = tag === "P";
+        const isFraming = k.classList && /(icon|glow|badge|halo|burst)/i.test(k.className || "");
+
+        if (isClose || isHeaderDiv || isTitle || isPara || isFraming) {
+          head.push(k);
+          if (isClose || isHeaderDiv) sawAnchor = true;
+          // Title/subtitle caps the run — anything after is body.
+          if (isHeaderDiv || isTitle || isPara) break;
+        } else {
+          break;
+        }
+      }
+
+      // Nothing recognisable as a header: leave the card alone rather than
+      // guessing (simple confirm dialogs fall into this bucket).
+      if (!sawAnchor || head.length === 0) return;
+
+      // The ✕ is sometimes declared after the header block (royalties modal).
+      // Always pin it, wherever it sits.
+      kids.forEach((k) => {
+        if (k.classList && k.classList.contains("close-btn") && !head.includes(k)) {
+          head.unshift(k);
+        }
+      });
+
+      const body = kids.filter((k) => !head.includes(k));
+      if (body.length === 0) return;
+
+      const headWrap = document.createElement("div");
+      headWrap.className = "modal-head";
+      head.forEach((k) => headWrap.appendChild(k));
+
+      const bodyWrap = document.createElement("div");
+      bodyWrap.className = "modal-scroll";
+      body.forEach((k) => bodyWrap.appendChild(k));
+
+      card.appendChild(headWrap);
+      card.appendChild(bodyWrap);
+      card.classList.add("has-fixed-head");
+      card.dataset.headPinned = "1";
+    });
+  }
+
   function wireUI() {
+    // --- Pin modal headers ---
+    // .modal-card is the scroll container, so the title and the ✕ scrolled away
+    // with the content. Move the header chrome out of the scroll flow and give
+    // the rest a .modal-scroll wrapper. Runs once; markup is untouched.
+    pinModalHeaders();
+
     // --- Side HUD Stack Collapse Toggle ---
     const collapseBtn = el("side-hud-collapse");
     const hudStack = el("side-hud-stack");
