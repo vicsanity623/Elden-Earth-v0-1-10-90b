@@ -4871,6 +4871,17 @@
     setTimeout(() => {
       if (!Store.get()?.player?.id || !Store.getDb()) return;
       if (typeof Friends !== "undefined" && Friends.syncTradeAlerts) Friends.syncTradeAlerts();
+      // Sweep any friend gifts already waiting in the mailbox. Without this the
+      // only path to claimMailbox was the royalties flow, so gifts sat unclaimed
+      // and the "Receive N gifts" badges never moved.
+      if (typeof Friends !== "undefined" && Friends.claimDailyGifts) Friends.claimDailyGifts();
     }, 6000);
+
+    // Re-sweep every few minutes so a gift sent while the app is open still
+    // settles without the player having to open the Friends tab.
+    setInterval(() => {
+      if (!Store.get()?.player?.id || !Store.getDb()) return;
+      if (typeof Friends !== "undefined" && Friends.claimDailyGifts) Friends.claimDailyGifts();
+    }, 180000);
   });
 })();

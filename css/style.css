@@ -1975,6 +1975,13 @@ html,body{
   overflow: hidden !important;
   box-sizing: border-box !important;
 }
+/* Fixed-height chrome above the panel. Without this the column squashed the
+   tab row first, clipping "Profile / Citadel / Friends / Referrals" at the top. */
+.player-info-card > .pi-tabs,
+.player-info-card > .avatar-pending-banner,
+.player-info-card > .close-btn {
+  flex: 0 0 auto;
+}
 .player-info-card h2 {
   text-align: center;
   margin-bottom: 14px;
@@ -2228,6 +2235,10 @@ html,body{
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  /* Never compress below its own content height. */
+  flex: 0 0 auto;
+  min-height: 42px;
+  align-items: stretch;
 }
 .pi-tabs::-webkit-scrollbar { display: none; }
 .pi-tab {
@@ -2596,6 +2607,57 @@ html,body{
   cursor: default;
   border-color: var(--line);
   color: var(--teal);
+}
+
+/* Green "Receive" action — the counterpart to .btn-gift. Previously there was
+   no way to claim an incoming gift at all. */
+.btn-receive-gift {
+  border: 1px solid var(--teal);
+  background: rgba(79, 214, 196, 0.16);
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+.btn-receive-gift:active { transform: scale(0.95); }
+
+/* Pending-gift banner at the top of the Friends tab. */
+.friends-gift-inbox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: rgba(79, 214, 196, 0.12);
+  border: 1px solid var(--teal);
+}
+
+.friends-gift-inbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.friends-gift-inbox-text strong {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--gold-hi);
+}
+
+.friends-gift-inbox-text span {
+  font-size: 10.5px;
+  color: var(--text-dim);
 }
 .btn-remove-friend {
   width: 28px;

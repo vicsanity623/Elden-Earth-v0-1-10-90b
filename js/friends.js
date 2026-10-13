@@ -434,6 +434,8 @@ const Friends = (() => {
         Store.save(true);
         if (typeof updateTopbar === "function") updateTopbar();
       }
+      // Only announce when something actually landed — this also runs on a
+      // timer, and a zero-amount toast every few minutes would be noise.
       if (result.giftsEb > 0) {
         toast(`🎁 Claimed ${result.giftsEb} EB from friend gift${result.giftsEb > 1 ? 's' : ''}!`, 4000);
       }
@@ -483,6 +485,32 @@ const Friends = (() => {
       console.warn("[Friends] Could not fetch friendships:", e);
     }
 
+    // Unclaimed gifts waiting for ME. Without a receive affordance these sat
+    // forever, so claimMailbox never ran and the "Receive N gifts" badges never
+    // moved off zero.
+    const pendingGiftsBySender = new Map();
+    let pendingGiftCount = 0;
+    let pendingGiftEb = 0;
+    try {
+      const giftSnap = await d.collection("daily_gifts")
+        .where("toId", "==", id)
+        .where("claimed", "==", false)
+        .get();
+      giftSnap.docs.forEach(g => {
+        const gData = g.data() || {};
+        const from = gData.fromId;
+        if (!from) return;
+        pendingGiftCount++;
+        pendingGiftEb += Number(gData.amount) || 0;
+        const prev = pendingGiftBySender.get(from) || { count: 0, name: "" };
+        prev.count++;
+        if (gData.fromName) prev.name = gData.fromName;
+        pendingGiftBySender.set(from, prev);
+      });
+    } catch (e) {
+      console.warn("[Friends] Could not fetch pending gifts:", e);
+    }
+
     // Update notification dot on avatar
     const dot = document.getElementById("friend-request-dot");
     if (dot) {
@@ -497,6 +525,19 @@ const Friends = (() => {
     const myAvatarVal = myAvatar();
 
     let html = "";
+
+    // Pending gifts banner — the only way gifts ever get claimed was by luck
+    // (the royalty mailbox path). Make it explicit and always visible.
+    if (pendingGiftCount > 0) {
+      html += `
+        <div class="friends-gift-inbox">
+          <div class="friends-gift-inbox-text">
+            <strong>🎁 ${pendingGiftCount} gift${pendingGiftCount > 1 ? "s" : ""} waiting</strong>
+            <span>${pendingGiftEb} EB to collect from your friends</span>
+          </div>
+          <button class="btn-receive-gift" onclick="Friends.claimDailyGifts();Friends.renderFriendsTab();">Receive</button>
+        </div>`;
+    }
 
     // Incoming Requests Section
     if (incoming.length > 0) {
@@ -545,6 +586,11 @@ const Friends = (() => {
 
         const av = friendAvatar && friendAvatar.startsWith("img:")
           ? `<img src="${friendAvatar.slice(4)}">` : `<span>${friendAvatar || "🙂"}</span>`;
+        // A gift this friend sent me that I have not claimed yet.
+        const incomingGift = pendingGiftsBySender.get(friendId);
+        const receiveBtn = incomingGift
+          ? `<button class="btn-receive-gift" onclick="Friends.claimDailyGifts();Friends.renderFriendsTab();">🎁 Receive</button>`
+          : "";
         html += `
           <div class="friend-row" onclick="Friends.openFriendshipDetail({ name: '${escapeHtml(friendName).replace(/'/g, "\\'")}', fsId: '${fs.id}', friendId: '${friendId}', alreadyGifted: ${alreadyGifted}, xp: ${fsXp}, reward: '+5 EB', quest: 'Send gifts and trade plots to earn Friendship XP and level up your hearts.'}); event.stopPropagation();" style="cursor:pointer;">
             <div class="friend-avatar">${av}</div>
@@ -554,6 +600,7 @@ const Friends = (() => {
             </div>
             <div class="friend-actions" onclick="event.stopPropagation();">
               <span class="friend-hearts-mini" title="${fsXp} Friendship XP">${"♥".repeat(fsHearts)}${"♡".repeat(CONFIG.FRIENDSHIP.MAX_HEARTS - fsHearts)}</span>
+              ${receiveBtn}
               <button class="btn-gift ${alreadyGifted ? 'gifted' : ''}"
                 ${alreadyGifted ? 'disabled' : ''}
                 onclick="Friends.sendDailyGift('${fs.id}','${friendId}','${escapeHtml(friendName)}')">

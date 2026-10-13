@@ -9,6 +9,9 @@ android/app/release/
 android/app/debug/
 *.keystore
 google-services.json
+.env
+.changelog-last-posted
+post-changelog.sh
 
 # Peer
 SCPR.md
