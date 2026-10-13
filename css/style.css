@@ -4400,7 +4400,18 @@ body.buy-mode #treasury-ad-container {
   position: relative;
   pointer-events: auto;
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.65));
+  /* Shadow lives on .side-hud-card as a box-shadow, NOT here as a
+     drop-shadow filter. A `filter` promotes the element to its own
+     compositing layer, and when the button is hidden with display:none iOS
+     can leave that layer painted — which is why the boost/multiplier shadow
+     outlived its button until entering buy-mode forced a repaint. */
+}
+
+/* Belt and braces: never let a hidden button keep a composited layer around.
+   The real fix is that .side-hud-btn no longer carries a `filter` at all. */
+.side-hud-btn.hidden {
+  filter: none !important;
+  transition: none !important;
 }
 
 .side-hud-btn:active {
@@ -4418,6 +4429,8 @@ body.buy-mode #treasury-ad-container {
   border-radius: 13px;
   background: var(--surface-1);
   border: 1px solid var(--line-subtle);
+  /* box-shadow, not a parent drop-shadow filter — see .side-hud-btn. */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4447,7 +4460,8 @@ body.buy-mode #treasury-ad-container {
   background: var(--surface-1) !important;
   border: 1px solid var(--line-subtle) !important;
   border-radius: 13px !important;
-  box-shadow: none !important;
+  /* Same shadow as .side-hud-card — these modifiers must not opt out of it. */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.65) !important;
   display: flex;
   align-items: center;
   justify-content: center;
