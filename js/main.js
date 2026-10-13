@@ -312,6 +312,14 @@
     // Image Safety Review Status: Shows centered banner while pending; vanishes when approved!
     const isPending = !isOtherPlayer && state.player?.avatarStatus === "pending";
     if (el("avatar-pending-banner")) el("avatar-pending-banner").classList.toggle("hidden", !isPending);
+    // Name changes are moderated the same way: show what is waiting on staff.
+    const pendingName = !isOtherPlayer ? (state.player?.pendingName || "") : "";
+    const nameBanner = el("name-pending-banner");
+    if (nameBanner) {
+      nameBanner.classList.toggle("hidden", !pendingName);
+      const t = el("name-pending-text");
+      if (t && pendingName) t.textContent = `Your new name "${pendingName}" is under review.`;
+    }
     const avatar = isOtherPlayer ? (targetPlayerData.avatar || "🙂") : (state.player.avatar || "🙂");
 
     el("info-name").textContent = name;
@@ -3288,112 +3296,107 @@
     // Rename Player on Name Pencil Tap (With Unique Name Registry & "Vic" Lock)
     el("edit-name-btn")?.addEventListener("click", async () => {
       const state = Store.get();
-      const db = Store.getDb();
       const currentName = state?.player?.name || "Traveler";
-      const myId = state?.player?.id;
 
-      const newName = prompt("Choose your unique realm name (2–16 characters):", currentName);
+      const newName = prompt(
+        "Choose a new realm name (2–16 characters).\n\nName changes are reviewed by staff before they go live.",
+        currentName
+      );
       if (!newName) return;
       const cleanName = newName.trim().slice(0, 16);
       if (cleanName.length < 2 || cleanName === currentName) return;
 
-      // Server-side validation (profanity filter + strike system)
-      if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
-        try {
-          const result = await ServerAntiCheat.validateUsername(cleanName);
-          
-          if (!result.valid) {
-            if (result.banned) {
-              showToast(`⛔ ${result.reason}`, 5000);
-              setTimeout(() => window.location.reload(), 3000);
-              return;
-            }
-            if (result.nameReset) {
-              showToast(` ${result.reason}`, 4000);
-              if (typeof Store.syncFromCloud === "function") {
-                await Store.syncFromCloud();
-                updateTopbar();
-                updatePlayerInfoModal();
-              }
-              return;
-            }
-            showToast(`⚠️ ${result.reason}`, 3500);
+      if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+        showToast("⚠️ Server connection required to request a name change.", 3500);
+        return;
+      }
+
+      try {
+        // NOT validateUsername() — that applies the rename instantly. Names are
+        // moderated now: requestNameChange stages it for admin approval, exactly
+        // like an avatar photo under safety review.
+        const result = await ServerAntiCheat.requestNameChange(cleanName);
+
+        if (!result.ok) {
+          if (result.banned) {
+            showToast(`⛔ ${result.reason}`, 5000);
+            setTimeout(() => window.location.reload(), 3000);
             return;
           }
-
-          state.player.name = result.name;
-          Store.save(true);
-          updateTopbar();
-          updatePlayerInfoModal();
-          showToast(`Name updated to "${result.name}"!`);
-        } catch (err) {
-          console.warn("[Name] Server validation failed:", err);
-          showToast("️ Name change unavailable. Try again.", 3000);
-          return;
-        }
-      } else {
-        // Fallback: client-side validation only
-        const lowerName = cleanName.toLowerCase();
-        const reservedSystemNames = ["vic", "admin", "developer", "system", "moderator", "official"];
-        if (reservedSystemNames.includes(lowerName)) {
-          showToast(`⛔ The handle "${cleanName}" is a reserved developer handle and cannot be claimed.`, 4000);
-          return;
-        }
-
-        if (db && myId) {
-          try {
-            const nameDoc = await db.collection("usernames").doc(lowerName).get();
-            if (nameDoc.exists) {
-              const existingOwner = nameDoc.data().uid;
-              if (existingOwner && existingOwner !== myId) {
-                showToast(`⚠️ The name "${cleanName}" is already taken by another player. Please pick a unique name!`, 4000);
-                return;
-              }
+          if (result.nameReset) {
+            showToast(`${result.reason}`, 4000);
+            if (typeof Store.syncFromCloud === "function") {
+              await Store.syncFromCloud();
+              updateTopbar();
+              updatePlayerInfoModal();
             }
-
-            await db.collection("usernames").doc(lowerName).set({
-              uid: myId,
-              name: cleanName,
-              updatedAt: Date.now()
-            });
-
-            if (currentName && currentName !== "Traveler" && currentName.toLowerCase() !== lowerName) {
-              db.collection("usernames").doc(currentName.toLowerCase()).delete().catch(() => {});
-            }
-          } catch (err) {
-            console.warn("[Registry] Username check notice:", err);
+            return;
           }
+          showToast(`⚠️ ${result.reason}`, 3500);
+          return;
         }
 
-        state.player.name = cleanName;
+        // Remember it locally so the pending banner shows immediately.
+        state.player.pendingName = cleanName;
         Store.save(true);
-        updateTopbar();
         updatePlayerInfoModal();
-        showToast(`Name updated to "${cleanName}"!`);
+        showToast(`📝 Name change to "${cleanName}" submitted for review.`, 4500);
+      } catch (err) {
+        console.warn("[Name] Name-change request failed:", err);
+        showToast("⚠️ Could not submit name change. Try again later.", 3500);
       }
+    });
 
-      // 4. Broadcast name change to all owned plots in Firestore so other players see it
-      if (db && myId && state.plots) {
-        try {
-          const batch = db.batch();
-          const snap = await db.collection("plots").where("ownerId", "==", myId).get();
-          snap.forEach((doc) => {
-            batch.update(doc.ref, { ownerName: cleanName });
-          });
-          await batch.commit();
-
-          if (typeof Grid !== "undefined" && Grid.render) {
-            for (const tid in state.plots) {
-              if (state.plots[tid].ownerId === myId) {
-                state.plots[tid].ownerName = cleanName;
-              }
-            }
-            Grid.render();
-          }
-        } catch (err) {
-          console.warn("[Multiplayer] Error updating name across plots:", err);
-        }
+    // ---- Admin: name-change review queue (mirrors the avatar review flow) ----
+    async function renderNameQueue() {
+      const list = el("name-queue-list");
+      if (!list) return;
+      list.innerHTML = `<div class="feed-empty-msg">Loading…</div>`;
+      const res = (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.listNameChangeRequests)
+        ? await ServerAntiCheat.listNameChangeRequests()
+        : null;
+      const rows = (res && res.requests) || [];
+      if (!rows.length) {
+        list.innerHTML = `<div class="feed-empty-msg">No pending name change requests.</div>`;
+        return;
       }
+      list.innerHTML = rows.map((r) => `
+        <div class="name-queue-row" data-uid="${r.uid}">
+          <div class="name-queue-text">
+            <strong>${escapeHtmlFallback(String(r.currentName || "?"))}</strong>
+            <span>→</span>
+            <strong class="name-queue-new">${escapeHtmlFallback(String(r.requestedName || "?"))}</strong>
+            <small>${new Date(Number(r.requestedAt) || 0).toLocaleString()}</small>
+          </div>
+          <div class="name-queue-actions">
+            <button class="btn-receive-gift" data-name-approve="${r.uid}">Approve</button>
+            <button class="btn-remove-friend" data-name-reject="${r.uid}" title="Reject">✕</button>
+          </div>
+        </div>`).join("");
+
+      list.querySelectorAll("[data-name-approve]").forEach((b) => {
+        b.addEventListener("click", async () => {
+          const uid = b.getAttribute("data-name-approve");
+          b.disabled = true;
+          const r = await ServerAntiCheat.approveNameChange(uid);
+          showToast(r && r.ok ? `✅ Approved "${r.name}"` : `⚠️ ${(r && r.reason) || "Could not approve"}`, 3500);
+          renderNameQueue();
+        });
+      });
+      list.querySelectorAll("[data-name-reject]").forEach((b) => {
+        b.addEventListener("click", async () => {
+          const uid = b.getAttribute("data-name-reject");
+          b.disabled = true;
+          const r = await ServerAntiCheat.rejectNameChange(uid, "rejected_by_staff");
+          showToast(r && r.ok ? "Rejected." : "⚠️ Could not reject", 3000);
+          renderNameQueue();
+        });
+      });
+    }
+
+    el("admin-name-queue-btn")?.addEventListener("click", () => {
+      openModal("name-queue-modal");
+      renderNameQueue();
     });
 
     // 1. Remote Citadel Recall
@@ -4965,5 +4968,11 @@
       if (!Store.get()?.player?.id || !Store.getDb()) return;
       if (typeof Friends !== "undefined" && Friends.claimDailyGifts) Friends.claimDailyGifts();
     }, 180000);
+
+    // Trade receipts for swaps that settled while this player was offline.
+    setTimeout(() => {
+      if (!Store.get()?.player?.id) return;
+      if (typeof Trade !== "undefined" && Trade.checkPendingResults) Trade.checkPendingResults();
+    }, 8000);
   });
 })();

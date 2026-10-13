@@ -10322,3 +10322,44 @@ body.birds-eye-mode .top-hud-row {
 }
 .btn-ghost:hover:not(:disabled) { color: var(--parchment, #f4e9d8); }
 .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Admin name-change queue ---------- */
+.name-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.name-queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-subtle);
+}
+.name-queue-text {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+.name-queue-text strong { color: var(--parchment); font-weight: 700; }
+.name-queue-new { color: var(--teal); }
+.name-queue-text small {
+  flex: 1 0 100%;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.name-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}

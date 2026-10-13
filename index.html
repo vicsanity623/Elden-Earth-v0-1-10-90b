@@ -564,6 +564,11 @@
       <span>⏳</span> Your photo is under safety review.
     </div>
 
+    <!-- Name Change Pending Banner -->
+    <div id="name-pending-banner" class="avatar-pending-banner hidden">
+      <span>⏳</span> <span id="name-pending-text">Your new name is under review.</span>
+    </div>
+
     <!-- Hidden file input for photo upload -->
     <input type="file" id="avatar-file-input" accept="image/*" style="display:none" />
 
@@ -596,6 +601,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="admin-ban-btn" class="btn" style="flex:1 1 130px;min-width:130px;background:rgba(248,113,113,0.18);border:1px solid #f87171;color:#f87171;font-size:12px;padding:8px 10px;">⛔ Ban Player</button>
           <button id="admin-purge-btn" class="btn" style="flex:1 1 130px;min-width:130px;background:rgba(239,68,68,0.28);border:1px solid #ef4444;color:#fff;font-size:12px;padding:8px 10px;">🗑 Delete Player</button>
+          <button id="admin-name-queue-btn" class="btn" style="flex:1 1 130px;min-width:130px;background:rgba(255,255,255,0.08);border:1px solid var(--line);color:var(--parchment);font-size:12px;padding:8px 10px;">📝 Name Requests</button>
         </div>
         <div id="admin-action-status" class="hidden" style="margin-top:8px;font-size:11px;color:var(--text-dim);"></div>
       </div>
@@ -1363,6 +1369,21 @@
 
     <div class="events-hub-section-label" id="events-hub-upcoming-label">Upcoming</div>
     <div class="events-hub-list" id="events-hub-upcoming-list"></div>
+  </div>
+</div>
+
+<!-- ===================== ADMIN — NAME CHANGE REQUESTS =====================
+     Mirrors the avatar review flow: players request, staff approve/reject. -->
+<div id="name-queue-modal" class="modal hidden">
+  <div class="modal-card name-queue-card">
+    <button class="close-btn" data-close="name-queue-modal">✕</button>
+    <div class="events-hub-header">
+      <h2>Name Requests</h2>
+      <p class="modal-sub">Approve or reject player name changes</p>
+    </div>
+    <div id="name-queue-list" class="name-queue-list">
+      <div class="feed-empty-msg">Loading…</div>
+    </div>
   </div>
 </div>
 

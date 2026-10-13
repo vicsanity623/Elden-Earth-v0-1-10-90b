@@ -486,6 +486,78 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  /** Receipts for trades that settled while this player was offline. */
+  async function listTradeResults() {
+    if (!functions) return { ok: false, results: [] };
+    try {
+      const fn = functions.httpsCallable("listTradeResults");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] listTradeResults failed:", e.message);
+      return { ok: false, results: [] };
+    }
+  }
+
+  /** Mark receipts as seen (only after the result screen is up). */
+  async function ackTradeResults(ids) {
+    if (!functions) return { ok: false, acked: 0 };
+    try {
+      const fn = functions.httpsCallable("ackTradeResults");
+      return (await fn({ ids: Array.isArray(ids) ? ids : [] })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] ackTradeResults failed:", e.message);
+      return { ok: false, acked: 0 };
+    }
+  }
+
+  /** Request a display-name change for admin approval. */
+  async function requestNameChange(name) {
+    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("requestNameChange");
+      return (await fn({ name })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] requestNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  /** Admin: pending name-change queue. */
+  async function listNameChangeRequests() {
+    if (!functions) return { ok: false, requests: [] };
+    try {
+      const fn = functions.httpsCallable("listNameChangeRequests");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] listNameChangeRequests failed:", e.message);
+      return { ok: false, requests: [] };
+    }
+  }
+
+  /** Admin: apply a requested name change. */
+  async function approveNameChange(uid) {
+    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("approveNameChange");
+      return (await fn({ uid })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] approveNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  /** Admin: reject a requested name change. */
+  async function rejectNameChange(uid, reason) {
+    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("rejectNameChange");
+      return (await fn({ uid, reason })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] rejectNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
   async function claimWeeklyPool() {
     if (!functions) return { claimed: false, reason: "not_ready" };
     try {
@@ -619,5 +691,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade };
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange };
 })();

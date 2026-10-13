@@ -91,6 +91,7 @@ const Trade = (() => {
       return;
     }
     trade = res.trade;
+    setExternalLocks(res.myLockedInstanceIds);
     // A resumed trade may have been opened with the OTHER type — adopt it so
     // the header, fee text and bag reflect what will actually settle.
     if (res.resumed && trade.type && trade.type !== current.type) {
@@ -185,6 +186,7 @@ const Trade = (() => {
     if (!res || !res.ok) return;
     const prev = trade;
     trade = res.trade;
+    setExternalLocks(res.myLockedInstanceIds);
     if (trade.status === "completed" && prev.status !== "completed") {
       stopPolling();
       applyCompletedTrade();
@@ -202,18 +204,43 @@ const Trade = (() => {
   // The plot already committed to this trade stays in the cloud bag but is
   // frozen by trade_locks — hide it from the pickable count so it never
   // looks like a spare copy you could offer twice.
-  function committedInstanceId() {
+  //
+  // lockedInstanceIds() also covers plots committed to OTHER live trades. A
+  // stacked bag holds two Commons; if one is already promised to a different
+  // friend, offering it bounces with `plot_busy`. The server sends the live
+  // lock set on create/get so the picker can skip them.
+  let externalLocks = new Set();
+
+  function setExternalLocks(ids) {
+    externalLocks = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
+  }
+
+  // Remember a plot the server just told us is busy. Self-healing: the server
+  // also ships myLockedInstanceIds, but a stale deploy or a race can still hand
+  // the picker a plot that is committed to another friend's trade.
+  function markLocked(id) {
+    if (id) externalLocks.add(id);
+  }
+
+  function lockedInstanceId() {
     return (trade && trade.mine && trade.mine.committed) ? trade.mine.instanceId : null;
+  }
+
+  function lockedIds() {
+    const s = new Set(externalLocks);
+    const self = lockedInstanceId();
+    if (self) s.add(self);
+    return s;
   }
 
   function bagGroups() {
     const s = state();
     const items = s?.plotBagItems || {};
     const lucky = s?.luckyBagItems || {};
-    const locked = committedInstanceId();
+    const locked = lockedIds();
     const groups = {};
     for (const id in items) {
-      if (locked && id === locked) continue;
+      if (locked.has(id)) continue;
       const r = String(items[id] || "common").split("_")[0];
       const isL = lucky[id] === true;
       const key = isL ? `${r}~lucky` : r;
@@ -252,15 +279,18 @@ const Trade = (() => {
     });
   }
 
-  // Pick the first instance in this rarity+lucky group (exact-match, so a
-  // Lucky Common never gets confused with a normal Common).
+  // Pick the first FREE instance in this rarity+lucky group (exact-match, so a
+  // Lucky Common never gets confused with a normal Common). Skips anything
+  // committed to another live trade — with a stacked bag the first matching id
+  // may already be promised to a different friend.
   function pickFromGroup(rarity, isLucky) {
     const s = state();
     const items = s?.plotBagItems || {};
     const lucky = s?.luckyBagItems || {};
-    const locked = committedInstanceId();
-    if (locked) return;
+    const locked = lockedIds();
+    if (lockedInstanceId()) return;
     for (const id in items) {
+      if (locked.has(id)) continue;
       if (String(items[id]).split("_")[0] !== rarity) continue;
       if ((lucky[id] === true) !== isLucky) continue;
       selectedInstance = id;
@@ -327,13 +357,31 @@ const Trade = (() => {
 
     if (trade.status === "selecting") {
       if (!selectedInstance) { toast("⚠️ Pick a plot first.", 2500); if (btn) btn.disabled = false; return; }
-      const res = await ServerAntiCheat.selectTradePlot({ tradeId: trade.tradeId, instanceId: selectedInstance });
+      // The picker can still hand us a plot another trade owns (stale deploy,
+      // or a commit that landed after the bag rendered). Mark it busy and move
+      // to the next free instance of the same rarity instead of failing.
+      let res = await ServerAntiCheat.selectTradePlot({ tradeId: trade.tradeId, instanceId: selectedInstance });
+      if (res && !res.ok && res.reason === "plot_busy") {
+        const s0 = state();
+        const wantRarity = String((s0?.plotBagItems || {})[selectedInstance] || "").split("_")[0];
+        const wantLucky = Boolean((s0?.luckyBagItems || {})[selectedInstance]);
+        markLocked(selectedInstance);
+        pickFromGroup(wantRarity, wantLucky);
+        if (selectedInstance) {
+          res = await ServerAntiCheat.selectTradePlot({ tradeId: trade.tradeId, instanceId: selectedInstance });
+        }
+      }
       if (!res || !res.ok) {
+        // Whatever we tried is committed elsewhere — remember it so the next
+        // tap cannot pick the same plot again.
+        if (res && res.reason === "plot_busy") markLocked(selectedInstance);
         toast("⚠️ " + failText(res && res.reason), 3000);
+        renderBag();
         if (btn) btn.disabled = false;
         return;
       }
       trade = res.trade;
+      if (res.myLockedInstanceIds) setExternalLocks(res.myLockedInstanceIds);
       selectedInstance = null;
       setStatus(trade.status, statusText(trade.status));
       renderBag(); renderSlots(); updateConfirmButton();
@@ -498,11 +546,51 @@ const Trade = (() => {
   }
 
   // ---------- PUBLIC API ----------
+  /**
+   * Show the result screen for trades that SETTLED while this player was
+   * offline. confirmTrade writes a receipt per participant; without this the
+   * partner who was away never learned what landed in their bag.
+   */
+  async function checkPendingResults() {
+    if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) return;
+    let res;
+    try {
+      res = await ServerAntiCheat.listTradeResults();
+    } catch (e) {
+      console.warn("[Trade] result fetch failed:", e);
+      return;
+    }
+    const list = (res && res.results) || [];
+    if (!list.length) return;
+
+    // One at a time — the modal is single-instance.
+    for (const rec of list) {
+      const t = rec.trade || {};
+      const received = t.result && t.result.mine;
+      if (received && received.rarity) {
+        showTradeResult({
+          received,
+          sentRarity: t.mine && t.mine.rarity,
+          feeEb: t.feeEb || 0,
+          remote: t.type === "remote",
+        });
+      }
+      // Only ack after the screen is up, so a crash cannot eat the notice.
+      try {
+        await ServerAntiCheat.ackTradeResults({ ids: [rec.id] });
+      } catch (e) {
+        console.warn("[Trade] result ack failed:", e);
+      }
+      break;
+    }
+  }
+
   return {
     open,
     close,
     onConfirm,
     onCancel,
+    checkPendingResults,
     get current() { return current; },
     get trade() { return trade; },
   };
