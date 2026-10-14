@@ -270,18 +270,35 @@ const Grid = (() => {
     showToast(`📦 Plot picked up! Added ${rarityLabel} Plot to your bag.`, 3500);
   }
 
+  // Plots committed to a live trade cannot be placed until it settles. The
+  // server falls back to a free sibling, but the picker must not OFFER a
+  // locked one — otherwise "x2 Common" shows and the player still gets told
+  // the plot is in a trade. Lives at module scope so both the picker and the
+  // bag render can call it.
+  function tradeLockedSet() {
+    try {
+      if (typeof Trade !== "undefined" && Array.isArray(Trade.lockedIds)) {
+        return new Set(Trade.lockedIds);
+      }
+    } catch (e) { /* Trade not ready yet */ }
+    return new Set();
+  }
+
   function openPlotBag() {
     const state = Store.get();
     const items = document.getElementById("plot-bag-items");
     if (!items) return;
     items.innerHTML = "";
+
     // Phase 2: group instance IDs by rarity; fall back to legacy counters.
-    // 🍀 Lucky plots stack separately so a Lucky Common renders as its own
-    // rainbow "🍀 Common Plot x3" button.
+  // 🍀 Lucky plots stack separately so a Lucky Common renders as its own
+  // rainbow "🍀 Common Plot x3" button.
     const counts = {};
+    const locked = tradeLockedSet();
     const hasItems = state.plotBagItems && typeof state.plotBagItems === "object" && Object.keys(state.plotBagItems).length > 0;
     if (hasItems) {
       for (const id in state.plotBagItems) {
+        if (locked.has(id)) continue;
         const rarity = String(state.plotBagItems[id] || "common").split("_")[0];
         const lucky = state.luckyBagItems && state.luckyBagItems[id] === true;
         const key = lucky ? `${rarity}~lucky` : rarity;
@@ -317,11 +334,14 @@ const Grid = (() => {
 
   // Resolve the bag instance a button was rendered for — same rarity AND the
   // same 🍀 flag. openPlotBag() groups with the identical predicate, so render
-  // and click can never disagree on a fresh snapshot.
+  // and click can never disagree on a fresh snapshot. Skips plots committed to
+  // a live trade so we never hand the server an instance it must reject.
   function findBagInstance(state, rarityKey, wantLucky) {
     const items = state && state.plotBagItems;
     if (!items || typeof items !== "object") return null;
+    const locked = tradeLockedSet();
     return Object.keys(items).find((id) => {
+      if (locked.has(id)) return false;
       if (String(items[id] || "common").split("_")[0] !== rarityKey) return false;
       const isLucky = !!(state.luckyBagItems && state.luckyBagItems[id] === true);
       return isLucky === wantLucky;
@@ -332,8 +352,9 @@ const Grid = (() => {
   function findBagInstanceAnyLucky(state, rarityKey) {
     const items = state && state.plotBagItems;
     if (!items || typeof items !== "object") return null;
+    const locked = tradeLockedSet();
     return Object.keys(items).find((id) =>
-      String(items[id] || "common").split("_")[0] === rarityKey) || null;
+      !locked.has(id) && String(items[id] || "common").split("_")[0] === rarityKey) || null;
   }
 
   async function placeBagPlot(slot) {

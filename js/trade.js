@@ -609,6 +609,8 @@ const Trade = (() => {
     onConfirm,
     onCancel,
     checkPendingResults,
+    /** Plots committed to any live trade — the bag picker must skip these. */
+    get lockedIds() { return Array.from(lockedIds()); },
     get current() { return current; },
     get trade() { return trade; },
   };
