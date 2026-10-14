@@ -224,19 +224,26 @@ var Referrals;
 
       // Fetch royalty stats from cloud
       let royaltyTotal = 0;
+      let serverReferralCount = 0;
       try {
         if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
           const royaltyResult = await ServerAntiCheat.claimReferralRoyalties();
           royaltyTotal = Number(royaltyResult?.totalRoyalty) || 0;
+          serverReferralCount = Number(royaltyResult?.referralCount) || 0;
         }
       } catch (e) {}
 
+      // The server counts `referrals` authoritatively. If the client-side query
+      // came back empty (stale session, rules hiccup) trust the server count so
+      // the panel never claims "0 REFERRALS" while royalties are accruing.
+      const referralCountShown = Math.max(referrals.length, serverReferralCount);
+
       let statsHtml = "";
-      if (referrals.length > 0 || bonusRows.length > 0 || royaltyTotal > 0) {
+      if (referralCountShown > 0 || bonusRows.length > 0 || royaltyTotal > 0) {
         statsHtml = `
           <div class="referral-stats-card">
             <div class="referral-stat">
-              <span class="referral-stat-val">${referrals.length}</span>
+              <span class="referral-stat-val">${referralCountShown}</span>
               <span class="referral-stat-label">Referrals</span>
             </div>
             <div class="referral-stat">

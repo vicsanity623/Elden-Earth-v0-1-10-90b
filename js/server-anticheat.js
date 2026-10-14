@@ -501,9 +501,11 @@ const ServerAntiCheat = (() => {
   /** Mark receipts as seen (only after the result screen is up). */
   async function ackTradeResults(ids) {
     if (!functions) return { ok: false, acked: 0 };
+    // Accept either an array or a { ids: [...] } payload — callers use both.
+    const list = Array.isArray(ids) ? ids : (Array.isArray(ids && ids.ids) ? ids.ids : []);
     try {
       const fn = functions.httpsCallable("ackTradeResults");
-      return (await fn({ ids: Array.isArray(ids) ? ids : [] })).data;
+      return (await fn({ ids: list })).data;
     } catch (e) {
       console.warn("[ServerAntiCheat] ackTradeResults failed:", e.message);
       return { ok: false, acked: 0 };
