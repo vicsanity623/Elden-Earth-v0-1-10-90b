@@ -4956,6 +4956,10 @@
     setTimeout(() => {
       if (!Store.get()?.player?.id || !Store.getDb()) return;
       if (typeof Friends !== "undefined" && Friends.syncTradeAlerts) Friends.syncTradeAlerts();
+      // Live listener so a trade opening/committing while the Friends tab is
+      // open updates the dot and badge immediately instead of next time the
+      // modal is reopened.
+      if (typeof Friends !== "undefined" && Friends.startTradeAlertsListener) Friends.startTradeAlertsListener();
       // Sweep any friend gifts already waiting in the mailbox. Without this the
       // only path to claimMailbox was the royalties flow, so gifts sat unclaimed
       // and the "Receive N gifts" badges never moved.

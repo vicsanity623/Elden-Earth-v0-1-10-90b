@@ -38,7 +38,44 @@ const AgeGate = (() => {
         resolved = true;
       }
     } catch (e) { /* Store not ready yet */ }
+    // Local persistence: once this device has a confirmed answer, NEVER ask
+    // again — even if the cloud sync has not landed yet on the next launch.
+    // The server copy stays authoritative for redemption eligibility.
+    try {
+      const flag = Number(localStorage.getItem("ee_age_verified")) || 0;
+      if (flag > 0 && dobMs === 0) { dobMs = flag; resolved = true; }
+    } catch (e) { /* private mode */ }
     return dobMs;
+  }
+
+  function persistLocal(dob) {
+    try { localStorage.setItem("ee_age_verified", String(Math.floor(dob))); } catch (e) {}
+  }
+
+  /**
+   * Ask the server whether a DOB is already on record. This is the missing
+   * half: `Store.dateOfBirth` is only filled by the cloud sync, and the old
+   * init() only waited 1.2s — so on a slow connection it prompted every
+   * launch even though the server already had the answer.
+   */
+  async function checkStatus() {
+    if (resolved) return true;
+    if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady && ServerAntiCheat.isReady()) {
+      try {
+        const res = await ServerAntiCheat.getAgeStatus();
+        if (res && res.verified && Number(res.dateOfBirth) > 0) {
+          dobMs = Number(res.dateOfBirth);
+          resolved = true;
+          persistLocal(dobMs);
+          try {
+            const s = Store.get();
+            if (s) { s.dateOfBirth = dobMs; Store.save && Store.save(false); }
+          } catch (e) {}
+          return true;
+        }
+      } catch (e) { console.warn("[AgeGate] status check failed:", e); }
+    }
+    return readFromState() > 0;
   }
 
   function ageYears(now = Date.now()) {
@@ -86,12 +123,12 @@ const AgeGate = (() => {
     const setErr = (m) => { if (errEl) errEl.textContent = m; };
 
     const raw = input ? input.value : "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      setErr("Please enter your date of birth.");
+    const dob = parseDob(raw);
+    if (dob == null) {
+      setErr("Please enter your date of birth as MM/DD/YYYY.");
       return;
     }
-    const dob = Date.parse(raw + "T00:00:00Z");
-    if (!Number.isFinite(dob) || dob > Date.now()) {
+    if (dob > Date.now()) {
       setErr("That date doesn't look right.");
       return;
     }
@@ -108,6 +145,7 @@ const AgeGate = (() => {
 
       dobMs = Number(res.dateOfBirth) || dob;
       resolved = true;
+      persistLocal(dobMs);
 
       // Mirror into local state so the UI reflects it immediately. dateOfBirth
       // is not in SAFE_SAVE_FIELDS, so this never reaches the cloud — the
@@ -142,6 +180,43 @@ const AgeGate = (() => {
     }
   }
 
+  // ---- MM/DD/YYYY text entry -------------------------------------------
+  // <input type="date"> opens a calendar wheel on iOS Safari, which is
+  // unusable when it lands under another panel — players could not see the
+  // picker and had to arrow through years. Free-text typing is faster and
+  // works everywhere; the field formats as you go.
+  function wireDateInput() {
+    const input = el("age-dob-input");
+    if (!input) return;
+    input.setAttribute("inputmode", "numeric");
+    input.setAttribute("autocomplete", "bday");
+    input.setAttribute("placeholder", "MM/DD/YYYY");
+    input.setAttribute("maxlength", "10");
+
+    input.addEventListener("input", () => {
+      // Auto-insert the slashes so the player just types digits.
+      let v = input.value.replace(/\D/g, "").slice(0, 8);
+      if (v.length > 4) v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+      else if (v.length > 2) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+      input.value = v;
+    });
+  }
+
+  /** Parse "MM/DD/YYYY" (also accepts "M/D/YYYY") into a UTC timestamp. */
+  function parseDob(raw) {
+    const m = String(raw || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    const mo = Number(m[1]), day = Number(m[2]), yr = Number(m[3]);
+    if (mo < 1 || mo > 12) return null;
+    if (day < 1 || day > 31) return null;
+    const t = Date.UTC(yr, mo - 1, day);
+    if (!Number.isFinite(t)) return null;
+    // Reject impossible dates (31 Feb rolls over silently in Date.UTC).
+    const d = new Date(t);
+    if (d.getUTCMonth() !== mo - 1 || d.getUTCDate() !== day) return null;
+    return t;
+  }
+
   function bind() {
     el("age-verify-confirm")?.addEventListener("click", submit);
     el("age-dob-input")?.addEventListener("keydown", (e) => {
@@ -152,22 +227,26 @@ const AgeGate = (() => {
   function init() {
     bind();
     readFromState();
+    // Wire up the MM/DD/YYYY text entry (see index.html).
+    wireDateInput();
 
-    // Prompt only when signed in and the save is already readable. The gate is
-    // advisory here — submitWithdrawalRequest is what actually enforces 18+.
-    if (needsPrompt()) {
-      setTimeout(() => {
-        try {
-          const signedIn = typeof firebase !== "undefined" && firebase.auth && firebase.auth().currentUser;
-          if (signedIn && needsPrompt()) openPrompt();
-        } catch (e) { /* ignore */ }
-      }, 1200);
-    }
+    // Never prompt more than once per account. Wait for BOTH the local flag
+    // and a server check before deciding — the old 1.2s timeout raced the cloud
+    // sync and re-asked on every launch.
+    setTimeout(async () => {
+      try {
+        const signedIn = typeof firebase !== "undefined" && firebase.auth && firebase.auth().currentUser;
+        if (!signedIn) return;
+        await checkStatus();
+        if (needsPrompt()) openPrompt();
+      } catch (e) { /* ignore */ }
+    }, 2500);
   }
 
   return {
     init,
     openPrompt,
+    checkStatus,
     needsPrompt,
     isVerified,
     isRedemptionEligible,

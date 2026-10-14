@@ -512,9 +512,20 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  /** Read-only age check — is a DOB already on record for this account? */
+  async function getAgeStatus() {
+    if (!functions) return { ok: false, verified: false };
+    try {
+      const fn = functions.httpsCallable("getAgeStatus");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getAgeStatus failed:", e.message);
+      return { ok: false, verified: false };
+    }
+  }
+
   /** Request a display-name change for admin approval. */
-  async function requestNameChange(name) {
-    if (!functions) return { ok: false, reason: "not_ready" };
+  async function requestNameChange(name) {    if (!functions) return { ok: false, reason: "not_ready" };
     try {
       const fn = functions.httpsCallable("requestNameChange");
       return (await fn({ name })).data;
@@ -693,5 +704,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange };
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange, getAgeStatus };
 })();

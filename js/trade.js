@@ -469,6 +469,15 @@ const Trade = (() => {
 
     const setTxt = (id, val) => { const n = el(id); if (n) n.textContent = val; };
 
+    // WHO this was with. The screen used to show only the plots, which was
+    // useless when you had several trades on the go.
+    const who = String(res.partnerName || (current && current.friendName) || "").trim();
+    const withEl = el("trade-result-with");
+    if (withEl) {
+      withEl.innerHTML = who ? `Traded with <strong>${escapeHtml(who)}</strong>` : "";
+      withEl.style.display = who ? "block" : "none";
+    }
+
     const badge = el("trade-result-rarity");
     if (badge) {
       badge.textContent = String(gotConf.label || "Plot").toUpperCase();
@@ -501,7 +510,9 @@ const Trade = (() => {
       }
     }
 
-    const remote = res.type === "remote";
+    // Both call sites pass the type in different shapes — accept either so a
+    // remote trade can never be labelled "Local — Free".
+    const remote = res.remote === true || res.type === "remote";
     setTxt("trade-result-cost-label", remote ? "Relay Fee Paid" : "Trade");
     setTxt("trade-result-cost", remote ? `${res.feeEb || 25} EB` : "📍 Local — Free");
 
@@ -522,6 +533,7 @@ const Trade = (() => {
       sentRarity: (trade.mine && trade.mine.rarity) || null,
       type: trade.type,
       feeEb: trade.feeEb || 0,
+      partnerName: (current && current.friendName) || "",
     };
     const set = (id, data) => {
       const node = el(id);
@@ -577,7 +589,8 @@ const Trade = (() => {
           received,
           sentRarity: t.mine && t.mine.rarity,
           feeEb: t.feeEb || 0,
-          remote: t.type === "remote",
+          type: t.type,
+          partnerName: rec.partnerName || "",
         });
       }
       // Only ack after the screen is up, so a crash cannot eat the notice.

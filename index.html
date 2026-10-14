@@ -211,7 +211,7 @@
     <div class="hero-balance-card" id="hero-balance-card">
       <div class="hero-top-line">
         <div class="hero-brand-title">
-          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.74b</span>
+          <span class="hero-brand-gem">◆</span> ELDEN EARTH <span class="hero-version-tag">0.1.11.75b</span>
         </div>
         <div id="boost-timer-badge" class="boost-timer-badge hidden">⚡ 20X BOOST <span id="boost-countdown">00:00:00</span></div>
       </div>
@@ -1474,6 +1474,7 @@
     <div id="trade-result-burst" class="asc-complete-burst"></div>
     <div class="forge-icon asc-complete-icon">🤝</div>
     <h2 class="asc-complete-title">TRADE COMPLETE</h2>
+    <p class="modal-sub" id="trade-result-with">Your new plot has arrived in your bag.</p>
     <p class="modal-sub" id="trade-result-sub">Your new plot has arrived in your bag.</p>
 
     <div class="asc-complete-rarity-box">
@@ -2135,7 +2136,7 @@
     <h2 style="font-family:var(--font-display);letter-spacing:1px;margin:4px 0 10px;">CONFIRM YOUR AGE</h2>
     <p class="modal-sub">Elden Earth is free to play — no purchase necessary. We ask for your date of birth once. You must be <strong>13 or older</strong> to play, and <strong>18 or older</strong> to redeem rewards.</p>
     <label for="age-dob-input" class="modal-sub" style="display:block;text-align:left;margin:16px 0 6px;">Date of birth</label>
-    <input type="date" id="age-dob-input" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--parchment);font-size:14px;">
+    <input type="text" id="age-dob-input" inputmode="numeric" autocomplete="bday" placeholder="MM/DD/YYYY" maxlength="10" style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--parchment);font-size:17px;letter-spacing:1px;">
     <p id="age-verify-error" class="modal-sub" style="color:var(--ruby);min-height:20px;margin:8px 0;"></p>
     <button id="age-verify-confirm" class="cal-claim-btn" style="width:100%;padding:12px;">Confirm</button>
     <p class="modal-sub" style="opacity:.6;font-size:10px;margin-top:12px;">Stored securely, checked once, and cannot be changed afterwards.</p>

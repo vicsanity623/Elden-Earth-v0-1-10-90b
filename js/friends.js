@@ -196,6 +196,56 @@ const Friends = (() => {
     return (friendshipId && tradeAlerts[friendshipId]) || null;
   }
 
+  /**
+   * Live trade-alert listener. Without this the Friends tab only refreshed when
+   * it was reopened, so a trade opening or committing while you were looking at
+   * the list never updated — the dot and the badge went stale until you exited
+   * the modal and came back.
+   */
+  let tradeAlertsUnsub = null;
+  function startTradeAlertsListener() {
+    const id = myId();
+    const d = db();
+    if (!id || !d || tradeAlertsUnsub) return;
+    try {
+      tradeAlertsUnsub = d.collection("trade_alerts").doc(id).collection("items")
+        .onSnapshot((snap) => {
+          const now = Date.now();
+          const map = {};
+          let waiting = 0;
+          snap.forEach((doc) => {
+            const a = doc.data() || {};
+            if (Number(a.expiresAt || 0) <= now) return;
+            if (["completed", "cancelled", "expired"].includes(a.status)) return;
+            if (!a.friendshipId) return;
+            map[a.friendshipId] = a;
+            if (a.waitingOn === "me") waiting++;
+          });
+          const changed = JSON.stringify(Object.keys(map).sort()) !== JSON.stringify(Object.keys(tradeAlerts).sort());
+          tradeAlerts = map;
+
+          const dot = document.getElementById("trade-pending-dot");
+          if (dot) dot.classList.toggle("hidden", waiting === 0);
+
+          // Re-render the friends list only if something visible changed, so
+          // an open trade screen is not constantly rebuilt underneath the user.
+          const friendsPanel = document.querySelector('[data-pi-panel="friends"]');
+          if (changed && friendsPanel && !friendsPanel.classList.contains("hidden")) {
+            renderFriendsTab();
+          }
+        }, (e) => console.warn("[Friends] trade alert listener:", e));
+    } catch (e) {
+      console.warn("[Friends] could not start trade listener:", e);
+    }
+  }
+
+  function stopTradeAlertsListener() {
+    if (tradeAlertsUnsub) {
+      try { tradeAlertsUnsub(); } catch (e) {}
+      tradeAlertsUnsub = null;
+    }
+  }
+
   async function syncTradeAlerts() {
     const id = myId();
     const d = db();
@@ -651,6 +701,8 @@ const Friends = (() => {
     openFriendshipDetail,
     syncRequestBadge,
     syncTradeAlerts,
+    startTradeAlertsListener,
+    stopTradeAlertsListener,
     pendingTradeFor,
     DAILY_GIFT_EB
   };
