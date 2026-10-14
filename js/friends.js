@@ -600,9 +600,17 @@ const Friends = (() => {
         const receiveBtn = incomingGift
           ? `<button class="btn-receive-gift" onclick="Friends.claimDailyGifts();Friends.renderFriendsTab();">🎁 Receive</button>`
           : "";
+        // Trade-in-progress dot on the avatar — much faster to scan than the
+        // text badge when you have a long friends list.
+        const tradeDot = pendingTrade
+          ? `<span class="friend-trade-dot ${pendingTrade.waitingOn === "me" ? "is-you" : "is-waiting"}"></span>`
+          : "";
         html += `
           <div class="friend-row" onclick="Friends.openFriendshipDetail({ name: '${escapeHtml(friendName).replace(/'/g, "\\'")}', fsId: '${fs.id}', friendId: '${friendId}', alreadyGifted: ${alreadyGifted}, xp: ${fsXp}, reward: '+5 EB', quest: 'Send gifts and trade plots to earn Friendship XP and level up your hearts.'}); event.stopPropagation();" style="cursor:pointer;">
-            <div class="friend-avatar">${av}</div>
+            <div class="friend-avatar-wrap">
+              <div class="friend-avatar">${av}</div>
+              ${tradeDot}
+            </div>
             <div class="friend-info">
               <span class="friend-name">${escapeHtml(friendName)}${pendingBadge}</span>
               <span class="friend-status">Friends since ${new Date(fs.since).toLocaleDateString()}</span>

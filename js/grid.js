@@ -618,7 +618,9 @@ const Grid = (() => {
         pending: true,
       };
       scheduleRender();
-      if (typeof showToast === "function") showToast("⏳ Placing plot…", 1200);
+      // Animate the preroll so the wait reads as "confirming", not "owned".
+      startPendingAnim();
+      if (typeof showToast === "function") showToast("⏳ Confirming plot…", 1200);
 
       let serverResult = null;
       let transportError = false;
@@ -719,6 +721,42 @@ const Grid = (() => {
     return _rarityCache[rarity];
   }
 
+  // ---- Pending-purchase "preroll" (animated rainbow) ----
+  // The tile cycles hue while the Cloud Function round-trips. Only runs while
+  // something is actually pending, so it costs nothing otherwise.
+  let pendingHue = 0;
+  let pendingAnimTimer = null;
+
+  function pendingPrerollColor() {
+    return `hsl(${Math.floor(pendingHue)}, 85%, 62%)`;
+  }
+
+  function hasPendingPlot() {
+    const all = getAllPlots();
+    for (const k in all) if (all[k] && all[k].pending === true) return true;
+    return false;
+  }
+
+  function startPendingAnim() {
+    if (pendingAnimTimer) return;
+    pendingAnimTimer = setInterval(() => {
+      if (!hasPendingPlot()) {
+        stopPendingAnim();
+        scheduleRender();
+        return;
+      }
+      pendingHue = (pendingHue + 12) % 360;
+      scheduleRender();
+    }, 90);
+  }
+
+  function stopPendingAnim() {
+    if (pendingAnimTimer) {
+      clearInterval(pendingAnimTimer);
+      pendingAnimTimer = null;
+    }
+  }
+
   function render() {
     // Battery Saver: Don't spend GPU/CPU cycles if phone is in pocket or map not ready!
     if (!map || !map.getStyle() || document.hidden) return;
@@ -773,16 +811,23 @@ const Grid = (() => {
       }
 
       const isSelf = Boolean(myPlayerId && plot.ownerId === myPlayerId);
+      // A plot awaiting server confirmation is NOT a rarity yet — painting it
+      // with a rolled colour misleads the player into thinking the purchase
+      // landed (and with a rarity it may not get). It renders as an animated
+      // rainbow "preroll" instead, and only takes a real colour once the
+      // server's rarity replaces this entry.
+      const isPending = plot.pending === true;
 
       claimedFeatures.push({
         type: "Feature",
         properties: {
-          color: cachedRarityColor(plot.rarity),
+          color: isPending ? pendingPrerollColor() : cachedRarityColor(plot.rarity),
           rarity: plot.rarity,
           ownerId: plot.ownerId,
           isSelf: isSelf,
+          pending: isPending,
           // 🍀 Lucky plots get an animated rainbow outline on the map.
-          lucky: plot.lucky === true,
+          lucky: !isPending && plot.lucky === true,
         },
         geometry: { type: "Polygon", coordinates: [coords] },
       });
@@ -850,6 +895,21 @@ const Grid = (() => {
           "line-width": 4,
           "line-dasharray": [2, 1.4],
           "line-opacity": 0.95,
+        },
+      });
+
+      // 5. ⏳ PENDING preroll — bright dashed outline on tiles still waiting on
+      //    the server. Reads as "confirming", never as an owned rarity.
+      map.addLayer({
+        id: "plots-pending-line",
+        type: "line",
+        source: "plots-source",
+        filter: ["==", ["get", "pending"], true],
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 3,
+          "line-dasharray": [1.2, 1.2],
+          "line-opacity": 0.9,
         },
       });
     }

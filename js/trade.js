@@ -205,7 +205,7 @@ const Trade = (() => {
   // frozen by trade_locks — hide it from the pickable count so it never
   // looks like a spare copy you could offer twice.
   //
-  // lockedInstanceIds() also covers plots committed to OTHER live trades. A
+  // lockedIds() also covers plots committed to OTHER live trades. A
   // stacked bag holds two Commons; if one is already promised to a different
   // friend, offering it bounces with `plot_busy`. The server sends the live
   // lock set on create/get so the picker can skip them.
@@ -257,9 +257,14 @@ const Trade = (() => {
     if (!grid) return;
     const groups = bagGroups();
     if (!groups.length) {
-      grid.innerHTML = committedInstanceId()
-        ? `<div class="trade-bag-empty">🔒 Your choice is sealed — waiting for your friend.</div>`
-        : `<div class="trade-bag-empty">No plots in your bag — pick up plots from the map first.</div>`;
+      // Three different reasons the pickable set can be empty — say which.
+      if (lockedInstanceId()) {
+        grid.innerHTML = `<div class="trade-bag-empty">🔒 Your choice is sealed — waiting for your friend.</div>`;
+      } else if (Object.keys(state()?.plotBagItems || {}).length > 0) {
+        grid.innerHTML = `<div class="trade-bag-empty">🔒 Every plot you own is committed to another open trade.</div>`;
+      } else {
+        grid.innerHTML = `<div class="trade-bag-empty">No plots in your bag — pick up plots from the map first.</div>`;
+      }
       return;
     }
     grid.innerHTML = groups.map(g => {
