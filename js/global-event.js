@@ -481,6 +481,15 @@ const GlobalEvent = (() => {
           : `⚠️ ${result?.reason || "Process failed"}`, 3500);
       } else {
         toast(`✅ Distributed plots to Top ${result.winners || 10}!`, 4500);
+        // The server wrote plotBagItems into each winner's save doc. Pull the
+        // authoritative bag back so the plot-bag UI updates without a reload.
+        try {
+          if (typeof Store !== "undefined" && Store.syncSafeStateToCloud) {
+            await Store.syncSafeStateToCloud();
+          }
+        } catch (e) {
+          console.warn("[GlobalEvent] bag re-sync after payout failed:", e);
+        }
       }
       await fetchEvent();
       renderModal();
