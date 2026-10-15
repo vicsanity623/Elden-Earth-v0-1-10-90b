@@ -284,11 +284,24 @@ const Grid = (() => {
     return new Set();
   }
 
-  function openPlotBag() {
+  let _bagRefreshInFlight = false;
+  function openPlotBag(skipCloudPull) {
     const state = Store.get();
     const items = document.getElementById("plot-bag-items");
     if (!items) return;
     items.innerHTML = "";
+
+    // Pull the authoritative bag from cloud — event-reward / trade / stop
+    // plots land in saves.plotBagItems server-side and the local copy can be
+    // stale until the next debounced sync. Render now, re-render once when
+    // the fresh bag arrives (the in-flight guard prevents recursion).
+    if (!skipCloudPull && !_bagRefreshInFlight && typeof Store !== "undefined" && Store.syncSafeStateToCloud) {
+      _bagRefreshInFlight = true;
+      Store.syncSafeStateToCloud().finally(() => {
+        _bagRefreshInFlight = false;
+        if (document.getElementById("plot-bag-items")) openPlotBag(true);
+      });
+    }
 
     // Phase 2: group instance IDs by rarity; fall back to legacy counters.
   // 🍀 Lucky plots stack separately so a Lucky Common renders as its own
@@ -1508,7 +1521,7 @@ const Grid = (() => {
       }
     });
 
-    bagBtn?.addEventListener("click", openPlotBag);
+    bagBtn?.addEventListener("click", () => openPlotBag());
     document.getElementById("plot-relocate-btn")?.addEventListener("click", relocatePlot);
     document.getElementById("plot-ascend-btn")?.addEventListener("click", () => {
       if (selectedPlotId && typeof PlotAscension !== "undefined") {

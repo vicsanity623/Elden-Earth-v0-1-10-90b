@@ -4,7 +4,10 @@
 // every CSS/JS change since then was invisible on iOS homescreen.
 // v41.25: Global Challenge hub row stays clickable after the event ends so the
 // admin payout button / player claim button in the modal remain reachable.
-const CACHE_NAME = 'elden-EARTH-v42.25';
+// v42.26: syncFromCloud now always adopts server-owned plotBagItems (LWW was
+// shadowing event-reward / trade / stop plots). openPlotBag forces a cloud
+// pull before rendering.
+const CACHE_NAME = 'elden-EARTH-v42.26';
 
 const ASSETS_TO_CACHE = [
     './',

@@ -655,6 +655,21 @@ const Store = (() => {
           const prevLastDiamondPlayerPosition = state.lastDiamondPlayerPosition || null;
           const prevBoostExpiry = Number(state.boostExpiry) || 0;
           const prevBoostMultiplier = Number(state.boostMultiplier) || 30;
+          // plotBagItems / luckyBagItems / plotBag are SERVER-OWNED (absent from
+          // SAFE_SAVE_FIELDS — the client can never write them). The LWW version
+          // check below is for client-writable fields; it must never shadow the
+          // authoritative bag. Event-reward plots, trade plots and Elden-Stop
+          // jackpots all land in cloud plotBagItems while the local copy is
+          // still the pre-grant snapshot — adopt cloud unconditionally.
+          if (cloudData.plotBagItems && typeof cloudData.plotBagItems === "object") {
+            state.plotBagItems = { ...cloudData.plotBagItems };
+          }
+          if (cloudData.luckyBagItems && typeof cloudData.luckyBagItems === "object") {
+            state.luckyBagItems = { ...cloudData.luckyBagItems };
+          }
+          if (cloudData.plotBag && typeof cloudData.plotBag === "object") {
+            state.plotBag = { ...cloudData.plotBag };
+          }
           if (cloudData.plots) {
             if (!state.plots) state.plots = {};
             for (const plotId in cloudData.plots) {
