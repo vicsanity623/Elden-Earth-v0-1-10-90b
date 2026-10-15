@@ -345,6 +345,16 @@ const Store = (() => {
             for (const t of result.data.plotDroppedTids) delete state.plots[t];
             mirrorDirty = true;
           }
+          // Server-authoritative display name. Adopt it so an admin-approved
+          // rename takes effect on this device on the next sync instead of the
+          // old local name silently winning forever.
+          if (typeof result.data?.playerName === "string" && result.data.playerName) {
+            if (state.player.name !== result.data.playerName) {
+              console.log(`[Cloud] Adopted server display name: ${result.data.playerName}`);
+              state.player.name = result.data.playerName;
+              mirrorDirty = true;
+            }
+          }
           if (mirrorDirty) localStorage.setItem(KEY, JSON.stringify(state));
         }
         if (result.data?.betaSeedsGranted) {
