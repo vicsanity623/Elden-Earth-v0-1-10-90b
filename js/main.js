@@ -2754,7 +2754,10 @@
 
       // --- Added 2026-10-09 ---
       { id: "recall_defender", title: "Recall a defender from a Citadel", reward: 15, rewardText: "+15 EB", rp: 2, action: "citadel" },
-      { id: "recall_defender_5x", title: "Recall 5 defenders from Citadels", reward: 20, rewardText: "+20 EB", rp: 2, action: "citadel", progressNeeded: 5 },
+      // The standout daily quest — server pays 40 EB + 20 RP (see QUEST_REWARDS
+      // and the RP map in functions/index.js). Reward text must match those or
+      // the player is shown one number and paid another.
+      { id: "recall_defender_5x", title: "Recall 5 defenders from Citadels", reward: 40, rewardText: "+40 EB", rp: 20, action: "citadel", progressNeeded: 5 },
       { id: "convert_cash", title: "Convert Cash to EB", reward: 25, rewardText: "+25 EB", rp: 2, action: "cashout" },
       { id: "spin_elden_stop", title: "Spin an Elden Stop", reward: 2, rewardText: "+2 EB", rp: 1, action: "eldenstop" },
       { id: "feed_berries", title: "Feed a berry to Buddy", reward: 5, rewardText: "+5 EB", rp: 1, action: "pet" },

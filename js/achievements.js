@@ -59,7 +59,12 @@ const Achievements = (() => {
     { id: "gifts_sent",      cat: "social",   stat: "giftsSent",     title: "Send {n} gifts to friends",         tiers: [{t:5,eb:5,rp:5},{t:50,eb:10,rp:5},{t:500,eb:100,rp:5}] },
     { id: "gifts_received",  cat: "social",   stat: "giftsReceived", title: "Receive {n} gifts",                 tiers: [{t:5,eb:25,rp:2},{t:50,eb:100,rp:5},{t:500,eb:400,rp:10}] },
     { id: "referrals_made",  cat: "social",   stat: "referralsMade", title: "Refer {n} new players",             tiers: [{t:1,eb:100,rp:5},{t:5,eb:250,rp:5},{t:25,eb:750,rp:10}] },
-    { id: "friends_made",    cat: "social",   stat: "friendsMade", derived: true, title: "Make {n} friends",      tiers: [{t:1,eb:25,rp:2},{t:5,eb:100,rp:5},{t:25,eb:400,rp:10}] },
+    // NOT derived: friendsMade is counted by recordActivity (js/friends.js calls
+    // Achievements.record("friendsMade") on accept). It was marked derived and
+    // so read `state.friendsCount` — a field nothing ever writes — which made
+    // every friend badge permanently read 0/1 no matter how many friends were
+    // added. The counter in achievementStats was already correct underneath.
+    { id: "friends_made",    cat: "social",   stat: "friendsMade", title: "Make {n} friends",      tiers: [{t:1,eb:25,rp:2},{t:5,eb:100,rp:5},{t:25,eb:400,rp:10}] },
     { id: "chat_messages",   cat: "social",   stat: "chatMessages",  title: "Send {n} chat messages",            tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:1000,eb:400,rp:10}] },
 
     { id: "citadels_taken",  cat: "combat",   stat: "citadelsTaken", title: "Capture {n} citadels",              tiers: [{t:1,eb:50,rp:2},{t:10,eb:150,rp:5},{t:50,eb:500,rp:10}] },
@@ -130,7 +135,8 @@ const Achievements = (() => {
       case "lifetimeRent":   return Number(state.lifetimeRent) || 0;
       case "totalDividends": return Number(state.totalDividends) || 0;
       case "extractorLevel": return Number(state.extractor && state.extractor.level) || 0;
-      case "friendsMade":    return Number(state.friendsCount) || 0;
+      // friendsMade is a counter (recordActivity), not derived — see the note
+      // on the friends_made track definition.
       case "badgesEarned":   return Object.keys(claims()).length;
       default: return 0;
     }
