@@ -12,6 +12,7 @@ google-services.json
 .env
 .changelog-last-posted
 post-changelog.sh
+post-changelogzen.sh
 
 # Peer
 SCPR.md

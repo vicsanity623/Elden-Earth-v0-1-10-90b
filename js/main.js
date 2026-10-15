@@ -3128,8 +3128,11 @@
           <span class="events-hub-row-go">›</span>
         </button>`;
 
-      // Global Challenge — live row, or a disabled row with a countdown.
+      // Global Challenge — live row, or a clickable "ended" row while the
+      // round still needs action (admin Top-10 payout / player EB claim),
+      // or a disabled countdown row once fully settled.
       let challengeRow;
+      const challengePending = !!ev && !ge.settled; // expired but not finished
       if (challengeLive) {
         const pct = Math.max(0, Math.min(100, Number(ev.pct) || 0));
         challengeRow = `
@@ -3142,11 +3145,24 @@
             </span>
             <span class="events-hub-row-go">›</span>
           </button>`;
+      } else if (challengePending) {
+        // Ended, but not fully settled: the admin still needs "Process Top 10
+        // Plots", or this player has an unclaimed EB share. Keep it clickable
+        // so the modal (and its payout / claim buttons) stay reachable.
+        challengeRow = `
+          <button class="events-hub-row" data-hub-action="challenge">
+            <span class="events-hub-row-icon">🌍${hubDot(true)}</span>
+            <span class="events-hub-row-body">
+              <span class="events-hub-row-title">Global Challenge</span>
+              <span class="events-hub-row-sub">Event ended — view results &amp; rewards</span>
+            </span>
+            <span class="events-hub-row-go">›</span>
+          </button>`;
       } else {
         const ms = Math.max(0, nextGlobalChallengeStart() - Date.now());
         challengeRow = `
           <div class="events-hub-row is-disabled" aria-disabled="true">
-            <span class="events-hub-row-icon">🌍${hubDot(sig.challengePending)}</span>
+            <span class="events-hub-row-icon">🌍</span>
             <span class="events-hub-row-body">
               <span class="events-hub-row-title">Global Challenge</span>
               <span class="events-hub-row-sub">Returns in ${fmtHubCountdown(ms)}</span>
@@ -3155,16 +3171,35 @@
           </div>`;
       }
 
-      if (challengeLive) {
-        liveList.innerHTML = challengeRow;
-        upList.innerHTML = dailyBtn + poolBtn;
-        if (liveLabel) liveLabel.classList.remove("hidden");
-        if (upLabel) upLabel.textContent = "More events";
+      if (challengeLive || challengePending) {
+        if (challengePending) {
+          // Ended but not settled: keep everything actionable in one list.
+          liveList.innerHTML = challengeRow + dailyBtn + poolBtn;
+          upList.innerHTML = "";
+          if (upLabel) upLabel.classList.add("hidden");
+        } else {
+          liveList.innerHTML = challengeRow;
+          upList.innerHTML = dailyBtn + poolBtn;
+          if (upLabel) {
+            upLabel.textContent = "More events";
+            upLabel.classList.remove("hidden");
+          }
+        }
+        if (liveLabel) {
+          liveLabel.textContent = challengeLive ? "Live now" : "Available now";
+          liveLabel.classList.remove("hidden");
+        }
       } else {
         liveList.innerHTML = dailyBtn + poolBtn;
         upList.innerHTML = challengeRow;
-        if (liveLabel) liveLabel.textContent = "Available now";
-        if (upLabel) upLabel.textContent = "Upcoming";
+        if (liveLabel) {
+          liveLabel.textContent = "Available now";
+          liveLabel.classList.remove("hidden");
+        }
+        if (upLabel) {
+          upLabel.textContent = "Upcoming";
+          upLabel.classList.remove("hidden");
+        }
       }
 
       liveList.querySelectorAll("[data-hub-action]").forEach((b) => {

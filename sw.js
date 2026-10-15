@@ -2,7 +2,9 @@
 // v32.16: dropped ./js/treasure.js (file does not exist). cache.addAll() rejects
 // the whole install on any 404, which left the PWA pinned to a stale cache —
 // every CSS/JS change since then was invisible on iOS homescreen.
-const CACHE_NAME = 'elden-EARTH-v41.24';
+// v41.25: Global Challenge hub row stays clickable after the event ends so the
+// admin payout button / player claim button in the modal remain reachable.
+const CACHE_NAME = 'elden-EARTH-v41.25';
 
 const ASSETS_TO_CACHE = [
     './',

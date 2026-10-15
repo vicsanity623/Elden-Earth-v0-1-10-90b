@@ -31,7 +31,9 @@ A comprehensive guide to every feature, currency, progression system, and gamepl
 23. [3D Character & Wardrobe](#character--wardrobe)
 24. [Bird's Eye View](#birds-eye-view)
 25. [Map Controls](#map-controls)
-26. [Progression Roadmap](#progression-roadmap)
+26. [Lucky Land Plots](#lucky-land-plots)
+27. [Ascending Land Plots (Ascension Forge)](#ascending-land-plots)
+28. [Progression Roadmap](#progression-roadmap)
 
 ---
 
@@ -809,6 +811,103 @@ A zoomed-out territory overview showing your land holdings across a **25-mile ra
 | **Pet** | Opens Companion Pet modal |
 | **Multiplier** | Opens Boost activation modal |
 | **Pool** | Opens Weekly Treasury Pool |
+
+---
+
+## Lucky Land Plots
+
+### What Is a Lucky Plot?
+
+A **Lucky plot (🍀)** is a normal plot of any rarity (Common, Rare, Epic or
+Legendary) that has been blessed with a permanent **+10% rent bonus**. A Lucky
+Common pays 10% more than a normal Common; a Lucky Legendary pays 10% more
+than a normal Legendary.
+
+- The bonus applies to **all income**: online rent, offline earnings, weekly
+  Treasury Pool contribution, and leaderboard lifetime rent
+- Lucky plots show an animated **rainbow holo outline** on the map
+- In your plot bag they stack separately — a "🍀 Common Plot x3" button is
+  distinct from a plain "Common Plot" button
+- The plot detail modal shows **(🍀 +10%)** next to the rate
+
+### How to Get One
+
+| Source | Chance |
+|---|---|
+| **Buying land** (100 EB per tile) | **0.5%** per purchase |
+| **Trading** with another player | **0.5%** base — rises to **5.5%** at max friendship (10 hearts) |
+| **Ascension Forge** | Inherited — see below |
+
+- Lucky is rolled **server-side** when the plot settles; there is no shop
+  purchase or other way to buy one directly
+- On a trade, **each incoming plot is rolled separately** — and if **either**
+  player's plot rolls Lucky, **both** swapped plots become Lucky
+- The Elden Stops "Lucky Land Plot" jackpot awards a **free** plot (1.5% on
+  each disc spin), but that free plot is **not** 🍀 Lucky — it pays the base
+  rate for its rarity
+
+### Luck Survives the Sacrifice
+
+The two Sacrifice plots are **permanently destroyed** — including any 🍀 Lucky
+flag they had. As a consolation, if the Target **or either Sacrifice** was
+Lucky, the upgraded Target comes out **Lucky**. Luck is transferred to the
+surviving plot, never duplicated — three Lucky plots in, one Lucky plot out.
+
+### Achievements
+
+| Goal | Reward |
+|---|---|
+| Own 1 Lucky plot | 50 EB + 2 RP |
+| Own 5 Lucky plots | 150 EB + 5 RP |
+| Own 25 Lucky plots | 500 EB + 10 RP |
+
+---
+
+## Ascending Land Plots
+
+### What Is the Ascension Forge?
+
+The Forge lets you **sacrifice 3 plots of the same rarity to upgrade one plot
+to the next tier**. It is the only way to turn Common land into Rare, Rare
+into Epic, or Epic into Legendary. Legendary is the cap — it cannot ascend
+further.
+
+### How It Works
+
+1. Open the Ascension Forge from your land / plot tools
+2. Pick **1 Target** and **2 Sacrifices** — all three must be the **same
+   rarity**, all your own plots, on the map within your **150 m reach circle**
+3. Review the before/after income, plot count, and forge-step gain
+4. Confirm — the sacrifices are **permanently destroyed** and their tiles
+   return to the public grid; the Target upgrades **in place**
+
+You need a live connection to the server (the Forge is rate-limited to 6
+attempts per minute).
+
+### Costs
+
+| Ascend | Plots burned | EB cost | Cash (RC) cost |
+|---|---|---|---|
+| Common → Rare | 3 | 50 EB | 0.25 |
+| Rare → Epic | 3 | 100 EB | 0.75 |
+| Epic → Legendary | 3 | 150 EB | 1.25 |
+
+### Why Bother?
+
+- Each forge step is a small but real income bump (~+1% over the 3 plots you
+  burned) — the Forge screen shows the exact delta before you commit
+- Building a Legendary from scratch takes **27 Common plots** (3³) — the Forge
+  is how late-game players consolidate land
+- Higher rarity = more prestige on the map, stronger flex on leaderboards, and
+  less plot-cap pressure for the same income tier
+- **Lucky inheritance:** if the Target or either Sacrifice was 🍀 Lucky, the
+  result is Lucky
+
+### Related Progression
+
+- **Daily quest:** one rotating Ascension quest per UTC day (Common / Rare /
+  Epic tier) pays 50–100 EB
+- **Achievements:** Ascend 1 plot → 5 EB; 10 → 10 EB; 100 → 100 EB
 
 ---
 
