@@ -16,7 +16,7 @@
 // is where it plugs in.
 // ============================================================
 const AgeGate = (() => {
-  const PLAY_MIN_YEARS = 13;
+  const PLAY_MIN_YEARS = 18;
   const REDEEM_MIN_YEARS = 18;
 
   let dobMs = 0;       // 0 = not yet recorded
@@ -160,7 +160,7 @@ const AgeGate = (() => {
 
       if (res.playable === false) {
         closePrompt();
-        toast("You must be 13 or older to play Elden Earth.", 6000);
+        toast("You must be 18 or older to play Elden Earth.", 6000);
         try {
           if (typeof firebase !== "undefined" && firebase.auth) await firebase.auth().signOut();
         } catch (e) { /* ignore */ }
