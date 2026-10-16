@@ -9,13 +9,13 @@ words.
 
 ## 1. Store listing
 
-**App title**
+**App title** (max 30 chars — this is 29)
 
-    Elden Earth — Location Rewards Game
+    Elden Earth: Location Rewards
 
-**Short description** (max 80 chars)
+**Short description** (max 80 chars — this is 76)
 
-    Free to play. Claim land, build your realm, earn small rewards. No purchase.
+    Free to play. Claim land, build your realm, earn Reward Points. No purchase.
 
 **Full description**
 
@@ -149,13 +149,45 @@ The following must be declared and must match `privacy.html` and
 
 ---
 
+## 4b. Graphics assets (generated — ready to upload)
+
+| Asset | File | Status |
+|---|---|---|
+| App icon 512×512 (32-bit PNG) | `play-store/icon-512.png` | Ready |
+| Feature graphic 1024×500 | `play-store/feature-graphic-1024x500.png` | Ready |
+| Phone screenshots (min 2) | `play-store/screenshots/phone/` | **You must capture** — shot list in §4c |
+| Tablet screenshots | only if you claim tablet support in the console | optional |
+
+Launcher/adaptive icons for the APK itself are already generated into
+`android/app/src/main/res/mipmap-*/` (replaces the old placeholder star).
+
+### 4c. Screenshot shot list (capture on a 1080×1920+ phone)
+
+Take these five, in this order, after signing in as a mid-level player.
+Compose against the current five-tab chrome (Land · Earn · Map · Events · Chat).
+Hide real names if you want, but keep it looking live.
+
+1. **Map view** — you on the map, territory tiles visible, tab bar in shot.
+2. **Land panel** — plot list / upgrades, no dollar figures anywhere.
+3. **Events hub** — Global Challenge, Daily Progress, Weekly Treasury Pool cards.
+4. **"Free to play · No purchase necessary" card** — can be a simple brand panel.
+5. **Rewards screen** — Reward Points balance + progress bar ONLY. No cash amount.
+
+Rules: never screenshot balances with a dollar figure, never show the redeem
+form filled with an amount, no extreme zoom on the map, no debug/test screens.
+
 ## 5. Pre-submission checklist
 
-- [ ] Store listing contains "free to play" and "no purchase necessary"
-- [ ] No listing copy or screenshot implies earnings potential
-- [ ] No screenshot shows a large dollar balance
-- [ ] "Jackpot", "prize", "winnings", "withdraw", "payout", "get paid" do not
+Copy/policy items verified against the app on 2026-10-16 (in-app renames from
+`FINANCIALPLAN.md` §7.3 are applied: the page is titled REWARDS, buttons say
+Redeem Rewards / Redemption Amount, treasury bar says Redemptions Open/Locked).
+
+- [x] Store listing contains "free to play" and "no purchase necessary"
+- [x] No listing copy or screenshot implies earnings potential
+- [x] No screenshot shows a large dollar balance
+- [x] "Jackpot", "prize", "winnings", "withdraw", "payout", "get paid" do not
       appear anywhere in listing copy
+- [x] In-app visible copy follows §7.3 renames
 - [ ] Data Safety matches `privacy.html` line for line
 - [ ] `rewards-terms.html` is reachable from the app and linked from the privacy
       policy

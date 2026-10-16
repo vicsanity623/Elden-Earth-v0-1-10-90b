@@ -772,6 +772,9 @@
     const player = playerData || Store.get()?.player || { name: "Traveler" };
     console.log("[Main] onSignedIn called with player:", player);
 
+    // Demo / reviewer accounts get a read-only lock (server enforces it too).
+    if (typeof DemoMode !== "undefined") DemoMode.attach();
+
     // Force immediate dismissal of signin screen on all browsers (Brave, Chrome, Safari)
     const signin = document.getElementById("signin-screen");
     if (signin) {
@@ -4017,7 +4020,7 @@
 
       // Show buy-mode ad banner safely
       const buyModeAd = el("buy-mode-ad-container");
-      if (buyModeAd) {
+      if (buyModeAd && window.EEAdPolicy && window.EEAdPolicy.adsAllowed) {
         buyModeAd.classList.remove("hidden");
         // Completely recreate the tag so Google knows it's a fresh impression
         buyModeAd.innerHTML = `<ins class="adsbygoogle" style="display:inline-block;width:320px;height:50px" data-ad-client="ca-pub-5972331036113330" data-ad-slot="4287691766"></ins>`;
@@ -4057,7 +4060,7 @@
       // Re-push treasury ad instantly now that the screen is clear
       setTimeout(() => {
         const treasuryAd = el("treasury-ad-container");
-        if (treasuryAd && !document.body.classList.contains("buy-mode")) {
+        if (treasuryAd && window.EEAdPolicy && window.EEAdPolicy.adsAllowed && !document.body.classList.contains("buy-mode")) {
           // Only inject if no ad is already loaded
           const existingAd = treasuryAd.querySelector("ins.adsbygoogle");
           if (!existingAd || existingAd.getAttribute("data-ad-status") === "unfilled") {
@@ -4243,6 +4246,8 @@
     
     // --- Google AdSense Compliant 60-Second Treasury Ad Refresher ---
     function initTreasuryAdRefresher() {
+      // No AdSense inside the native Android app (Play policy + AdSense terms).
+      if (!window.EEAdPolicy || !window.EEAdPolicy.adsAllowed) return;
       const adContainer = el("treasury-ad-container");
       if (!adContainer) return;
 
@@ -4930,20 +4935,6 @@
 
   // ---------------- Boot ----------------
   document.addEventListener("DOMContentLoaded", () => {
-    const repairHosts = new Set([]);
-    if (repairHosts.has(window.location.hostname)) {
-      document.body.innerHTML = `
-        <main style="min-height:100vh;display:grid;place-items:center;background:#0e1522;color:#f4f0e8;font-family:Manrope,system-ui,sans-serif;text-align:center;padding:24px;">
-          <section style="max-width:520px;border:1px solid #3a4b5c;border-radius:14px;padding:32px 24px;background:#172235;">
-            <div style="font-size:48px;margin-bottom:16px;">🛠️</div>
-            <h1 style="margin:0 0 12px;font-family:Cinzel,serif;">Realm Under Repair</h1>
-            <p style="color:#b8c2d1;line-height:1.6;margin:0 0 24px;">This version is temporarily unavailable. Please use the official game link below.</p>
-            <a href="https://vicsanity623.github.io/Elden-Earth-Pre-Release/" style="display:inline-block;padding:13px 20px;border-radius:8px;background:#4fd6c4;color:#0e1522;font-weight:800;text-decoration:none;">Open Elden Earth</a>
-          </section>
-        </main>`;
-      return;
-    }
-
     // --- AUTOMATION / HEADLESS BROWSER DETECTION ---
     if (typeof detectAutomation === "function" && detectAutomation()) {
       console.error("[AntiCheat] Automated browser detected — aborting game init.");

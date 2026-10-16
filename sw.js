@@ -7,7 +7,7 @@
 // v42.26: syncFromCloud now always adopts server-owned plotBagItems (LWW was
 // shadowing event-reward / trade / stop plots). openPlotBag forces a cloud
 // pull before rendering.
-const CACHE_NAME = 'elden-EARTH-v44.27';
+const CACHE_NAME = 'elden-EARTH-v45.27';
 
 const ASSETS_TO_CACHE = [
     './',

@@ -135,7 +135,7 @@ const Cashout = (() => {
             ? "Confirm Your Age to Redeem"
             : "Redeeming Unlocks at 18";
         } else if (!treasuryOk) {
-          openBtn2.textContent = "Cashouts Locked — Treasury Goal";
+          openBtn2.textContent = "Redemptions Locked — Treasury Goal";
         } else if (!budgetOk) {
           openBtn2.textContent = !monthBudgetOk ? "Monthly Program Budget Spent" : "Yearly Program Budget Spent";
         } else if (pending) {
@@ -252,7 +252,7 @@ const Cashout = (() => {
       return;
     }
     if (treasuryStatus && !treasuryStatus.unlocked) {
-      toast("🏛️ Cashouts are locked until the Realm's revenue goal is met.", 4000);
+      toast("🏛️ Redemptions are locked until the Realm's revenue goal is met.", 4000);
       return;
     }
     if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {

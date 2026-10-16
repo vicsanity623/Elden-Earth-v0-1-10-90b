@@ -15,9 +15,6 @@ const ServerAntiCheat = (() => {
       return;
     }
     functions = firebase.functions();
-
-    // Connect to emulator in local dev (uncomment when testing locally)
-    // functions.useEmulator("localhost", 5019);
   }
 
   // ======================== KEEP-ALIVE (cold-start suppression) ========================

@@ -21,68 +21,63 @@ const Auth = (() => {
     }
   }
 
-  // --- RICKROLL BAN GATE ---
-  // Instant fullscreen takeover with YouTube embed. Autoplay muted (browser
-  // requirement), then on ANY tap unmute at max volume with CSS distortion.
-  function showCWOODBanScreen() {
+  // --- BAN SCREEN ---
+  // Fullscreen takeover for suspended accounts. Signs the player out, kills any
+  // live game timers, and offers an appeal channel. Locked to this screen.
+  const APPEAL_URL = "https://discord.gg/mfNPrHpsaq";
+
+  function showBanScreen() {
     try { firebase.auth().signOut(); } catch (e) {}
 
     // Nuke the entire page — nothing survives
     document.body.innerHTML = "";
-    document.body.style.cssText = "margin:0;padding:0;overflow:hidden;background:#000;";
+    document.body.style.cssText = "margin:0;padding:0;overflow:hidden;background:#0a0a0a;";
 
     // Kill every timer/interval the game may have started
     for (let i = 1; i < 99999; i++) { clearInterval(i); clearTimeout(i); }
 
-    // Build the rickroll gate
     const gate = document.createElement("div");
-    gate.id = "rickroll-gate";
+    gate.id = "ban-gate";
     gate.innerHTML = `
-      <div class="rr-video-wrap">
-        <video id="rr-video" autoplay muted loop playsinline
-          style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:110vw;height:110vh;object-fit:cover;">
-          <source src="assets/rickroll.mp4" type="video/mp4">
-        </video>
+      <div class="ban-panel">
+        <div class="ban-icon">⛔</div>
+        <h1 class="ban-title">Account Suspended</h1>
+        <p class="ban-text">
+          This Elden Earth account has been suspended for violating the
+          Community Rules. Access to the game has been disabled on this device.
+        </p>
+        <p class="ban-text">
+          If you believe this is a mistake, you may appeal through our
+          Discord community. Decisions are reviewed by our moderation team.
+        </p>
+        <a class="ban-appeal-btn" id="ban-appeal-link" href="${APPEAL_URL}" target="_blank" rel="noopener noreferrer">Appeal on Discord</a>
+        <p class="ban-fine">Suspensions are final where cheating, ban evasion, or abuse of other players is confirmed.</p>
       </div>
-      <div class="rr-top-text">GET RICKROLLED</div>
-      <div class="rr-tap-hint">TAP ANYWHERE TO UNMUTE</div>
     `;
     document.body.appendChild(gate);
 
-    // On ANY tap/click: unmute at max volume + activate distortion chaos
-    let unmuted = false;
-    const unmute = () => {
-      if (unmuted) return;
-      unmuted = true;
-      gate.classList.add("rr-active");
+    const appealLink = document.getElementById("ban-appeal-link");
+    if (appealLink) {
+      appealLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (window.NativeBridge && window.NativeBridge.isNativeApp) {
+          window.NativeBridge.openExternal(APPEAL_URL);
+        } else {
+          window.open(APPEAL_URL, "_blank", "noopener");
+        }
+      });
+    }
 
-      const vid = document.getElementById("rr-video");
-      if (vid) {
-        vid.muted = false;
-        vid.volume = 1.0;
-        vid.play().catch(() => {});
-      }
-    };
-    gate.addEventListener("click", unmute, { once: false });
-    gate.addEventListener("touchstart", unmute, { once: false });
-
-    // Prevent ANY escape: block back button, escape key, swipe-down gestures
+    // Prevent escape: block back button and history navigation
     window.addEventListener("popstate", () => history.pushState(null, "", location.href));
     history.pushState(null, "", location.href);
     document.addEventListener("keydown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      unmute(); // any key also unmutes
-      return false;
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
     }, true);
-
-    // Block all touch gestures that could dismiss
-    document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-
-    // Prevent page hide / visibility change from doing anything useful
-    document.addEventListener("visibilitychange", () => {
-      document.title = "GET RICKROLLED";
-    });
   }
 
   // --- BAN EVASION: Device fingerprint + integrity checks ---
@@ -212,7 +207,7 @@ const Auth = (() => {
     if (isDevicePreviouslyBanned()) {
       console.warn(`[Auth] BANNED DEVICE detected: ${uid} (${emailLower})`);
       storeBanIntegrity(uid, emailLower);
-      showCWOODBanScreen();
+      showBanScreen();
       return true;
     }
 
@@ -220,7 +215,7 @@ const Auth = (() => {
     if (detectBanEvasionPatterns(uid, emailLower)) {
       console.warn(`[Auth] BAN EVASION detected: ${uid} (${emailLower})`);
       storeBanIntegrity(uid, emailLower);
-      showCWOODBanScreen();
+      showBanScreen();
       return true;
     }
 
@@ -233,7 +228,7 @@ const Auth = (() => {
         const ban = banDoc.data();
         console.warn(`[Auth] BANNED user attempted login: ${uid} (${emailLower}) — reason: ${ban.reason || "none"}`);
         storeBanIntegrity(uid, emailLower);
-        showCWOODBanScreen();
+        showBanScreen();
         return true;
       }
     } catch (e) {
@@ -348,7 +343,7 @@ const Auth = (() => {
   }
 
   function showBannedScreen(reason) {
-    showCWOODBanScreen(); // Same rickroll gate for all ban paths
+    showBanScreen(); // Same ban screen for all ban paths
   }
 
   /**
@@ -533,7 +528,7 @@ const Auth = (() => {
             if (deviceBanned) {
               console.warn(`[Auth] BANNED DEVICE (early): ${user.uid}`);
               storeBanIntegrity(user.uid, userEmail);
-              showCWOODBanScreen();
+              showBanScreen();
               return;
             }
 
@@ -581,6 +576,37 @@ const Auth = (() => {
       } catch (e) {
         console.warn("[Auth] Firebase auth listener notice:", e);
       }
+    }
+
+    // --- NATIVE ANDROID APP: platform Google Sign-In, not the GSI web widget ---
+    // The WebView runs from a bundled origin (appassets.androidplatform.net),
+    // which is not an authorized JavaScript origin for the GSI web flow. The
+    // native bridge owns sign-in instead and injects the Firebase credential.
+    // data-native-bound keeps the injected click-sweeper from double-firing.
+    if (window.EEAdPolicy && window.EEAdPolicy.isNativeApp) {
+      const loading = document.getElementById("google-signin-loading");
+      const slot = document.getElementById("g_id_signin_slot");
+      if (loading) loading.style.display = "none";
+      if (slot) {
+        slot.style.display = "flex";
+        slot.innerHTML = `<button type="button" id="native-google-signin" class="btn" data-native-bound="true">Sign in with Google</button>`;
+        const nativeBtn = document.getElementById("native-google-signin");
+        let lastNativeLaunch = 0;
+        nativeBtn.addEventListener("click", () => {
+          const now = Date.now();
+          if (now - lastNativeLaunch < 3000) return;
+          lastNativeLaunch = now;
+          setSignInLoading(true);
+          if (window.EldenEarthNative && typeof window.EldenEarthNative.signInWithGoogle === "function") {
+            window.EldenEarthNative.signInWithGoogle();
+          } else if (window.AndroidBridge && typeof window.AndroidBridge.nativeGoogleSignIn === "function") {
+            window.AndroidBridge.nativeGoogleSignIn();
+          } else {
+            setSignInLoading(false);
+          }
+        });
+      }
+      return;
     }
 
     // --- GOOGLE SIGN-IN ONLY ---

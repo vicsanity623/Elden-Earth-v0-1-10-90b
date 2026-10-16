@@ -15,14 +15,6 @@ const NativeBridge = (() => {
     return isNativeApp ? window.EldenEarthNative.buildVersionCode : 0;
   }
 
-  function isUpdateAvailable() {
-    return isNativeApp && window.EldenEarthNative.updateAvailable;
-  }
-
-  function requestUpdate() {
-    if (isNativeApp) window.EldenEarthNative.requestUpdate();
-  }
-
   function vibrate(ms) {
     if (isNativeApp) {
       window.EldenEarthNative.vibrate(ms || 50);
@@ -57,9 +49,7 @@ const NativeBridge = (() => {
     return {
       version: window.EldenEarthNative.buildVersion,
       versionCode: window.EldenEarthNative.buildVersionCode,
-      platform: window.EldenEarthNative.platform,
-      updateAvailable: window.EldenEarthNative.updateAvailable,
-      updateVersion: window.EldenEarthNative.updateVersion
+      platform: window.EldenEarthNative.platform
     };
   }
 
@@ -76,21 +66,52 @@ const NativeBridge = (() => {
     window.EldenEarthNative.cancelBoostEnd();
   }
 
+  // Rewarded video (AdMob on Android). Resolves true only when the ad was
+  // completed — the caller must still have the reward granted server-side
+  // (AdMob SSV); never grant anything from this promise alone.
+  function showRewardedAd() {
+    return new Promise((resolve) => {
+      if (!isNativeApp
+          || !window.EldenEarthNative
+          || typeof window.EldenEarthNative.showRewardedAd !== 'function') {
+        resolve(false);
+        return;
+      }
+      const id = 'rw_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      window.__eeRewarded = window.__eeRewarded || {};
+      window.__eeRewarded[id] = resolve;
+      try {
+        window.EldenEarthNative.showRewardedAd(id);
+      } catch (e) {
+        delete window.__eeRewarded[id];
+        resolve(false);
+      }
+    });
+  }
+
+  // Called by the injected native bridge when the ad finishes.
+  window.onNativeRewardedAd = function (id, earned) {
+    const pending = window.__eeRewarded && window.__eeRewarded[id];
+    if (pending) {
+      delete window.__eeRewarded[id];
+      pending(!!earned);
+    }
+  };
+
   return {
     isNativeApp,
     isAndroid,
     isIOS,
     getBuildVersion,
     getBuildVersionCode,
-    isUpdateAvailable,
-    requestUpdate,
     vibrate,
     getDeviceId,
     isOnline,
     openExternal,
     getVersionInfo,
     scheduleBoostEnd,
-    cancelBoostEnd
+    cancelBoostEnd,
+    showRewardedAd
   };
 })();
 
@@ -100,9 +121,6 @@ window.NativeBridge = NativeBridge;
 // Auto-detect and log
 if (NativeBridge.isNativeApp) {
   console.log(`[EldenEarth] Running in native Android app — build ${NativeBridge.getBuildVersion()}`);
-  if (NativeBridge.isUpdateAvailable()) {
-    console.log(`[EldenEarth] Update available — version ${NativeBridge.getVersionInfo().updateVersion}`);
-  }
 } else {
   console.log('[EldenEarth] Running in browser (PWA mode)');
 }

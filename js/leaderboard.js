@@ -312,6 +312,8 @@ const Leaderboard = (() => {
     // 1-Pass Optimization: Aggregates plots, cities, AND rates simultaneously with ZERO hardcoded Phoenix defaults!
     for (const tid in allPlots) {
       const p = allPlots[tid];
+      // Demo / reviewer plots are seeded placeholders — they never rank.
+      if (p.demo === true) continue;
       const oid = p.ownerId || "unknown";
 
       const rKey = p.rarity?.key || p.rarity || "common";
@@ -487,6 +489,8 @@ const Leaderboard = (() => {
         snap.forEach(doc => {
           const d = doc.data();
           savedPlayers[doc.id] = d;
+          // Demo / reviewer accounts exist for Play review only — they never rank.
+          if (d.demoMode === true) return;
           const target = playerArray.find(p => p.id === doc.id);
 
           let finalLifetime = calculatePreciseLifetimeRent(doc.id, d, allPlots);

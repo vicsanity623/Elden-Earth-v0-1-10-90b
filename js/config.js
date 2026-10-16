@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "0.1.12.00b",
+  GAME_VERSION: "1.1.01.00b",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
