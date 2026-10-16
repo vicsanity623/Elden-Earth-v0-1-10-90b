@@ -592,11 +592,20 @@ const Auth = (() => {
         slot.innerHTML = `<button type="button" id="native-google-signin" class="btn" data-native-bound="true">Sign in with Google</button>`;
         const nativeBtn = document.getElementById("native-google-signin");
         let lastNativeLaunch = 0;
+        let nativeSignWatchdog = 0;
+        // The native side calls this when Google sign-in is cancelled or fails,
+        // so the button never stays stuck on "Signing in...".
+        window.onNativeSignInCancelled = () => {
+          clearTimeout(nativeSignWatchdog);
+          setSignInLoading(false);
+        };
         nativeBtn.addEventListener("click", () => {
           const now = Date.now();
           if (now - lastNativeLaunch < 3000) return;
           lastNativeLaunch = now;
           setSignInLoading(true);
+          clearTimeout(nativeSignWatchdog);
+          nativeSignWatchdog = setTimeout(() => setSignInLoading(false), 20000);
           if (window.EldenEarthNative && typeof window.EldenEarthNative.signInWithGoogle === "function") {
             window.EldenEarthNative.signInWithGoogle();
           } else if (window.AndroidBridge && typeof window.AndroidBridge.nativeGoogleSignIn === "function") {

@@ -3,9 +3,12 @@
 // Detects Android app vs browser, exposes native features
 // ============================================================
 const NativeBridge = (() => {
-  const isNativeApp = !!(window.EldenEarthNative && window.EldenEarthNative.isNativeApp);
-  const isAndroid = isNativeApp && window.EldenEarthNative.platform === 'android';
-  const isIOS = isNativeApp && window.EldenEarthNative.platform === 'ios';
+  // window.AndroidBridge exists from the first script (injected before page
+  // load); window.EldenEarthNative is only injected on page-finish, so check
+  // both or the module misdetects the app as a browser ("PWA mode").
+  const isNativeApp = !!(window.AndroidBridge || (window.EldenEarthNative && window.EldenEarthNative.isNativeApp));
+  const isAndroid = isNativeApp && (!!window.AndroidBridge || window.EldenEarthNative.platform === 'android');
+  const isIOS = !!(window.EldenEarthNative && window.EldenEarthNative.platform === 'ios');
 
   function getBuildVersion() {
     return isNativeApp ? window.EldenEarthNative.buildVersion : null;

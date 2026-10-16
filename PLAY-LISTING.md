@@ -113,17 +113,17 @@ of the most common causes of rejection.
 | **Personal info — name (display name)** | App functionality | Yes — visible to other players in-game | Yes | Yes |
 | **Personal info — email address** | Account management, Fraud prevention | No | Yes | Yes |
 | **Personal info — date of birth** | Account management (age verification) | No | Yes | Yes |
-| **Personal info — phone number** | Account management (verification), Fraud prevention | No | Yes | Yes |
+| **Personal info — phone number** | Account management (verification), Fraud prevention | No | Optional — only needed to redeem | Yes |
 | **Financial info — user payment info (PayPal address)** | App functionality (sending redemptions) | Yes — with PayPal to process payment | Optional | Yes |
 | **Financial info — purchase history** (redemption history) | Account management, Fraud prevention | No | Yes | Yes |
 | **App activity — in-app actions** | Analytics, App functionality | No | Yes | Yes |
 | **App activity — other user-generated content (chat)** | App functionality | Yes — visible to other players in-game | Optional | Yes |
+| **Photos and videos — user photos (avatars)** | App functionality | Yes — visible to other players in-game | Optional | Yes |
 | **Device or other IDs** | Fraud prevention, Security | No | Yes | Yes |
 
 ### Data NOT collected
 
 - Health and fitness
-- Photos and video (avatars are optional and reviewed before display)
 - Audio
 - Files and documents
 - Calendar
