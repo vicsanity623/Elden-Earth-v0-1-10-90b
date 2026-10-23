@@ -11,7 +11,9 @@
 // v71.04: tactical buy-land UX — camera auto-focus above the modal, tile
 // D-Pad, and smart hop navigation over owned tiles.
 // v71.05: remove-friend confirmation dialog (accidental taps wiped friends).
-const CACHE_NAME = 'elden-EARTH-v71.05';
+// v71.06: capsule mirror (plant button learns cloud state) + truthful
+// stronghold status text.
+const CACHE_NAME = 'elden-EARTH-v71.06';
 
 const ASSETS_TO_CACHE = [
     './',

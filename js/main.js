@@ -758,7 +758,15 @@
           }
         } else {
           if (el("remote-citadel-title")) el("remote-citadel-title").textContent = "No Active Stronghold";
-          if (el("remote-citadel-coords")) el("remote-citadel-coords").textContent = "Capsule in bag — Plant via Buy Land!";
+          // Only claim a capsule is "in bag" when it truly is — this used to be
+          // hardcoded, so players with no capsule were told to plant one.
+          const myCap = state && state.capsule;
+          const plantable = !!(myCap && myCap.awarded && !myCap.planted);
+          if (el("remote-citadel-coords")) {
+            el("remote-citadel-coords").textContent = plantable
+              ? "Capsule in bag — Plant via Buy Land!"
+              : "No capsule yet — unlocks at $0.01 total earned (rent/RC).";
+          }
           if (recallBtn) {
             recallBtn.disabled = true;
             recallBtn.innerHTML = "🔒 Not Planted";
