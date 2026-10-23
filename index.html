@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elden Earth — Claim the Real World | Geo-Location Strategy Game</title>
+<meta name="description" content="Elden Earth is a free geo-location strategy game. Walk the real world, claim 10x10 ft plots of land, earn passive in-game income, trade with friends, defend citadels and climb the realm rankings. Play free in any browser — Google Play closed testing now open.">
+<meta property="og:title" content="Elden Earth — Claim the Real World">
+<meta property="og:description" content="Free geo-location strategy game: claim real-world land, earn passive income, trade with friends and climb the rankings.">
+<meta property="og:image" content="https://elden-earth.web.app/play-store/feature-graphic-1024x500.png">
+<link rel="icon" href="assets/icon512.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site/css/portal.css">
+<script async id="adsense-portal" crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5972331036113330"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-functions-compat.js"></script>
+<script defer src="site/js/portal.js"></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">🌐 Free to play · Browser &amp; Mobile</span>
+      <h1>Claim the <span class="accent">real world</span>, one tile at a time.</h1>
+      <p class="lead">Elden Earth turns the map beneath your feet into a living strategy realm. Walk, claim 10×10&nbsp;ft plots, earn passive in-game income, trade with friends, defend citadels, and race your city for the Mayor's crown.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="game.html">▶ Play Free Now</a>
+        <a class="btn btn-ghost btn-lg" href="guides/getting-started.html">Learn to play</a>
+      </div>
+      <div class="hero-facts">
+        <div><b>10×10 ft</b>real-world plots</div>
+        <div><b>90 days</b>of login rewards</div>
+        <div><b>63</b>badges to master</div>
+        <div><b>20X–50X</b>boost events</div>
+      </div>
+    </div>
+    <div class="hero-art">
+      <img src="play-store/feature-graphic-1024x500.png" alt="Elden Earth game art">
+      <div class="glow"></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="ad-slot">
+    <div class="ad-label">Advertisement</div>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5972331036113330" data-ad-slot="4287691766" data-ad-format="auto" data-full-width-responsive="true"></ins>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">The Realm</span>
+        <h2>A whole economy at your feet</h2>
+        <p>Every system in Elden Earth is designed to be learned in minutes and mastered over months. No energy timers, no pay-to-win — just land, timing and good trades.</p>
+      </div>
+    </div>
+    <div class="grid grid-3">
+      <a class="card" href="guides/land-plots.html">
+        <div class="icon">🗺️</div>
+        <h3>Claim real land</h3>
+        <p>Buy 10×10 ft tiles around you for 100 EB. Own the most land in a city and become its Mayor — with a 2% dividend on every plot bought there.</p>
+        <span class="more">Land guide →</span>
+      </a>
+      <a class="card" href="guides/economy.html">
+        <div class="icon">💰</div>
+        <h3>Passive income</h3>
+        <p>Plots accrue Realm Coins around the clock. Convert RC to EB, level your Diamond Extractor, and stack boosts up to 10 hours deep.</p>
+        <span class="more">Economy guide →</span>
+      </a>
+      <a class="card" href="trade.html">
+        <div class="icon">🤝</div>
+        <h3>Trade with friends</h3>
+        <p>Friend-to-friend plot trading with a sealed commit-reveal flow — no scams, no middlemen. Trade rare and lucky plots to complete collections.</p>
+        <span class="more">How trading works →</span>
+      </a>
+      <a class="card" href="guides/citadels.html">
+        <div class="icon">🏰</div>
+        <h3>Citadels &amp; sieges</h3>
+        <p>Plant a citadel on your land, station your avatar as its defender, and mine diamonds while rivals plan a 100&nbsp;m reflex siege to dethrone you.</p>
+        <span class="more">Citadel guide →</span>
+      </a>
+      <a class="card" href="guides/pets-stops.html">
+        <div class="icon">🐾</div>
+        <h3>Pets &amp; Elden Stops</h3>
+        <p>Feed Buddy berries that forage while you walk, and plant Beacon seeds at public landmarks to spin up rewards for everyone.</p>
+        <span class="more">Pets &amp; stops →</span>
+      </a>
+      <a class="card" href="rewards.html">
+        <div class="icon">⭐</div>
+        <h3>Reward Points</h3>
+        <p>Earn RP through daily quests, achievements, referrals and events. 100&nbsp;RP = $1.00 toward PayPal redemptions for verified players.</p>
+        <span class="more">Rewards explained →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="section band">
+  <div class="wrap">
+    <div class="stat-strip">
+      <div class="cell"><div class="num">100 EB</div><div class="lbl">per plot</div></div>
+      <div class="cell"><div class="num">3 / day</div><div class="lbl">free wheel spins</div></div>
+      <div class="cell"><div class="num">24 h</div><div class="lbl">citadel spoils cap</div></div>
+      <div class="cell"><div class="num">0 $</div><div class="lbl">to start playing</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Community</span>
+        <h2>Built by the players in it</h2>
+        <p>Strategy threads, trade partners, screenshots and feedback — the Realm's community hub is where the metagame gets written.</p>
+      </div>
+      <a class="btn btn-ghost" href="community.html">Open community hub</a>
+    </div>
+    <div class="grid grid-3">
+      <div class="card">
+        <div class="icon">💬</div>
+        <h3>Guides &amp; tips threads</h3>
+        <p>Share your plot layouts, income math and event strategy. The best posts get pinned to the guides.</p>
+      </div>
+      <div class="card">
+        <div class="icon">📸</div>
+        <h3>Screenshot stories</h3>
+        <p>That legendary pull, that perfectly timed siege, that city you took over one tile at a time.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🛡️</div>
+        <h3>Moderated &amp; clean</h3>
+        <p>Posts run through server-side moderation and a profanity filter, with one-tap delete for your own posts.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section band">
+  <div class="wrap text-center">
+    <span class="eyebrow">Get the game</span>
+    <h2>Play anywhere — same cloud save</h2>
+    <p class="lead" style="max-width:720px;margin:0 auto 8px">Start in the browser, continue on your phone. Your realm, land and rewards live in one cloud save tied to your Google account.</p>
+    <div class="store-row" style="justify-content:center">
+      <a class="store-badge" href="game.html"><span>▶</span><span><span class="lbl">Play instantly</span><span class="big">Browser</span></span></a>
+      <a class="store-badge" href="downloads.html"><span>▶</span><span><span class="lbl">Get it on</span><span class="big">Google Play</span></span></a>
+      <span class="store-badge disabled"><span></span><span><span class="lbl">Coming soon</span><span class="big">iOS</span></span></span>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="ad-slot">
+    <div class="ad-label">Advertisement</div>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5972331036113330" data-ad-slot="4287691766" data-ad-format="auto" data-full-width-responsive="true"></ins>
+  </div>
+</div>
+
+<div id="site-footer"></div>
+</body>
+</html>

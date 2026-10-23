@@ -1,0 +1,1296 @@
+// ============================================================
+// Elden Earth — save data (Local + Firebase Cloud Sync)
+// ============================================================
+const Store = (() => {
+  const KEY = "eldenEarth.save.v1";
+  let db = null;
+
+  let isSessionPaused = false;
+  let cloudSyncComplete = false;
+
+  // ===== SESSION LOCK: ONE session at a time, enforced via Firestore =====
+  // sessionStorage survives refreshes in the same browser tab/window but is
+  // isolated from other tabs/windows, which preserves single-session locking.
+  const SESSION_ID_KEY = "eldenEarth.sessionId";
+  let localSessionId = null;
+  try { localSessionId = sessionStorage.getItem(SESSION_ID_KEY); } catch (e) {}
+  if (!localSessionId) {
+    localSessionId = "sess_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    try { sessionStorage.setItem(SESSION_ID_KEY, localSessionId); } catch (e) {}
+  }
+  let _sessionActive = false;
+
+  function getDb() {
+    if (db) return db;
+    try {
+      if (typeof firebase !== "undefined" && CONFIG.FIREBASE_CONFIG && CONFIG.FIREBASE_CONFIG.apiKey) {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(CONFIG.FIREBASE_CONFIG);
+        }
+        db = firebase.firestore();
+
+        // 🚀 ZERO-READ CACHE: Stores plots & saves in IndexedDB (Slashes 70% of cloud reads!)
+        db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+          if (err.code === "failed-precondition") {
+            console.warn("[Firestore] Multi-tab persistence active in another tab.");
+          } else if (err.code === "unimplemented") {
+            console.warn("[Firestore] Browser does not support IndexedDB persistence.");
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("[Firebase] Init error:", e);
+    }
+    return db;
+  }
+
+  function defaultState() {
+    return {
+      player: { name: "Traveler", id: null, avatar: "🙂", model3d: "soldier", freeSpins: 0, freeSpinsNoDiamondCost: false, phoneVerified: false, bonusClaimed: false },
+      cash: 0,
+      lifetimeRent: 0,
+      eb: 0,
+      diamonds: 0,
+      initialEBClaimed: false,
+      totalDividends: 0,
+      plots: {},
+      plotBag: {},
+      plotBagItems: {},
+      luckyBagItems: {},
+      plotsVersion: 0,
+      saveVersion: 0,
+      eldenStopSeeds: 0,
+      eldenStopCooldowns: {},
+      calendar: { claimedDays: 0, lastClaimTime: 0, lastClaimDate: null },
+      liveDiamonds: {},
+      collectedDiamondIds: [],
+      lastDiamondSpawn: 0,
+      lastDiamondMovementAt: 0,
+      lastDiamondPlayerPosition: null,
+      lastTerritoryCheck: null,
+      boostExpiry: 0,
+      boostMultiplier: 30,
+      extractor: { built: false, level: 1, lastHarvest: Date.now(), stored: 0 },
+      pet: { unlocked: false, nickname: "Buddy", mood: 100, lastFedAt: 0, totalFetched: 0, lastFetchedResetDate: null },
+      berries: 0,
+      lastTick: Date.now(),
+      createdAt: Date.now(),
+      antiCheatStrikes: 0,
+      networkVerification: null,
+      cashoutBlocked: false,
+      redemptions: [],
+    };
+  }
+
+  let state = null;
+
+  // --- REALM SERVER EPOCH GATE: DISABLED ---
+  // Previously purged local saves older than REALM_SERVER_EPOCH. This caused
+  // existing players to lose their cash/lifetimeRent on every sync. Disabled
+  // so no player save is ever wiped by timestamp mismatches.
+  function isPreEpochSave(savedState) {
+    return false;
+  }
+
+  // --- CONSOLE TAMPER TRAPS ---
+  // Maximum sane values for economy fields. Anything above triggers a tamper strike.
+  const TAMPER_LIMITS = {
+    eb: 1000000,         // 1M EB max
+    cash: 10000,         // $10,000 max
+    diamonds: 50000,     // 50K diamonds max
+    totalDividends: 100000,
+  };
+  let _tamperStrikeCount = 0;
+
+  function applyTamperTraps(obj) {
+    if (typeof window === "undefined" || !obj) return;
+
+    const fields = ["eb", "cash", "diamonds", "totalDividends"];
+    const originalValues = {};
+
+    fields.forEach(field => {
+      originalValues[field] = obj[field] || 0;
+      let internalValue = obj[field] || 0;
+
+      Object.defineProperty(obj, field, {
+        get() { return internalValue; },
+        set(newValue) {
+          const oldValue = internalValue;
+          internalValue = newValue;
+
+          // Only flag suspicious direct assignments (not incremental game logic)
+          const jump = Math.abs(newValue - oldValue);
+          const limit = TAMPER_LIMITS[field] || 999999;
+
+          // A jump of more than 50% of the limit OR absolute value exceeding limit
+          if (newValue > limit || (oldValue > 0 && jump > limit * 0.5 && newValue > oldValue)) {
+            _tamperStrikeCount++;
+            console.error(
+              `[Store] TAMPER DETECTED: state.${field} changed from ${oldValue} to ${newValue} (jump=${jump}). ` +
+              `Strike ${_tamperStrikeCount}/3.`
+            );
+            if (typeof AntiCheat !== "undefined" && typeof AntiCheat.reportViolation === "function") {
+              AntiCheat.reportViolation("console_tamper", `${field}: ${oldValue} -> ${newValue}`);
+            }
+            // NOTE: previously wiped localStorage + signed the player out after 3 strikes.
+            // Legitimate large swings (offline income catch-up, dividends, jackpots) could
+            // trip this and permanently destroy real progress, so we only ever block the
+            // suspicious assignment below and report it for manual review — never delete data.
+            return; // Block the assignment
+          }
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    });
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+
+        // --- VERSION TAG: track the patch that produced this save, but never wipe
+        // player progress over it — a version bump used to nuke localStorage here,
+        // which then made the freshly-defaulted state look "newer" than the real
+        // cloud save below and overwrote it with defaults. Just carry data forward.
+        const currentVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
+
+        state = Object.assign(defaultState(), parsed);
+        state._gameVersion = currentVersion;
+        if (parsed.player) {
+          state.player = Object.assign(defaultState().player, parsed.player);
+        }
+        if (parsed.extractor) {
+          state.extractor = Object.assign(defaultState().extractor, parsed.extractor);
+        }
+        if (parsed.pet) {
+          state.pet = Object.assign(defaultState().pet, parsed.pet);
+        }
+        if (parsed.berries !== undefined) {
+          state.berries = parsed.berries;
+        }
+      } else {
+        state = defaultState();
+      }
+    } catch (e) {
+      console.warn("Save data unreadable, starting fresh.", e);
+      state = defaultState();
+    }
+
+    // --- REALM SERVER EPOCH GATE: purge saves older than the last intentional wipe ---
+    if (isPreEpochSave(state)) {
+      console.warn("[Store] Local save predates the current Realm Epoch — purging stale save.");
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      state = defaultState();
+      state.createdAt = Date.now();
+      state._epochWiped = true; // consumed by main.js to show a one-time toast
+    }
+
+    // --- CONSOLE TAMPER TRAPS: Protect economy fields from DevTools manipulation ---
+    applyTamperTraps(state);
+
+    // --- AUTO-RECOVER NAME & AVATAR FROM OWNED PLOTS ---
+    if (state && state.player && (!state.player.name || state.player.name === "Traveler")) {
+      for (const id in (state.plots || {})) {
+        const p = state.plots[id];
+        if (p.ownerName && p.ownerName !== "Traveler") {
+          state.player.name = p.ownerName;
+          if (p.avatar && p.avatar !== "🙂") state.player.avatar = p.avatar;
+          break;
+        }
+      }
+    }
+
+    // --- PLAYER CONFLICT AUDIT: Detect and resolve UID/IP conflicts on load ---
+    if (state && state.player && state.player.id) {
+      const conflictCheck = ConflictResolver.checkConflict(state.player.id);
+      if (conflictCheck && conflictCheck.hasConflict) {
+        console.log(`[Conflict] Detected conflict for ${state.player.id}: ${conflictCheck.reason}`);
+        // Trigger resolution after a brief delay to let UI show advisory
+        setTimeout(() => {
+          ConflictResolver.resolveConflict({
+            playerId: state.player.id,
+            onResolved: (result) => {
+              if (result.success) {
+                console.log(`[Conflict] Resolved: kept ${result.plotsKept} plots, EB=${result.eb}`);
+                // Refresh the save data after resolution
+                load();
+              } else {
+                console.warn("[Conflict] Resolution failed:", result.reason);
+              }
+            }
+          });
+        }, 500);
+      }
+    }
+
+    // --- SELF-SEALING LIFETIME RENT & CASH AUDIT RESTORATION: DISABLED ---
+    // This section previously modified player cash/rent
+    // which caused data loss for real players. Disabled to prevent further corruption.
+    // if (state && state.player && !state.cashAuditV1Done) {
+    //   state.cashAuditV1Done = true;
+    //
+    //   const pName = (state.player.name || "").toLowerCase();
+    //   if ((pName.includes("vic") || (state.plots && Object.keys(state.plots).length >= 20))) {
+    //     if ((Number(state.lifetimeRent) || 0) < 1.01) {
+    //       state.lifetimeRent = 1.017436000000000;
+    //     }
+    //     if ((Number(state.cash) || 0) > 0.30 && state.extractor && state.extractor.level >= 2) {
+    //       state.cash = 0.087474587225872;
+    //     }
+    //   }
+    //
+    //   try {
+    //     localStorage.setItem(KEY, JSON.stringify(state));
+    //     setTimeout(() => syncToCloud(), 500);
+    //   } catch (e) {}
+    // }
+    // ============================================================
+
+    updateBaseRateCache();
+    return state;
+  }
+
+  // Default to false for routine background tasks to protect Firebase quota
+  function save(immediateCloud = false) {
+    // A superseded/stale session (lock stolen by another tab) must never clobber
+    // the shared localStorage with its own outdated in-memory state.
+    if (isSessionPaused) return;
+    
+    // PREVENT BACKGROUND TAB SAVES: hidden tabs cannot overwrite the session leader
+    if (typeof document !== "undefined" && document.hidden) {
+      console.warn("[Store] Blocked save from hidden tab — only the active session may persist.");
+      return;
+    }
+    
+    try {
+      state._gameVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
+      state.lastSavedAt = Date.now(); // Timestamp for conflict resolution
+      state.saveVersion = (state.saveVersion || 0) + 1; // LWW version counter
+      localStorage.setItem(KEY, JSON.stringify(state));
+      syncToCloudDebounced(immediateCloud);
+    } catch (e) {
+      console.warn("Could not save game.", e);
+    }
+  }
+
+  let localDiskTimeout = null;
+  function flushToDisk() {
+    if (!state || isSessionPaused) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  // Flush immediately on phone lock, tab switch, or app close
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", () => {
+      flushToDisk();
+      syncToCloud();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        flushToDisk();
+        syncToCloud();
+      }
+    });
+  }
+
+  // Cloud Save to Firestore (Guaranteed Sync)
+  // BLOCKED for guest accounts - prevents cross-device conflicts
+  function syncSafeStateToCloud() {
+    if (typeof firebase === "undefined" || !firebase.functions || !state?.player?.id) {
+      return Promise.resolve(false);
+    }
+
+    const syncSafeState = firebase.functions().httpsCallable("syncSafeState");
+    return syncSafeState({ state })
+      .then((result) => {
+        if (result.data?.reset) {
+          state = Object.assign(defaultState(), result.data.state || {});
+          if (result.data.state?.player) {
+            state.player = Object.assign(defaultState().player, result.data.state.player);
+          }
+          state._epochWiped = true;
+          localStorage.setItem(KEY, JSON.stringify(state));
+        } else {
+          if (Number.isFinite(Number(result.data?.eldenStopSeeds))) {
+            // Server owns eldenStopSeeds — mirror the authoritative count locally.
+            state.eldenStopSeeds = Math.max(0, Number(result.data.eldenStopSeeds) || 0);
+            localStorage.setItem(KEY, JSON.stringify(state));
+          }
+          let mirrorDirty = false;
+          if (result.data?.authoritative && typeof result.data.authoritative === "object") {
+            // Economy values are SERVER-AUTHORITATIVE and adopted on every sync
+            // response. Without this each device kept ticking its own local copy
+            // of cash/berries/etc. forever — the bug that made the same account
+            // show different RC and pet-food counts on Android vs iPhone.
+            Object.assign(state, result.data.authoritative);
+            mirrorDirty = true;
+          }
+          if (result.data?.plotBag && typeof result.data.plotBag === "object") {
+            // Server owns plotBag — client never writes it; mirror the authoritative bag.
+            state.plotBag = { ...result.data.plotBag };
+            mirrorDirty = true;
+          }
+          if (result.data?.plotBagItems && typeof result.data.plotBagItems === "object") {
+            // Phase 2: authoritative instance-id inventory.
+            state.plotBagItems = { ...result.data.plotBagItems };
+            mirrorDirty = true;
+          }
+          if (result.data?.luckyBagItems && typeof result.data.luckyBagItems === "object") {
+            // 🍀 Read-only mirror of which bagged instances are Lucky.
+            state.luckyBagItems = { ...result.data.luckyBagItems };
+            mirrorDirty = true;
+          }
+          if (Array.isArray(result.data?.plotDroppedTids) && result.data.plotDroppedTids.length) {
+            // Server just evicted tiles whose instanceId already sits in the
+            // bag (bag↔map invariant). Drop them locally too, otherwise the
+            // ghost keeps rendering and keeps being re-sent on the next sync.
+            if (!state.plots || typeof state.plots !== "object") state.plots = {};
+            for (const t of result.data.plotDroppedTids) delete state.plots[t];
+            mirrorDirty = true;
+          }
+          // Server-authoritative display name. Adopt it so an admin-approved
+          // rename takes effect on this device on the next sync instead of the
+          // old local name silently winning forever.
+          if (typeof result.data?.playerName === "string" && result.data.playerName) {
+            if (state.player.name !== result.data.playerName) {
+              console.log(`[Cloud] Adopted server display name: ${result.data.playerName}`);
+              state.player.name = result.data.playerName;
+              mirrorDirty = true;
+            }
+          }
+          // Ad counters are server-owned (daily free spins, ad credits) — the
+          // sync response carries the rolled values so the wheel/extractor UI
+          // shows the correct "spins remaining today" at login.
+          const adState = result.data?.adState;
+          if (adState && typeof adState === "object") {
+            state.player.freeSpins = Number(adState.freeSpins) || 0;
+            state.player.freeSpinsNoDiamondCost = state.player.freeSpins > 0;
+            state.player.freeSpinsCap = Number(adState.freeSpinsCap) || 3;
+            state.player.adRecallCredits = Number(adState.adRecallCredits) || 0;
+            state.player.adExtractDoubles = Number(adState.adExtractDoubles) || 0;
+            state.player.adRewardCounts = adState.adRewardCounts || {};
+            mirrorDirty = true;
+          }
+          if (mirrorDirty) localStorage.setItem(KEY, JSON.stringify(state));
+        }
+        if (result.data?.betaSeedsGranted) {
+          if (typeof window !== "undefined" && typeof window.showToast === "function") {
+            window.showToast("🔥 BETA GIFT: 5 Elden Stop Seeds added to your satchel! Find a public landmark and plant a Beacon!", 6000);
+          }
+        }
+        return true;
+      })
+      .catch((err) => {
+        console.warn("[Cloud] Safe state sync failed:", err);
+        return false;
+      });
+  }
+
+  function syncToCloud() {
+    if (isSessionPaused) return;
+    if (!cloudSyncComplete) return; // Block until syncFromCloud completes
+    
+    // PREVENT BACKGROUND TAB SYNC: hidden tabs cannot push to cloud
+    // This prevents the "stale desktop tab" from overwriting the active mobile session
+    if (typeof document !== "undefined" && document.hidden) {
+      console.warn("[Store] Blocked syncToCloud from hidden tab — only active session syncs.");
+      return;
+    }
+    
+    // Block guest saves from syncing to cloud - guest data stays local only
+    if (state && state.player && (!state.player.id || state.player.id.startsWith("guest-"))) {
+      return;
+    }
+    // Belt-and-suspenders: never push a pre-epoch save to Firestore, even if it
+    // somehow slipped past the load()-time purge (e.g. mid-session state mutation).
+    if (isPreEpochSave(state)) {
+      console.warn("[Store] Blocked cloud sync of pre-epoch save.");
+      return;
+    }
+
+    // Only the Admin SDK callable may persist save state. It ignores economy,
+    // ownership, reward, and progression fields supplied by the browser.
+    if (typeof firebase !== "undefined" && firebase.functions) {
+      syncSafeStateToCloud();
+      return;
+    }
+
+    return;
+  }
+
+  // Smart 30-Second Cloud Save Throttle (Cuts Firestore writes by ~90%!)
+  let cloudSyncTimeout = null;
+  let lastCloudSyncTime = 0;
+  const CLOUD_SYNC_THROTTLE_MS = 1000; // 1-second window — near-instant cloud sync
+
+  function syncToCloudDebounced(immediateCloud = false) {
+    const now = Date.now();
+
+    // Critical actions (buying land, wheel jackpot, citadel) sync IMMEDIATELY
+    if (immediateCloud) {
+      clearTimeout(cloudSyncTimeout);
+      cloudSyncTimeout = null;
+      lastCloudSyncTime = now;
+      syncToCloud();
+      return;
+    }
+
+    // If 30 seconds have passed, write to cloud now
+    if (now - lastCloudSyncTime >= CLOUD_SYNC_THROTTLE_MS) {
+      clearTimeout(cloudSyncTimeout);
+      cloudSyncTimeout = null;
+      lastCloudSyncTime = now;
+      syncToCloud();
+      return;
+    }
+
+    // Otherwise, buffer the write to fire when the 30-second window finishes
+    if (!cloudSyncTimeout) {
+      cloudSyncTimeout = setTimeout(() => {
+        cloudSyncTimeout = null;
+        lastCloudSyncTime = Date.now();
+        syncToCloud();
+      }, CLOUD_SYNC_THROTTLE_MS - (now - lastCloudSyncTime));
+    }
+  }
+
+  // Load from Cloud with Full Cloud Authority
+  async function syncFromCloud(playerId) {
+    const firestore = getDb();
+    if (!firestore || !playerId) { cloudSyncComplete = true; return null; }
+
+    // Canonical identity guard: a Google UID must always map to the same account.
+    if (state && state.player && state.player.id && state.player.id !== playerId) {
+      console.warn(`[Store] Local save UID mismatch: ${state.player.id} -> ${playerId}. Resetting to canonical player record.`);
+      state = Object.assign(defaultState(), state);
+      state.player.id = playerId;
+      state.player.name = state.player.name || "Traveler";
+      state.player.avatar = state.player.avatar || "🙂";
+      localStorage.setItem(KEY, JSON.stringify(state));
+    }
+
+    // SESSION LOCK with PRESENCE HEARTBEAT: Check if another session is actively running
+    try {
+      // Both reads are independent — fired together they cost one round trip
+      // instead of two, and this runs before the boot pipeline every session.
+      const [saveDoc, presenceDoc] = await Promise.all([
+        firestore.collection("saves").doc(playerId).get(),
+        firestore.collection("presence").doc(playerId).get(),
+      ]);
+      if (saveDoc.exists) {
+        const saveData = saveDoc.data();
+        const existingLock = saveData.sessionLock;
+        const lockAge = existingLock ? (Date.now() - Number(existingLock.lockedAt || 0)) : Infinity;
+        const LOCK_STALE_MS = 30000; // Lock considered stale after 30s without heartbeat
+
+        // Also check presence collection for heartbeat (more real-time than sessionLock)
+        let presenceAge = Infinity;
+        try {
+          if (presenceDoc.exists) {
+            const presenceData = presenceDoc.data() || {};
+            const heartbeat = Number(presenceData.lastHeartbeat || 0);
+            presenceAge = heartbeat ? (Date.now() - heartbeat) : Infinity;
+          }
+        } catch (e) {
+          console.warn("[Presence] Read error:", e.message);
+        }
+        const effectiveLockAge = Math.min(lockAge, presenceAge);
+
+        if (existingLock && existingLock.sessionId !== localSessionId && effectiveLockAge < LOCK_STALE_MS) {
+          // Another session is active and its lock is fresh — BLOCK this session
+          console.warn(`[Session] BLOCKED — account already active in another window/tab (lock age: ${Math.round(lockAge / 1000)}s)`);
+          isSessionPaused = true;
+          cloudSyncComplete = true;
+
+          // Show the session conflict modal
+          const conflictModal = document.getElementById("session-conflict-modal");
+          if (conflictModal) conflictModal.classList.remove("hidden");
+
+          // Wire up the Take Over button
+          const takeOverBtn = document.getElementById("resume-session-btn");
+          if (takeOverBtn && !takeOverBtn._wired) {
+            takeOverBtn._wired = true;
+            takeOverBtn.addEventListener("click", async () => {
+              // CRITICAL: Fetch cloud state FIRST to preserve model3d, boost, plots
+              // before claiming the lock. Without this, the default in-memory state
+              // (model3d:"soldier", boostExpiry:0) overwrites the real cloud save.
+              try {
+                const firestore = getDb();
+                if (firestore && playerId) {
+                  const cloudDoc = await firestore.collection("saves").doc(playerId).get();
+                  if (cloudDoc.exists) {
+                    const cloudData = cloudDoc.data() || {};
+                    // Preserve critical cloud fields that the default state would destroy
+                    if (cloudData.player?.model3d && cloudData.player.model3d !== state.player?.model3d) {
+                      console.log(`[TakeOver] Preserving cloud model3d: ${cloudData.player.model3d}`);
+                      if (!state.player) state.player = {};
+                      state.player.model3d = cloudData.player.model3d;
+                    }
+                    if (Number(cloudData.boostExpiry) > Number(state.boostExpiry || 0)) {
+                      console.log(`[TakeOver] Preserving cloud boostExpiry: ${cloudData.boostExpiry}`);
+                      state.boostExpiry = cloudData.boostExpiry;
+                      state.boostMultiplier = cloudData.boostMultiplier || state.boostMultiplier;
+                    }
+                    if (cloudData.plots && Object.keys(cloudData.plots).length > Object.keys(state.plots || {}).length) {
+                      console.log(`[TakeOver] Preserving cloud plots (${Object.keys(cloudData.plots).length} > ${Object.keys(state.plots || {}).length})`);
+                      state.plots = cloudData.plots;
+                    }
+                    if (cloudData.eb !== undefined) state.eb = cloudData.eb;
+                    if (cloudData.cash !== undefined) state.cash = cloudData.cash;
+                    if (cloudData.diamonds !== undefined) state.diamonds = cloudData.diamonds;
+                    if (cloudData.lifetimeRent !== undefined) state.lifetimeRent = cloudData.lifetimeRent;
+                    if (cloudData.extractor) state.extractor = cloudData.extractor;
+                    if (cloudData.pet) state.pet = cloudData.pet;
+                    if (cloudData.calendar) state.calendar = cloudData.calendar;
+                  }
+                }
+              } catch (e) {
+                console.warn("[TakeOver] Failed to read cloud state:", e);
+              }
+              // Force-takeover: claim the lock and reload
+              state.sessionLock = { sessionId: localSessionId, lockedAt: Date.now() };
+              state.lastSavedAt = Date.now();
+              localStorage.setItem(KEY, JSON.stringify(state));
+              syncSafeStateToCloud().finally(() => window.location.reload());
+            });
+          }
+          return null;
+        }
+      }
+
+      // No active lock or lock is stale — claim it
+      state.sessionLock = { sessionId: localSessionId, lockedAt: Date.now() };
+      isSessionPaused = false;
+    } catch (lockErr) {
+      console.warn("[Session] Lock claim error (proceeding anyway):", lockErr);
+    }
+
+    // Start presence heartbeat: update presence/{uid} every 10s so other tabs know this session is alive
+    if (typeof heartbeatInterval === "undefined") {
+      window.heartbeatInterval = setInterval(async () => {
+        if (state && state.player && state.player.id) {
+          try {
+            const firestore = getDb();
+            if (firestore) {
+              await firestore.collection("presence").doc(state.player.id).set({
+                sessionId: localSessionId,
+                lastHeartbeat: Date.now(),
+                tabId: localSessionId, // distinguish tabs
+              }, { merge: true });
+            }
+          } catch (e) {
+            // Silent fail — heartbeat is best-effort
+          }
+        }
+      }, 10000);
+      // Cleanup on unload
+      window.addEventListener("beforeunload", () => {
+        if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);
+      });
+    }
+
+    try {
+      // saves_private holds the fields that must NOT be world-readable (Reward
+      // Points, date of birth) — `saves` is readable by every player because
+      // the leaderboard and the profile modal need it. The rules make this doc
+      // owner-only, so this read succeeds for the player and is denied for
+      // anyone else, which is exactly the privacy boundary we want.
+      const [doc, privateDoc] = await Promise.all([
+        firestore.collection("saves").doc(playerId).get(),
+        firestore.collection("saves_private").doc(playerId).get().catch(() => null),
+      ]);
+      if (doc.exists) {
+        const cloudData = doc.data();
+        const localPlayer = Object.assign({}, defaultState().player, state?.player || {});
+        const currentName = localPlayer.name;
+        const currentAvatar = localPlayer.avatar;
+
+        // A stale cloud save is just as dangerous as a stale local save. Replace
+        // it with a fresh account state before any merge can resurrect old data.
+        if (isPreEpochSave(cloudData)) {
+          console.warn("[Cloud] Cloud save predates the current Realm Epoch — replacing it with a fresh state.");
+          state = defaultState();
+          state.createdAt = Date.now();
+          state.player.id = playerId;
+          state.player.name = currentName || "Traveler";
+          state.player.avatar = currentAvatar || "🙂";
+          state.lastSavedAt = Date.now();
+          state._epochWiped = true;
+          state.sessionLock = {
+            sessionId: localSessionId,
+            lockedAt: Date.now()
+          };
+          await syncSafeStateToCloud();
+          localStorage.setItem(KEY, JSON.stringify(state));
+          if (typeof showToast === "function") {
+            showToast("✨ A new Realm Era has begun! Your account has been reset for the new season.", 6000);
+          }
+        } else {
+        const localCalendar = state?.calendar || {};
+        const cloudCalendar = cloudData.calendar || {};
+        const mergedCalendar = {
+          claimedDays: Math.max(Number(localCalendar.claimedDays) || 0, Number(cloudCalendar.claimedDays) || 0),
+          lastClaimTime: Math.max(Number(localCalendar.lastClaimTime) || 0, Number(cloudCalendar.lastClaimTime) || 0),
+          lastClaimDate: localCalendar.lastClaimDate || cloudCalendar.lastClaimDate || null,
+        };
+
+        // Merge daily quest claims the same way as the calendar above — otherwise
+        // whichever side (local vs cloud) wins the timestamp race silently drops
+        // "claimed" flags, letting a refresh re-open an already-claimed quest.
+        const localQuests = state?.dailyQuests || null;
+        const cloudQuests = cloudData.dailyQuests || null;
+        let mergedQuests = cloudQuests || localQuests || null;
+        if (localQuests && cloudQuests && localQuests.date === cloudQuests.date) {
+          const questIds = new Set([
+            ...Object.keys(localQuests.quests || {}),
+            ...Object.keys(cloudQuests.quests || {}),
+          ]);
+          const mergedQuestMap = {};
+          questIds.forEach((id) => {
+            const l = (localQuests.quests || {})[id] || {};
+            const c = (cloudQuests.quests || {})[id] || {};
+            // Once claimed/completed on either side, it stays claimed/completed.
+            mergedQuestMap[id] = {
+              completed: Boolean(l.completed) || Boolean(c.completed),
+              claimed: Boolean(l.claimed) || Boolean(c.claimed),
+            };
+          });
+          mergedQuests = { date: localQuests.date, quests: mergedQuestMap };
+        } else if (localQuests && cloudQuests) {
+          // Different days recorded — keep whichever actually matches today.
+          const today = new Date().toISOString().slice(0, 10);
+          mergedQuests = localQuests.date === today ? localQuests : cloudQuests;
+        }
+
+        // --- VERSION-AWARE CONFLICT RESOLUTION (LWW) ---
+        // Uses saveVersion (incremented on every Store.save) for authoritative
+        // last-write-wins. This prevents timestamp manipulation and stale tab overwrites.
+        // A stale tab with a newer localTimestamp but OLDER saveVersion is REJECTED.
+        const localVersion = Number(state?.saveVersion) || 0;
+        const cloudVersion = Number(cloudData.saveVersion) || 0;
+
+        if (localVersion > cloudVersion && state?.player?.id === playerId) {
+          // LOCAL IS NEWER: Device has uncommitted actions (boost, wheel, etc.)
+          // Keep local state, but merge in any cloud-only plots
+          console.log(`[Cloud] Local state is newer (v${localVersion} > v${cloudVersion}). Preserving local progress.`);
+          // Preserve ephemeral local-only state across sync
+          const prevLiveDiamonds = state.liveDiamonds || {};
+          const prevCollected = state.collectedDiamondIds || [];
+          const prevLastDiamondSpawn = state.lastDiamondSpawn || 0;
+          const prevLastDiamondMovementAt = state.lastDiamondMovementAt || 0;
+          const prevLastDiamondPlayerPosition = state.lastDiamondPlayerPosition || null;
+          const prevBoostExpiry = Number(state.boostExpiry) || 0;
+          const prevBoostMultiplier = Number(state.boostMultiplier) || 30;
+          // plotBagItems / luckyBagItems / plotBag are SERVER-OWNED (absent from
+          // SAFE_SAVE_FIELDS — the client can never write them). The LWW version
+          // check below is for client-writable fields; it must never shadow the
+          // authoritative bag. Event-reward plots, trade plots and Elden-Stop
+          // jackpots all land in cloud plotBagItems while the local copy is
+          // still the pre-grant snapshot — adopt cloud unconditionally.
+          if (cloudData.plotBagItems && typeof cloudData.plotBagItems === "object") {
+            state.plotBagItems = { ...cloudData.plotBagItems };
+          }
+          if (cloudData.luckyBagItems && typeof cloudData.luckyBagItems === "object") {
+            state.luckyBagItems = { ...cloudData.luckyBagItems };
+          }
+          if (cloudData.plotBag && typeof cloudData.plotBag === "object") {
+            state.plotBag = { ...cloudData.plotBag };
+          }
+          if (cloudData.plots) {
+            if (!state.plots) state.plots = {};
+            for (const plotId in cloudData.plots) {
+              // Only merge cloud plots that are NOT already known locally.
+              // Pruning against the plots collection happens after the owner
+              // query below — never re-add blindly here.
+              if (!state.plots[plotId]) {
+                state.plots[plotId] = cloudData.plots[plotId];
+                console.log(`[Cloud] Merged cloud-only plot: ${plotId}`);
+              }
+            }
+          }
+          // Merge calendar (take most recent values)
+          state.calendar = mergedCalendar;
+          state.dailyQuests = mergedQuests;
+          // Merge ephemeral state — diamonds are now cloud-synced
+          state.liveDiamonds = Object.assign(state.liveDiamonds || {}, prevLiveDiamonds);
+          const mergedCollected2 = new Set([...(state.collectedDiamondIds || []), ...prevCollected]);
+          state.collectedDiamondIds = [...mergedCollected2].slice(-200);
+          state.lastDiamondSpawn = Math.max(state.lastDiamondSpawn || 0, prevLastDiamondSpawn);
+          state.lastDiamondMovementAt = Math.max(state.lastDiamondMovementAt || 0, prevLastDiamondMovementAt);
+          state.lastDiamondPlayerPosition = prevLastDiamondPlayerPosition || state.lastDiamondPlayerPosition;
+          // Upload merged state to cloud immediately
+          state.lastSavedAt = Date.now();
+          state.saveVersion = (state.saveVersion || 0) + 1; // bump version on merge
+          localStorage.setItem(KEY, JSON.stringify(state));
+          // Fire-and-forget cloud upload
+          syncSafeStateToCloud();
+        } else {
+          // CLOUD IS NEWER OR EQUAL: Safely adopt cloud data (LWW rejects stale local)
+          if (localVersion < cloudVersion) {
+            console.warn(`[Cloud] DISCARDING STALE LOCAL STATE — local v${localVersion} < cloud v${cloudVersion}. Cloud is authoritative.`);
+          } else {
+            console.log(`[Cloud] Cloud state is newer or equal (v${cloudVersion} >= v${localVersion}). Adopting cloud data.`);
+          }
+          // Preserve ephemeral local-only state before cloud overwrite
+          const prevLiveDiamonds = state.liveDiamonds || {};
+          const prevCollected = state.collectedDiamondIds || [];
+          const prevLastDiamondSpawn = state.lastDiamondSpawn || 0;
+          const prevLastDiamondMovementAt = state.lastDiamondMovementAt || 0;
+          const prevLastDiamondPlayerPosition = state.lastDiamondPlayerPosition || null;
+          const prevBerries = Number(state.berries) || 0;
+          const prevBoostExpiry = Number(state.boostExpiry) || 0;
+          const prevBoostMultiplier = Number(state.boostMultiplier) || 30;
+          const prevLoginClaimedDate = state.loginClaimedDate || null;
+          state = Object.assign(defaultState(), cloudData);
+          state._gameVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
+          state.calendar = mergedCalendar;
+          state.dailyQuests = mergedQuests;
+          if (cloudData.player) {
+            // Cloud is authoritative, but preserve custom local fields when an
+            // older cloud save does not contain them yet.
+            state.player = Object.assign({}, defaultState().player, localPlayer, cloudData.player);
+            if ((!cloudData.player.name || cloudData.player.name === "Traveler") && localPlayer.name && localPlayer.name !== "Traveler") {
+              state.player.name = localPlayer.name;
+            }
+            if ((!cloudData.player.avatar || cloudData.player.avatar === "🙂") && localPlayer.avatar && localPlayer.avatar !== "🙂") {
+              state.player.avatar = localPlayer.avatar;
+            }
+            if ((!cloudData.player.model3d || cloudData.player.model3d === "robot") && localPlayer.model3d && localPlayer.model3d !== "robot") {
+              state.player.model3d = localPlayer.model3d;
+            }
+          } else {
+            state.player = localPlayer;
+          }
+
+          if (currentName && currentName !== "Traveler" && (!state.player.name || state.player.name === "Traveler")) {
+            state.player.name = currentName;
+          }
+          if (currentAvatar && currentAvatar !== "🙂" && (!state.player.avatar || state.player.avatar === "🙂")) {
+            state.player.avatar = currentAvatar;
+          }
+
+          // Merge ephemeral local-only state with cloud state
+          // Diamonds are now synced to cloud — merge instead of overwrite
+          state.liveDiamonds = Object.assign(state.liveDiamonds || {}, prevLiveDiamonds);
+          const mergedCollected = new Set([...(state.collectedDiamondIds || []), ...prevCollected]);
+          state.collectedDiamondIds = [...mergedCollected].slice(-200);
+          state.lastDiamondSpawn = Math.max(state.lastDiamondSpawn || 0, prevLastDiamondSpawn);
+          state.lastDiamondMovementAt = Math.max(state.lastDiamondMovementAt || 0, prevLastDiamondMovementAt);
+          state.lastDiamondPlayerPosition = prevLastDiamondPlayerPosition || state.lastDiamondPlayerPosition;
+
+          // Preserve local berries if cloud doesn't have them (old save migration)
+          if (cloudData.berries === undefined && prevBerries > 0) {
+            state.berries = prevBerries;
+            console.log(`[Cloud] Preserved local berries (${prevBerries}) — cloud save missing field.`);
+          }
+
+          const cloudBoostExpiry = Number(state.boostExpiry) || 0;
+          if (prevBoostExpiry > cloudBoostExpiry) {
+            state.boostExpiry = prevBoostExpiry;
+            state.boostMultiplier = prevBoostMultiplier;
+          }
+
+          // Same idea as berries: an older cloud save may not carry this field
+          // yet. Keeping the local copy stops the login quest re-opening after
+          // it has already been claimed today.
+          if (cloudData.loginClaimedDate === undefined && prevLoginClaimedDate) {
+            state.loginClaimedDate = prevLoginClaimedDate;
+          }
+
+          localStorage.setItem(KEY, JSON.stringify(state));
+        }
+        }
+      }
+
+      // Reward Points and date of birth live in saves_private and deliberately
+      // take no part in the local/cloud merge above: they are server-owned and
+      // never client-writable, so the server copy simply replaces local. This
+      // is also the ONLY place they enter the client — they are not on the
+      // world-readable `saves` doc, so no other player can read them.
+      if (privateDoc && privateDoc.exists) {
+        const priv = privateDoc.data() || {};
+        if (priv.rewardPoints !== undefined) state.rewardPoints = Number(priv.rewardPoints) || 0;
+        if (priv.dateOfBirth) state.dateOfBirth = Number(priv.dateOfBirth);
+        // Achievement progress + unlock record. Server-owned like the two
+        // above — never client-writable, so a tampered save cannot mint badges.
+        if (priv.stats && typeof priv.stats === "object") state.achievementStats = priv.stats;
+        if (priv.achievements && typeof priv.achievements === "object") state.achievementsClaimed = priv.achievements;
+        // Citadel spoils daily tally + the post-recall re-station cooldown.
+        if (priv.citadelSpoils && typeof priv.citadelSpoils === "object") state.citadelSpoils = priv.citadelSpoils;
+        if (priv.citadelRecallCooldownUntil) state.citadelRecallCooldownUntil = Number(priv.citadelRecallCooldownUntil) || 0;
+      }
+
+      // 2. Query and restore all plots officially owned by this player from world map
+      const plotSnap = await firestore.collection("plots").where("ownerId", "==", playerId).get();
+
+      if (!state.plots) state.plots = {};
+      const officialPlotIds = new Set();
+
+      if (!plotSnap.empty) {
+        plotSnap.forEach((pDoc) => {
+          state.plots[pDoc.id] = pDoc.data();
+          officialPlotIds.add(pDoc.id);
+        });
+      }
+
+      // 3. GHOST PRUNER: the plots collection is the source of truth for what
+      // is on the map. Any local/save entry with no matching doc is a leftover
+      // from a pickup/relocate (or polluted save.plots) and must not render.
+      // Only prune when the query succeeded (plotSnap is a complete result).
+      let ghostPruned = 0;
+      if (plotSnap && typeof plotSnap.empty === "boolean") {
+        for (const tid of Object.keys(state.plots)) {
+          if (!officialPlotIds.has(tid)) {
+            delete state.plots[tid];
+            ghostPruned++;
+          }
+        }
+      }
+      if (ghostPruned > 0) {
+        console.log(`[Cloud] Pruned ${ghostPruned} ghost plot(s) not present on the world map.`);
+        // Bump version so the cleaned plot map wins the syncSafeState guard
+        state.plotsVersion = (Number(state.plotsVersion) || 0) + 1;
+        state.lastSavedAt = Date.now();
+        localStorage.setItem(KEY, JSON.stringify(state));
+        syncSafeStateToCloud();
+      }
+
+      localStorage.setItem(KEY, JSON.stringify(state));
+
+      // Essential data loaded — unblock the game immediately
+      cloudSyncComplete = true;
+
+      // Non-critical: session listener removed — cloud sync handles data safely
+      try {
+        state.activeSessionId = localSessionId;
+        isSessionPaused = false;
+      } catch (sessionErr) {
+        console.warn("[Cloud] Session claim non-critical error:", sessionErr);
+      }
+
+      console.log(`[Cloud] Restored account for ${playerId} with ${Object.keys(state.plots || {}).length} plots.`);
+      return state;
+    } catch (err) {
+      console.warn("[Cloud] Load error:", err);
+      cloudSyncComplete = true; // Unblock game even if cloud read fails
+    }
+    return null;
+  }
+
+  function get() { return state; }
+
+  function reset() {
+    localStorage.removeItem(KEY);
+    state = defaultState();
+    save();
+    return state;
+  }
+
+  // ============================================================
+// PLAYER CONFLICT DETECTION & RESOLUTION
+// Tracks UID and IP conflicts across saves, resolves by keeping
+// the account with largest progress (max 10 plots / 1000EB).
+// Respects Firebase limits: one read per conflict check, batch writes.
+// ============================================================
+let playerConflictCheckCache = {};
+const CONFLICT_THROTTLE_MS = 60000; // 1-minute throttle between conflict checks
+
+const CONFLICT_RULES = {
+  maxPlots: 10,
+  maxPlotWorthEB: 1000,
+  extraEBForBackpay: 500,
+};
+
+// Track last conflict check time per player
+let lastConflictCheck = {};
+// ============================================================
+
+// Fast Rarity Rate Lookup Table (Zero array find overhead)
+  let cachedBaseRate = 0;
+  let lastPlotsCount = -1;
+
+  function updateBaseRateCache() {
+    if (!state || !state.plots) {
+      cachedBaseRate = 0;
+      return;
+    }
+    const currentCount = Object.keys(state.plots).length;
+    // Include the lucky count so gaining/losing a 🍀 plot busts the cache too.
+    let luckyCount = 0;
+    for (const id in state.plots) if (state.plots[id]?.lucky) luckyCount++;
+    const cacheKey = currentCount * 1000 + luckyCount;
+    if (cacheKey === lastPlotsCount) return;
+
+    lastPlotsCount = cacheKey;
+    let sum = 0;
+    for (const id in state.plots) {
+      const p = state.plots[id];
+      const rKey = p.rarity?.key || p.rarity || "common";
+      // 🍀 Lucky plots earn ×1.1; plotRate() handles the multiplier.
+      sum += CONFIG.plotRate(rKey, p.lucky === true);
+    }
+    cachedBaseRate = sum;
+  }
+
+  // ============================================================
+  // PLAYER CONFLICT DETECTION & RESOLUTION
+  // Tracks UID and IP conflicts across saves, resolves by keeping
+  // the account with largest progress (max 10 plots / 1000EB).
+  // Respects Firebase limits: one read per conflict check, batch writes.
+  // ============================================================
+  const ConflictResolver = (() => {
+    let initialized = false;
+
+    function init() {
+      if (initialized) return;
+      initialized = true;
+    }
+
+    // Get player state from local save
+    function getLocalState(uid) {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return parsed.player?.id === uid ? parsed : null;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    // Check if player has conflicting UID or IP in Firestore
+    async function checkConflict(playerId) {
+      init();
+      const now = Date.now();
+      const playerKey = `conflict_${playerId}`;
+
+      // Throttle: avoid excessive Firestore reads
+      if (lastConflictCheck[playerKey] && now - lastConflictCheck[playerKey] < CONFLICT_THROTTLE_MS) {
+        return playerConflictCheckCache[playerKey] || { hasConflict: false };
+      }
+
+      const firestore = getDb();
+      if (!firestore) return { hasConflict: false, reason: "no_firestore" };
+
+      hasConflict = false;
+      conflictReason = null;
+      bestAccount = null;
+      otherAccounts = [];
+
+      try {
+        // 1. Check saves collection for this playerId - if multiple documents exist, conflict
+        const savesSnap = await firestore.collection("saves").where("playerId", "==", playerId).limit(2).get();
+        const saveCount = savesSnap.size;
+
+        if (saveCount > 1) {
+          // Multiple save files for same playerId - conflict!
+          hasConflict = true;
+          conflictReason = "multiple_save_files";
+
+          // Find the best account (most plots/EB) and others
+          let bestScore = -1;
+          savesSnap.forEach(doc => {
+            const data = doc.data();
+            const plotsCount = Object.keys(data.plots || {}).length;
+            const eb = Number(data.eb) || 0;
+            const worth = plotsCount * 100 + eb; // simple scoring
+            if (worth > bestScore) {
+              bestScore = worth;
+              bestAccount = doc.id;
+            } else {
+              otherAccounts.push(doc.id);
+            }
+          });
+
+          // Store result in cache
+          playerConflictCheckCache[playerKey] = { hasConflict: true, reason: "multiple_save_files", bestAccount, otherAccounts };
+          lastConflictCheck[playerKey] = now;
+          return playerConflictCheckCache[playerKey];
+        }
+
+        // 2. Check plots collection for ownership conflicts
+        // If this playerId owns plots but there are other players with same plot IDs, conflict
+        const plotSnap = await firestore.collection("plots").where("ownerId", "==", playerId).get();
+        const ownedPlotCount = plotSnap.size;
+
+        if (ownedPlotCount > 0) {
+          // Check if any of these plots also owned by other players
+          // (This would indicate shared/IP-conflicted accounts)
+          // Sample a few plots to check for shared ownership
+          const plotDocs = [];
+          plotSnap.forEach(doc => plotDocs.push(doc.id));
+
+          if (plotDocs.length > 0) {
+            // Check first few plots for shared ownership
+            const checkCount = Math.min(plotDocs.length, 5);
+            let sharedFound = false;
+
+            for (let i = 0; i < checkCount; i++) {
+              const plotDoc = plotDocs[i];
+              const plotSnap2 = await firestore.collection("plots").doc(plotDoc).get();
+              const plotData = plotSnap2.data();
+              if (plotData && plotData.ownerId && plotData.ownerId !== playerId) {
+                sharedFound = true;
+                hasConflict = true;
+                conflictReason = "shared_plot_ownership";
+                break;
+              }
+            }
+
+            if (sharedFound) {
+              playerConflictCheckCache[playerKey] = { hasConflict: true, reason: "shared_plot_ownership" };
+              lastConflictCheck[playerKey] = now;
+              return playerConflictCheckCache[playerKey];
+            }
+          }
+        }
+
+        playerConflictCheckCache[playerKey] = { hasConflict: false };
+        lastConflictCheck[playerKey] = now;
+        return playerConflictCheckCache[playerKey];
+
+      } catch (err) {
+        console.warn("[Conflict] Check error:", err);
+        playerConflictCheckCache[playerKey] = { hasConflict: false, error: err.message };
+        lastConflictCheck[playerKey] = now;
+        return playerConflictCheckCache[playerKey];
+      }
+    }
+
+    // Resolve conflict: keep best account, delta/rest other accounts
+    async function resolveConflict(options) {
+      init();
+      const { playerId, onResolved } = options;
+      const firestore = getDb();
+      if (!firestore) {
+        if (onResolved) onResolved({ success: false, reason: "no_firestore" });
+        return;
+      }
+
+      const check = await checkConflict(playerId);
+      if (!check.hasConflict) {
+        if (onResolved) onResolved({ success: false, reason: "no_conflict" });
+        return;
+      }
+
+      const bestAccount = check.bestAccount;
+      const otherAccounts = check.otherAccounts || [];
+
+      if (!bestAccount) {
+        if (onResolved) onResolved({ success: false, reason: "no_best_account" });
+        return;
+      }
+
+      // Load the best account from cloud
+      const bestState = await syncFromCloud(bestAccount);
+      if (!bestState) {
+        if (onResolved) onResolved({ success: false, reason: "cloud_load_failed" });
+        return;
+      }
+
+      // Apply best state as the base, then delta other accounts INTO it
+      // but LIMIT: max 10 plots worth 1000EB total
+      let totalPlotWorth = 0;
+      let plotsToKeep = {};
+      let plotsRemoved = [];
+
+      // First, take plots from best account (already loaded)
+      for (const tid in bestState.plots) {
+        const p = bestState.plots[tid];
+        const rarityRate = (p.rarity && CONFIG.PLOT_RARITIES.find(r => r.key === p.rarity.key))
+          ? CONFIG.PLOT_RARITIES.find(r => r.key === p.rarity.key).rate
+          : (p.rate || CONFIG.PLOT_RARITIES[0].rate);
+        totalPlotWorth += rarityRate;
+        if (totalPlotWorth <= CONFLICT_RULES.maxPlotWorthEB && Object.keys(plotsToKeep).length < CONFLICT_RULES.maxPlots) {
+          plotsToKeep[tid] = p;
+        } else {
+          plotsRemoved.push(tid);
+        }
+      }
+
+      // Now delta each other account's plots, but respect the limits
+      for (const otherUid of otherAccounts) {
+        if (otherUid === bestAccount) continue;
+        const otherState = await syncFromCloud(otherUid);
+        if (!otherState) continue;
+
+        for (const tid in otherState.plots) {
+          // Only add if we haven't reached the limit
+          if (Object.keys(plotsToKeep).length >= CONFLICT_RULES.maxPlots) break;
+
+          if (!plotsToKeep[tid]) {
+            const p = otherState.plots[tid];
+            const rarityRate = (p.rarity && CONFIG.PLOT_RARITIES.find(r => r.key === p.rarity.key))
+              ? CONFIG.PLOT_RARITIES.find(r => r.key === p.rarity.key).rate
+              : (p.rate || CONFIG.PLOT_RARITIES[0].rate);
+
+            // Check if adding this plot would exceed 1000EB worth
+            const currentWorth = Object.keys(plotsToKeep).reduce((sum, k) => {
+              const pp = plotsToKeep[k];
+              const r = (pp.rarity && CONFIG.PLOT_RARITIES.find(rr => rr.key === pp.rarity.key))
+                ? CONFIG.PLOT_RARITIES.find(rr => rr.key === pp.rarity.key).rate
+                : (pp.rate || CONFIG.PLOT_RARITIES[0].rate);
+              return sum + r;
+            }, 0);
+
+            if (currentWorth + rarityRate <= CONFLICT_RULES.maxPlotWorthEB) {
+              plotsToKeep[tid] = p;
+              totalPlotWorth = currentWorth + rarityRate;
+            }
+          }
+        }
+      }
+
+      // Now update the best account's state with resolved plots
+      bestState.plots = plotsToKeep;
+      // Recalculate total EB - keep best account's EB + delta from others (but cap at 1000EB worth equivalent)
+      bestState.eb = Math.min(CONFLICT_RULES.maxPlotWorthEB, Number(bestState.eb) || 0);
+
+      // Remove plots from other accounts in Firestore (delta them out)
+      // Keep the local resolution for display. Firestore cleanup requires a
+      // dedicated Admin SDK operation and must never be attempted by the client.
+      localStorage.setItem(KEY, JSON.stringify(bestState));
+      console.warn("[Conflict] Local resolution complete; server cleanup requires Admin SDK.");
+
+      if (onResolved) onResolved({ success: true, bestAccount, plotsKept: Object.keys(plotsToKeep).length, plotsRemoved: plotsRemoved.length, eb: bestState.eb });
+    }
+
+    return { init, checkConflict, resolveConflict };
+  })();
+
+  function applyOfflineProgress() {
+    const now = Date.now();
+    const lastTick = state.lastTick || state.createdAt || now;
+    const MAX_OFFLINE_SEC = 24 * 60 * 60; // 24 hours max offline
+    const elapsedSec = Math.min(MAX_OFFLINE_SEC, Math.max(0, (now - lastTick) / 1000));
+
+    if (elapsedSec <= 0) return 0;
+
+    // 1. Calculate unboosted base rate
+    let baseRate = 0;
+    if (state && state.plots) {
+      for (const id in state.plots) {
+        const p = state.plots[id];
+        const rKey = p.rarity?.key || p.rarity || "common";
+        // 🍀 Lucky plots earn ×1.1 while offline too.
+        baseRate += CONFIG.plotRate(rKey, p.lucky === true);
+      }
+    }
+
+    if (baseRate <= 0) return 0;
+
+    // 2. Separate boosted seconds from normal seconds
+    const boostExpiry = state.boostExpiry || 0;
+    let boostedSec = 0;
+    let normalSec = elapsedSec;
+
+    if (boostExpiry > lastTick) {
+      // The boost was active for part (or all) of the offline window
+      const boostEnd = Math.min(now, boostExpiry);
+      boostedSec = Math.max(0, (boostEnd - lastTick) / 1000);
+      boostedSec = Math.min(elapsedSec, boostedSec);
+      normalSec = Math.max(0, elapsedSec - boostedSec);
+    }
+
+    const baseMult = (typeof Multiplier !== "undefined") ? (state.boostMultiplier || Multiplier.getActiveMultiplier()) : 30;
+    const plotCount = state.plots ? Object.keys(state.plots).length : 0;
+    const tierFactor = (typeof Multiplier !== "undefined" && Multiplier.getTierFactor) ? Multiplier.getTierFactor(plotCount) : 1.0;
+    const mult = baseMult * tierFactor;
+
+    // 3. Earned = (boosted time * boosted rate) + (normal time * normal rate)
+    const earned = (boostedSec * baseRate * mult) + (normalSec * baseRate);
+
+    if (state.cash === undefined) state.cash = 0;
+    if (state.lifetimeRent === undefined) state.lifetimeRent = state.cash;
+
+    state.cash += earned;
+    state.lifetimeRent += earned;
+
+    state.lastTick = now;
+    save(false);
+    return earned;
+  }
+
+  function isSessionActive() {
+    return !isSessionPaused;
+  }
+
+  async function resumeSession() {
+    isSessionPaused = false;
+    document.getElementById("session-conflict-modal")?.classList.add("hidden");
+
+    // CRITICAL: Fetch cloud state FIRST to preserve model3d, boost, plots
+    // before writing our session lock. Without this, the default in-memory state
+    // overwrites the real cloud save on reload.
+    try {
+      const firestore = getDb();
+      if (firestore && state?.player?.id) {
+        const cloudDoc = await firestore.collection("saves").doc(state.player.id).get();
+        if (cloudDoc.exists) {
+          const cloudData = cloudDoc.data() || {};
+          if (cloudData.player?.model3d && cloudData.player.model3d !== state.player?.model3d) {
+            if (!state.player) state.player = {};
+            state.player.model3d = cloudData.player.model3d;
+          }
+          if (Number(cloudData.boostExpiry) > Number(state.boostExpiry || 0)) {
+            state.boostExpiry = cloudData.boostExpiry;
+            state.boostMultiplier = cloudData.boostMultiplier || state.boostMultiplier;
+          }
+          if (cloudData.plots && Object.keys(cloudData.plots).length > Object.keys(state.plots || {}).length) {
+            state.plots = cloudData.plots;
+          }
+          if (cloudData.eb !== undefined) state.eb = cloudData.eb;
+          if (cloudData.cash !== undefined) state.cash = cloudData.cash;
+          if (cloudData.diamonds !== undefined) state.diamonds = cloudData.diamonds;
+          if (cloudData.lifetimeRent !== undefined) state.lifetimeRent = cloudData.lifetimeRent;
+          if (cloudData.extractor) state.extractor = cloudData.extractor;
+          if (cloudData.pet) state.pet = cloudData.pet;
+          if (cloudData.calendar) state.calendar = cloudData.calendar;
+        }
+      }
+    } catch (e) {
+      console.warn("[ResumeSession] Failed to read cloud state:", e);
+    }
+
+    state.sessionLock = { sessionId: localSessionId, lockedAt: Date.now() };
+    state.lastSavedAt = Date.now();
+    localStorage.setItem(KEY, JSON.stringify(state));
+    syncSafeStateToCloud().finally(() => window.location.reload());
+  }
+
+  // Cache rarity rate lookups — CONFIG.PLOT_RARITIES.find is called per-plot
+  const _rarityRateCache = {};
+  function getRarityRate(rKey) {
+    if (_rarityRateCache[rKey] === undefined) {
+      const conf = CONFIG.PLOT_RARITIES.find(r => r.key === rKey);
+      _rarityRateCache[rKey] = conf ? conf.rate : CONFIG.PLOT_RARITIES[0].rate;
+    }
+    return _rarityRateCache[rKey];
+  }
+
+  // Calculate total EB/sec from all owned plots + boost multiplier
+  function totalRate() {
+    if (!state || !state.plots) return 0;
+    let rate = 0;
+    for (const id in state.plots) {
+      const p = state.plots[id];
+      const rKey = p.rarity?.key || p.rarity || "common";
+      // 🍀 Lucky plots (🍀) earn ×1.1 their rarity rate.
+      rate += CONFIG.plotRate(rKey, p.lucky === true);
+    }
+    // Apply 20X/50X boost if active (delegated to Multiplier module)
+    if (typeof Multiplier !== "undefined") {
+      rate = Multiplier.applyMultiplier(rate, state);
+    }
+    return rate;
+  }
+
+  function isCloudSyncComplete() { return cloudSyncComplete; }
+
+  return { load, save, get, reset, totalRate, applyOfflineProgress, syncFromCloud, getDb, isSessionActive, resumeSession, isCloudSyncComplete, syncSafeStateToCloud };
+})();

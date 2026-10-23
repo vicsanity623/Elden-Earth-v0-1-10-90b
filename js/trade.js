@@ -1,0 +1,697 @@
+// ============================================================
+// Elden Earth — Plot Trade UI
+// Local (≤500m, both online, free) / Remote (25 EB, ≤48h relay).
+// Commit-reveal: choices stay sealed until both sides have picked.
+// ============================================================
+const Trade = (() => {
+  let current = null;      // { friendshipId, friendName, type }
+  let trade = null;        // redacted trade view from the server
+  let selectedInstance = null;
+  let pollTimer = null;
+
+  function db() { return Store.getDb(); }
+  function state() { return Store.get(); }
+
+  function toast(msg, dur) {
+    if (typeof window.showToast === "function") window.showToast(msg, dur);
+    else console.log("[Trade]", msg);
+  }
+
+  function el(id) { return document.getElementById(id); }
+
+  function ready() {
+    return typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady();
+  }
+
+  function rarityLabel(key) {
+    return ({ common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary" })[key] || key;
+  }
+
+  function rarityClass(key) { return `trade-rarity-${key}`; }
+
+  function rarityConf(key) {
+    const list = (typeof CONFIG !== "undefined" && CONFIG.PLOT_RARITIES) || [];
+    return list.find(r => r.key === key) || list[0] || { key: key || "common", label: "Common", rate: 0, color: "#8fa3b8" };
+  }
+
+  // Player-controlled names get echoed into innerHTML — escape them. This used
+  // to be referenced while only existing inside other modules, which threw a
+  // ReferenceError inside showTradeResult() and silently killed the whole
+  // trade result screen (no result modal for either player).
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function formatIncome(val) {
+    return Fmt.rate(val, { bare: true, perSec: false });
+  }
+
+  // ---------- OPEN / CLOSE ----------
+  async function open(opts) {
+    current = {
+      friendshipId: opts.friendshipId,
+      friendName: opts.friendName || "Friend",
+      type: opts.type === "local" ? "local" : "remote",
+    };
+    selectedInstance = null;
+    trade = null;
+    // A leftover result screen from a previous trade must never sit on top of
+    // the new one.
+    el("trade-result-modal")?.classList.add("hidden");
+
+    const modal = el("trade-modal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    modal.style.zIndex = "2147483647";
+
+    const title = el("trade-title");
+    if (title) title.textContent = current.type === "local" ? "📍 Local Trade" : "🌐 Remote Trade";
+    const fname = el("trade-friend-name");
+    if (fname) fname.textContent = current.friendName;
+
+    const fine = el("trade-fine");
+    if (fine) {
+      fine.textContent = current.type === "local"
+        ? "Both of you must be online within 500m. Free — no relay fee."
+        : `25 EB relay fee. Your friend has up to 48h to commit their plot.`;
+    }
+
+    setStatus("creating", "Opening trade…");
+    renderBag();
+    renderSlots();
+    updateConfirmButton();
+
+    if (!ready()) {
+      setStatus("error", "Server offline — try again later.");
+      return;
+    }
+
+    const res = await ServerAntiCheat.createTrade({ friendshipId: current.friendshipId, type: current.type });
+    if (!res || !res.ok) {
+      let msg = failText(res && res.reason);
+      const left = res && Number(res.daysLeft);
+      if (res && res.reason === "account_too_new" && left) {
+        msg = `Trading unlocks in ${left} day${left === 1 ? "" : "s"} — accounts must be 14 days old.`;
+      } else if (res && res.reason === "friend_account_too_new" && left) {
+        msg = `Your friend's account is too new — trading unlocks in ${left} day${left === 1 ? "" : "s"}.`;
+      }
+      setStatus("error", msg);
+      return;
+    }
+    trade = res.trade;
+    setExternalLocks(res.myLockedInstanceIds);
+    // A resumed trade may have been opened with the OTHER type — adopt it so
+    // the header, fee text and bag reflect what will actually settle.
+    if (res.resumed && trade.type && trade.type !== current.type) {
+      current.type = trade.type === "local" ? "local" : "remote";
+      if (title) title.textContent = current.type === "local" ? "📍 Local Trade" : "🌐 Remote Trade";
+      if (fine) {
+        fine.textContent = current.type === "local"
+          ? "Both of you must be online within 500m. Free — no relay fee."
+          : "25 EB relay fee. Your friend has up to 48h to commit their plot.";
+      }
+    }
+    setStatus(trade.status, statusText(trade.status));
+    renderBag();
+    renderSlots();
+    updateConfirmButton();
+    if (res.resumed) toast("↻ Resumed your open trade.", 2500);
+    startPolling();
+  }
+
+  function close() {
+    stopPolling();
+    el("trade-modal")?.classList.add("hidden");
+    el("trade-swap-overlay")?.classList.add("hidden");
+    current = null; trade = null; selectedInstance = null;
+    // A result that arrived while this trade was open gets its turn now.
+    setTimeout(flushPendingTradeResult, 300);
+  }
+
+  function failText(reason) {
+    switch (reason) {
+      case "friend_not_nearby": return "Your friend isn't nearby (need both online within 500m).";
+      case "too_far": return "You're too far apart — get within 500m.";
+      case "daily_trade_limit": return "Daily trade limit reached (20/day).";
+      case "friend_trade_limit": return "Only 3 trades per friend per day.";
+      case "insufficient_eb": return "Not enough EB for the 25 EB relay fee.";
+      case "not_a_friend": return "That friendship could not be found.";
+      case "friendship_not_found": return "That friendship could not be found.";
+      case "account_too_new": return "New accounts unlock trading after 14 days.";
+      case "friend_account_too_new": return "Your friend's account is under 14 days old — trading unlocks soon.";
+      case "plot_busy": return "That plot is already in another trade.";
+      case "plot_in_trade": return "That plot is committed to an open trade.";
+      case "not_in_bag": return "That plot is no longer in your bag.";
+      case "trade_not_open": return "This trade is no longer open.";
+      case "trade_expired": return "This trade expired.";
+      case "plot_no_longer_in_bag": return "A committed plot left the bag — trade voided.";
+      case "not_revealed": return "Both sides must commit before confirming.";
+      case "server_error": return "Server error — please try again.";
+      case "rate_limited": return "Too many attempts — wait a moment and try again.";
+      default: return "Could not start the trade.";
+    }
+  }
+
+  function statusText(s) {
+    return ({
+      selecting: "Selecting…",
+      revealed: "Both committed — confirm!",
+      confirming: "Waiting for friend…",
+      completed: "Complete",
+      cancelled: "Cancelled",
+      expired: "Expired",
+    })[s] || "…";
+  }
+
+  function setStatus(s, text) {
+    const chip = el("trade-status-chip");
+    if (chip) {
+      chip.textContent = text || statusText(s);
+      chip.className = "trade-status-chip trade-status-" + (s || "error");
+    }
+    const fine = el("trade-fine");
+    if (fine && s === "error") fine.textContent = text || "";
+    const prog = el("trade-progress");
+    if (prog) prog.textContent = "";
+  }
+
+  // ---------- POLLING ----------
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(() => {
+      // The generic modal close (X button / backdrop tap) hides the modal
+      // directly, so stop ourselves as soon as it's gone from view.
+      const modal = el("trade-modal");
+      if (!modal || modal.classList.contains("hidden")) { close(); return; }
+      refresh();
+    }, 3000);
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function refresh() {
+    if (!trade || !trade.tradeId || !ready()) return;
+    const res = await ServerAntiCheat.getTrade({ tradeId: trade.tradeId });
+    if (!res || !res.ok) return;
+    const prev = trade;
+    trade = res.trade;
+    setExternalLocks(res.myLockedInstanceIds);
+    if (trade.status === "completed" && prev.status !== "completed") {
+      stopPolling();
+      applyCompletedTrade();
+      renderSlots();
+      playSwap();
+      return;
+    }
+    setStatus(trade.status, statusText(trade.status));
+    renderSlots();
+    updateConfirmButton();
+    renderBag();
+  }
+
+  // ---------- BAG (stacked rarity grid) ----------
+  // The plot already committed to this trade stays in the cloud bag but is
+  // frozen by trade_locks — hide it from the pickable count so it never
+  // looks like a spare copy you could offer twice.
+  //
+  // lockedIds() also covers plots committed to OTHER live trades. A
+  // stacked bag holds two Commons; if one is already promised to a different
+  // friend, offering it bounces with `plot_busy`. The server sends the live
+  // lock set on create/get so the picker can skip them.
+  let externalLocks = new Set();
+
+  function setExternalLocks(ids) {
+    externalLocks = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
+  }
+
+  // Remember a plot the server just told us is busy. Self-healing: the server
+  // also ships myLockedInstanceIds, but a stale deploy or a race can still hand
+  // the picker a plot that is committed to another friend's trade.
+  function markLocked(id) {
+    if (id) externalLocks.add(id);
+  }
+
+  function lockedInstanceId() {
+    return (trade && trade.mine && trade.mine.committed) ? trade.mine.instanceId : null;
+  }
+
+  function lockedIds() {
+    const s = new Set(externalLocks);
+    const self = lockedInstanceId();
+    if (self) s.add(self);
+    return s;
+  }
+
+  function bagGroups() {
+    const s = state();
+    const items = s?.plotBagItems || {};
+    const lucky = s?.luckyBagItems || {};
+    const locked = lockedIds();
+    const groups = {};
+    for (const id in items) {
+      if (locked.has(id)) continue;
+      const r = String(items[id] || "common").split("_")[0];
+      const isL = lucky[id] === true;
+      const key = isL ? `${r}~lucky` : r;
+      if (!groups[key]) groups[key] = { rarity: r, lucky: isL, count: 0, sampleId: id };
+      groups[key].count++;
+      if (!groups[key].sampleId) groups[key].sampleId = id;
+    }
+    const order = { common: 0, rare: 1, epic: 2, legendary: 3 };
+    return Object.values(groups).sort((a, b) => (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9) || (b.lucky ? 1 : 0) - (a.lucky ? 1 : 0));
+  }
+
+  function renderBag() {
+    const grid = el("trade-bag-grid");
+    if (!grid) return;
+    const groups = bagGroups();
+    if (!groups.length) {
+      // Three different reasons the pickable set can be empty — say which.
+      if (lockedInstanceId()) {
+        grid.innerHTML = `<div class="trade-bag-empty">🔒 Your choice is sealed — waiting for your friend.</div>`;
+      } else if (Object.keys(state()?.plotBagItems || {}).length > 0) {
+        grid.innerHTML = `<div class="trade-bag-empty">🔒 Every plot you own is committed to another open trade.</div>`;
+      } else {
+        grid.innerHTML = `<div class="trade-bag-empty">No plots in your bag — pick up plots from the map first.</div>`;
+      }
+      return;
+    }
+    grid.innerHTML = groups.map(g => {
+      const sel = selectedInstance && state()?.plotBagItems?.[selectedInstance];
+      const anySel = Boolean(sel);
+      const active = anySel && String(state().plotBagItems[selectedInstance]).split("_")[0] === g.rarity && (state().luckyBagItems?.[selectedInstance] === true) === g.lucky;
+      return `
+        <button class="trade-bag-btn ${rarityClass(g.rarity)} ${g.lucky ? "bag-btn-lucky" : ""} ${active ? "is-selected" : ""}"
+          data-rarity="${g.rarity}" data-lucky="${g.lucky ? "1" : "0"}" title="${rarityLabel(g.rarity)}${g.lucky ? " (Lucky)" : ""}">
+          <span class="trade-bag-count">x${g.count}</span>
+          <span class="trade-bag-name">${g.lucky ? "🍀 " : ""}${rarityLabel(g.rarity)}</span>
+        </button>`;
+    }).join("");
+
+    grid.querySelectorAll(".trade-bag-btn").forEach(btn => {
+      btn.addEventListener("click", () => pickFromGroup(btn.dataset.rarity, btn.dataset.lucky === "1"));
+    });
+  }
+
+  // Pick the first FREE instance in this rarity+lucky group (exact-match, so a
+  // Lucky Common never gets confused with a normal Common). Skips anything
+  // committed to another live trade — with a stacked bag the first matching id
+  // may already be promised to a different friend.
+  function pickFromGroup(rarity, isLucky) {
+    const s = state();
+    const items = s?.plotBagItems || {};
+    const lucky = s?.luckyBagItems || {};
+    const locked = lockedIds();
+    if (lockedInstanceId()) return;
+    for (const id in items) {
+      if (locked.has(id)) continue;
+      if (String(items[id]).split("_")[0] !== rarity) continue;
+      if ((lucky[id] === true) !== isLucky) continue;
+      selectedInstance = id;
+      break;
+    }
+    renderBag();
+    renderSlots();
+    updateConfirmButton();
+  }
+
+  // ---------- SLOTS ----------
+  function slotHtml(side, data) {
+    if (!data) return `<span class="trade-slot-empty">${side === "me" ? "Tap a plot below" : "Waiting for them…"}</span>`;
+    const r = data.rarity || "common";
+    const lucky = data.lucky === true;
+    const ready = data.committed ? "✓" : "";
+    return `<div class="trade-slot-inner ${rarityClass(r)} ${lucky ? "slot-lucky" : ""}">
+      <span class="trade-slot-rarity">${lucky ? "🍀 " : ""}${rarityLabel(r)}</span>
+      <span class="trade-slot-flag">${ready || "…"}</span>
+    </div>`;
+  }
+
+  function renderSlots() {
+    const me = el("trade-slot-me");
+    const them = el("trade-slot-them");
+    if (me) {
+      let mine = trade && trade.mine;
+      if (!mine && selectedInstance) {
+        const s = state();
+        mine = { rarity: String(s.plotBagItems[selectedInstance] || "common").split("_")[0], lucky: s.luckyBagItems?.[selectedInstance] === true, committed: false };
+      }
+      me.innerHTML = slotHtml("me", mine);
+    }
+    if (them) them.innerHTML = slotHtml("them", trade ? trade.theirs : null);
+  }
+
+  function updateConfirmButton() {
+    const btn = el("trade-confirm-btn");
+    if (!btn) return;
+    if (!trade) { btn.disabled = true; btn.textContent = "🔒 Commit Plot"; return; }
+
+    if (trade.status === "selecting") {
+      const committed = trade.mine && trade.mine.committed;
+      btn.disabled = committed || !selectedInstance;
+      btn.textContent = committed ? "✓ Committed — waiting" : "🔒 Commit Plot";
+    } else if (trade.status === "revealed" || trade.status === "confirming") {
+      const confirmed = trade.selfConfirmed;
+      btn.disabled = confirmed || !trade.theirs;
+      btn.textContent = confirmed ? "✓ Confirmed — waiting" : "✅ Confirm Trade";
+    } else if (trade.status === "completed") {
+      btn.disabled = true;
+      btn.textContent = "✓ Complete";
+    } else {
+      btn.disabled = true;
+      btn.textContent = "—";
+    }
+  }
+
+  // ---------- ACTIONS ----------
+  async function onConfirm() {
+    if (!trade || !ready()) return;
+    const btn = el("trade-confirm-btn");
+    if (btn) btn.disabled = true;
+
+    if (trade.status === "selecting") {
+      if (!selectedInstance) { toast("⚠️ Pick a plot first.", 2500); if (btn) btn.disabled = false; return; }
+      // The picker can still hand us a plot another trade owns (stale deploy,
+      // or a commit that landed after the bag rendered). Mark it busy and move
+      // to the next free instance of the same rarity instead of failing.
+      let res = await ServerAntiCheat.selectTradePlot({ tradeId: trade.tradeId, instanceId: selectedInstance });
+      if (res && !res.ok && res.reason === "plot_busy") {
+        const s0 = state();
+        const wantRarity = String((s0?.plotBagItems || {})[selectedInstance] || "").split("_")[0];
+        const wantLucky = Boolean((s0?.luckyBagItems || {})[selectedInstance]);
+        markLocked(selectedInstance);
+        pickFromGroup(wantRarity, wantLucky);
+        if (selectedInstance) {
+          res = await ServerAntiCheat.selectTradePlot({ tradeId: trade.tradeId, instanceId: selectedInstance });
+        }
+      }
+      if (!res || !res.ok) {
+        // Whatever we tried is committed elsewhere — remember it so the next
+        // tap cannot pick the same plot again.
+        if (res && res.reason === "plot_busy") markLocked(selectedInstance);
+        toast("⚠️ " + failText(res && res.reason), 3000);
+        renderBag();
+        if (btn) btn.disabled = false;
+        return;
+      }
+      trade = res.trade;
+      if (res.myLockedInstanceIds) setExternalLocks(res.myLockedInstanceIds);
+      selectedInstance = null;
+      setStatus(trade.status, statusText(trade.status));
+      renderBag(); renderSlots(); updateConfirmButton();
+      if (trade.status === "revealed") toast("🤝 Both committed — confirm to trade!", 3000);
+      else toast("🔒 Choice sealed — waiting for your friend.", 3000);
+      return;
+    }
+
+    if (trade.status === "revealed" || trade.status === "confirming") {
+      const res = await ServerAntiCheat.confirmTrade({ tradeId: trade.tradeId });
+      if (!res || !res.ok) {
+        toast("⚠️ " + failText(res && res.reason), 3000);
+        if (btn) btn.disabled = false;
+        return;
+      }
+      trade = res.trade;
+      setStatus(trade.status, statusText(trade.status));
+      renderSlots(); updateConfirmButton();
+      if (res.executed) {
+        stopPolling();
+        applyCompletedTrade();
+        playSwap();
+      } else {
+        toast("✅ Confirmed — waiting for your friend.", 3000);
+      }
+      return;
+    }
+  }
+
+  async function onCancel() {
+    if (!trade || !ready()) return;
+    const res = await ServerAntiCheat.cancelTrade({ tradeId: trade.tradeId });
+    if (res && res.ok) {
+      toast("Trade cancelled.", 2500);
+      close();
+    } else {
+      toast("⚠️ Could not cancel.", 2500);
+    }
+  }
+
+  // Server already moved the instanceIds between bags. Mirror that into local
+  // state so the bag grid and land counts are correct without waiting for the
+  // next cloud sync (which could briefly show a plot we no longer own).
+  function applyCompletedTrade() {
+    if (!trade || !trade.result) return;
+    const s = state();
+    if (!s) return;
+    const items = { ...(s.plotBagItems || {}) };
+    const lucky = { ...(s.luckyBagItems || {}) };
+    // What I gave leaves my bag; what I received enters it with the re-rolled
+    // rarity/lucky the server settled on. The other side's plot is NOT mine.
+    const givenId = trade.mine?.instanceId;
+    const got = trade.result.mine || {};
+
+    if (givenId) { delete items[givenId]; delete lucky[givenId]; }
+    if (got.instanceId) delete lucky[got.instanceId];
+    if (got.instanceId) items[got.instanceId] = got.rarity || "common";
+    if (got.instanceId && got.lucky) lucky[got.instanceId] = true;
+
+    s.plotBagItems = items;
+    s.luckyBagItems = lucky;
+    try {
+      if (typeof Store !== "undefined" && Store.save) Store.save(true);
+    } catch (e) { console.warn("[Trade] local bag save failed:", e); }
+    renderBag();
+  }
+
+  // ---------- FINAL RESULT SCREEN ----------
+  // The swap animation only flashes both rarities for 2.6s. This is the
+  // lingering screen afterwards: the plot the server re-rolled for THIS
+  // player, styled like the Ascension "COMPLETE" screen.
+  // A result may only ever be shown for a trade that actually SETTLED (both
+  // players confirmed) — and never while another trade modal owns the screen.
+  // Receipts get marked delivered only after the screen is up, so a crash can
+  // still replay them later — but never as a premature popup mid-trade.
+  let pendingTradeResult = null;
+  // The live flow and the receipt flow can race (a receipt can land during the
+  // 2.6s swap animation) — one result screen per trade, ever.
+  let lastShownTradeId = null;
+
+  function ackReceipt(tradeId) {
+    if (!tradeId) return;
+    try {
+      const myId = Store.get() && Store.get().player && Store.get().player.id;
+      if (!myId || typeof ServerAntiCheat === "undefined") return;
+      ServerAntiCheat.ackTradeResults({ ids: [`${myId}__${tradeId}`] }).catch(() => {});
+    } catch (e) { /* acking must never break the result screen */ }
+  }
+
+  function showTradeResult(res) {
+    const got = res && res.received;
+    if (!got || !got.rarity) return;
+    // Hard gate: nothing that is not a finished, settled trade may ever
+    // produce a result screen.
+    if (res.status && res.status !== "completed") return;
+    const tradeModalEl = el("trade-modal");
+    if (tradeModalEl && !tradeModalEl.classList.contains("hidden")) {
+      // Defer FIRST — marking the trade as shown before deferring would make
+      // the flush below dedupe against itself and drop the result entirely.
+      pendingTradeResult = res;
+      return;
+    }
+    if (res.tradeId && res.tradeId === lastShownTradeId) { ackReceipt(res.tradeId); return; }
+    lastShownTradeId = res.tradeId || lastShownTradeId;
+    const gotConf = rarityConf(got.rarity);
+    const sentConf = res.sentRarity ? rarityConf(res.sentRarity) : null;
+    const lucky = got.lucky === true;
+    // Mirror the server's plotRateFor(): base rarity rate × 1.1 when Lucky.
+    const rate = gotConf.rate * (lucky ? 1.1 : 1);
+
+    const setTxt = (id, val) => { const n = el(id); if (n) n.textContent = val; };
+
+    // WHO this was with. The screen used to show only the plots, which was
+    // useless when you had several trades on the go.
+    const who = String(res.partnerName || (current && current.friendName) || "").trim();
+    const withEl = el("trade-result-with");
+    if (withEl) {
+      withEl.innerHTML = who ? `Traded with <strong>${escapeHtml(who)}</strong>` : "";
+      withEl.style.display = who ? "block" : "none";
+    }
+
+    const badge = el("trade-result-rarity");
+    if (badge) {
+      badge.textContent = String(gotConf.label || "Plot").toUpperCase();
+      badge.style.color = gotConf.color;
+      badge.style.textShadow = `0 0 22px ${gotConf.color}`;
+    }
+    setTxt("trade-result-rate", `RC ${formatIncome(rate)} /s per plot`);
+    setTxt("trade-result-sub", `A ${gotConf.label} plot has arrived in your bag.`);
+
+    const sentEl = el("trade-result-sent");
+    if (sentEl) {
+      sentEl.textContent = sentConf ? sentConf.label : "???";
+      sentEl.style.color = sentConf ? sentConf.color : "";
+    }
+    const gotEl = el("trade-result-got");
+    if (gotEl) {
+      gotEl.textContent = gotConf.label;
+      gotEl.style.color = gotConf.color;
+    }
+
+    const note = el("trade-result-note");
+    if (note) {
+      note.classList.remove("up", "down", "flat");
+      if (lucky) {
+        note.classList.add("up");
+        note.textContent = "🍀 LUCKY TRADE! +10% earn rate on your new plot.";
+      } else {
+        note.classList.add("flat");
+        note.textContent = "◆ New plot added to your bag.";
+      }
+    }
+
+    // Both call sites pass the type in different shapes — accept either so a
+    // remote trade can never be labelled "Local — Free".
+    const remote = res.remote === true || res.type === "remote";
+    setTxt("trade-result-cost-label", remote ? "Relay Fee Paid" : "Trade");
+    setTxt("trade-result-cost", remote ? `${res.feeEb || 25} EB` : "📍 Local — Free");
+
+    el("trade-result-modal")?.classList.remove("hidden");
+    ackReceipt(res.tradeId);
+  }
+
+  // Show a result that was deferred while another trade was on screen.
+  function flushPendingTradeResult() {
+    if (!pendingTradeResult) return;
+    const r = pendingTradeResult;
+    pendingTradeResult = null;
+    showTradeResult(r);
+  }
+
+  // ---------- SWAP ANIMATION ----------
+  function playSwap() {
+    const ov = el("trade-swap-overlay");
+    if (!ov || !trade || !trade.result) { if (ov) ov.classList.add("hidden"); return; }
+
+    const mine = trade.result.mine || {};
+    const theirs = trade.result.theirs || {};
+    // close() below nulls `trade`, so snapshot everything the result screen
+    // needs while the trade object is still live.
+    const resultScreen = {
+      received: mine,
+      sentRarity: (trade.mine && trade.mine.rarity) || null,
+      type: trade.type,
+      feeEb: trade.feeEb || 0,
+      partnerName: (current && current.friendName) || "",
+      tradeId: trade.tradeId,
+      status: "completed",
+    };
+    const set = (id, data) => {
+      const node = el(id);
+      if (node) {
+        node.textContent = `${rarityLabel(data.rarity)} plot`;
+        node.className = `trade-swap-rarity ${rarityClass(data.rarity)}`;
+      }
+    };
+    set("swap-rarity-me", mine);
+    set("swap-rarity-them", theirs);
+    const lm = el("swap-lucky-me");
+    const lt = el("swap-lucky-them");
+    if (lm) lm.textContent = mine.lucky ? "🍀 LUCKY!" : "";
+    if (lt) lt.textContent = theirs.lucky ? "🍀 LUCKY!" : "";
+    const title = el("swap-title");
+    if (title) title.textContent = (mine.lucky || theirs.lucky) ? "🍀 LUCKY TRADE!" : "TRADE COMPLETE!";
+
+    ov.classList.remove("hidden");
+    ov.style.zIndex = "2147483647";
+    setTimeout(() => {
+      ov.classList.add("hidden");
+      close();
+      const s = state();
+      if (s && typeof Store !== "undefined" && Store.save) Store.save(true);
+      showTradeResult(resultScreen);
+    }, 2600);
+  }
+
+  // ---------- PUBLIC API ----------
+  /**
+   * Show the result screen for trades that SETTLED while this player was
+   * offline. confirmTrade writes a receipt per participant; without this the
+   * partner who was away never learned what landed in their bag.
+   */
+  async function checkPendingResults() {
+    if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) return;
+    let res;
+    try {
+      res = await ServerAntiCheat.listTradeResults();
+    } catch (e) {
+      console.warn("[Trade] result fetch failed:", e);
+      return;
+    }
+    const list = (res && res.results) || [];
+    if (!list.length) return;
+
+    // One at a time — the modal is single-instance.
+    for (const rec of list) {
+      const t = rec.trade || {};
+      const received = t.result && t.result.mine;
+      // Receipts are only ever written at settle, but verify anyway — a result
+      // must never appear for a trade that is not fully confirmed and completed.
+      if (received && received.rarity && t.status === "completed") {
+        showTradeResult({
+          received,
+          sentRarity: t.mine && t.mine.rarity,
+          feeEb: t.feeEb || 0,
+          type: t.type,
+          partnerName: rec.partnerName || "",
+          tradeId: rec.tradeId || (rec.id ? String(rec.id).split("__")[1] : ""),
+          status: "completed",
+        });
+      }
+      // Only ack after the screen is up, so a crash cannot eat the notice.
+      try {
+        await ServerAntiCheat.ackTradeResults({ ids: [rec.id] });
+      } catch (e) {
+        console.warn("[Trade] result ack failed:", e);
+      }
+      break;
+    }
+  }
+
+  return {
+    open,
+    close,
+    onConfirm,
+    onCancel,
+    checkPendingResults,
+    /** Plots committed to any live trade — the bag picker must skip these. */
+    get lockedIds() { return Array.from(lockedIds()); },
+    get current() { return current; },
+    get trade() { return trade; },
+  };
+})();
+
+// Bind modal buttons once the DOM is ready.
+if (typeof document !== "undefined") {
+  const bindTradeButtons = () => {
+    const confirmBtn = document.getElementById("trade-confirm-btn");
+    const cancelBtn = document.getElementById("trade-cancel-btn");
+      if (confirmBtn) confirmBtn.addEventListener("click", () => Trade.onConfirm());
+      if (cancelBtn) cancelBtn.addEventListener("click", () => Trade.onCancel());
+      const resultCloseBtn = document.getElementById("trade-result-close-btn");
+      if (resultCloseBtn) resultCloseBtn.addEventListener("click", () => {
+        document.getElementById("trade-result-modal")?.classList.add("hidden");
+        if (typeof window.updateLandModal === "function") window.updateLandModal();
+      });
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindTradeButtons);
+  } else {
+    bindTradeButtons();
+  }
+}

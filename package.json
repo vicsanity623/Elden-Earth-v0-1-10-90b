@@ -1,0 +1,24 @@
+{
+  "name": "ee",
+  "version": "1.0.0",
+  "description": "A real-world geo-location territory-claiming and idle income game. Walk the real world, collect diamonds, spin the fortune wheel for Elden Bucks (EB), claim real 10×10 ft tiles beneath your feet, and earn simulated passive rent ($USD) every fraction of a second.",
+  "main": "sw.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vicsanity623/eldenEarth.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/vicsanity623/eldenEarth/issues"
+  },
+  "homepage": "https://github.com/vicsanity623/eldenEarth#readme",
+  "dependencies": {
+    "firebase-admin": "^10.0.0"
+  }
+}

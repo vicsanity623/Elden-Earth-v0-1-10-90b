@@ -1,0 +1,561 @@
+// ============================================================
+// Elden Earth — Achievements & Badges
+//
+// Lifetime milestones with progress tracking. Every tier is claimable exactly
+// once; claiming awards EB + a small amount of Reward Points and unlocks a
+// badge.
+//
+// BADGES ARE GENERATED, NOT DRAWN. Each one is composed from its category
+// (colour + glyph) and its tier (bronze / silver / gold rim), so 100 badges
+// need no image assets and still look distinct in the grid.
+//
+// ACHIEVEMENT_TRACKS must stay identical to functions/index.js — the server
+// holds the authoritative table and pays from it. Progress is read from
+// state.achievementStats (saves_private.stats, server-owned) for tracked stats
+// and computed live for the `derived` ones.
+// ============================================================
+const Achievements = (() => {
+  const CATEGORIES = {
+    dedication: { label: "Dedication",  color: "#4fd6c4", glyph: "◆" },
+    land:       { label: "Land",        color: "#64748b", glyph: "▲" },
+    economy:    { label: "Economy",     color: "#ffd700", glyph: "●" },
+    explore:    { label: "Exploration", color: "#2ee59d", glyph: "◈" },
+    social:     { label: "Social",      color: "#ff6b4a", glyph: "✦" },
+    combat:     { label: "Combat",      color: "#b537f2", glyph: "★" },
+    mastery:    { label: "Mastery",     color: "#ffb703", glyph: "❖" },
+  };
+
+  const TIER_RIMS = ["#cd7f32", "#c0c0c0", "#ffd700"]; // bronze / silver / gold
+
+  const TRACKS = [
+    { id: "login_streak",   cat: "dedication", stat: "streakBest",   title: "Log in {n} days in a row",            tiers: [{t:30,eb:200,rp:10},{t:60,eb:200,rp:10},{t:90,eb:200,rp:10}] },
+    { id: "days_played",    cat: "dedication", stat: "daysPlayed",   title: "Play on {n} separate days",           tiers: [{t:7,eb:25,rp:2},{t:30,eb:100,rp:5},{t:90,eb:400,rp:10}] },
+    { id: "quests_done",    cat: "dedication", stat: "questsCompleted", title: "Complete {n} daily quests",       tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:500,eb:400,rp:10}] },
+    { id: "boosts_used",    cat: "dedication", stat: "boostsActivated", title: "Activate {n} boosts",            tiers: [{t:5,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
+    // wheel_spins and the three plot tracks pay EB ONLY — no RP. Spinning is
+    // chance and plots cost EB from the wheel, so redeemable points here would
+    // reopen the chance -> money chain. Must match functions/index.js.
+    { id: "wheel_spins",    cat: "dedication", stat: "wheelSpins",   title: "Spin the Diamond Wheel {n} times",    tiers: [{t:10,eb:25,rp:0},{t:100,eb:100,rp:0},{t:500,eb:400,rp:0}] },
+
+    { id: "plots_purchased", cat: "land",     stat: "plotsPurchased", title: "Purchase {n} plots",                tiers: [{t:1,eb:25,rp:0},{t:25,eb:100,rp:0},{t:100,eb:400,rp:0}] },
+    { id: "plots_owned",     cat: "land",     stat: "plotsOwned", derived: true, title: "Own {n} plots at once",  tiers: [{t:10,eb:25,rp:0},{t:100,eb:100,rp:0},{t:500,eb:400,rp:0}] },
+    { id: "plots_ascended",  cat: "land",     stat: "plotsAscended", title: "Ascend {n} plots at the Forge",     tiers: [{t:1,eb:5,rp:0},{t:10,eb:10,rp:0},{t:100,eb:100,rp:0}] },
+    { id: "legendary_owned", cat: "land",     stat: "legendaryOwned", derived: true, title: "Own {n} Legendary plots", tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
+    { id: "lucky_owned",     cat: "land",     stat: "luckyOwned", derived: true, title: "Own {n} Lucky plots",     tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
+    { id: "trades_done",     cat: "land",     stat: "tradesCompleted", title: "Complete {n} trades",             tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:50,eb:400,rp:10}] },
+
+    { id: "rent_earned",     cat: "economy",  stat: "lifetimeRent", derived: true, title: "Accrue {n} in lifetime rent", tiers: [{t:1,eb:25,rp:2},{t:50,eb:100,rp:5},{t:500,eb:400,rp:10}] },
+    { id: "dividends",       cat: "economy",  stat: "totalDividends", derived: true, title: "Collect {n} in royalties", tiers: [{t:10,eb:25,rp:2},{t:250,eb:100,rp:5},{t:2500,eb:400,rp:10}] },
+    { id: "cash_converted",  cat: "economy",  stat: "cashConverted", title: "Convert Cash to EB {n} times",      tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:50,eb:400,rp:10}] },
+    { id: "extractor_up",    cat: "economy",  stat: "extractorLevel", derived: true, title: "Upgrade the Extractor to level {n}", tiers: [{t:5,eb:50,rp:2},{t:25,eb:150,rp:5},{t:50,eb:500,rp:10}] },
+    { id: "extractor_builds", cat: "economy", stat: "extractorUpgrades", title: "Install {n} Extractor upgrades", tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:40,eb:400,rp:10}] },
+
+    { id: "areas_surveyed",  cat: "explore",  stat: "areasSurveyed", title: "Survey {n} new areas",              tiers: [{t:5,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
+    { id: "stops_spun",      cat: "explore",  stat: "eldenStopsSpun", title: "Spin {n} Elden Stops",             tiers: [{t:5,eb:25,rp:2},{t:50,eb:100,rp:5},{t:250,eb:400,rp:10}] },
+    { id: "beacons_planted", cat: "explore",  stat: "beaconsPlanted", title: "Plant {n} Elden Stop beacons",     tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
+    { id: "gems_collected",  cat: "explore",  stat: "diamondsCollected", title: "Collect {n} diamonds",          tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:1000,eb:400,rp:10}] },
+    { id: "berries_found",   cat: "explore",  stat: "berriesFound",  title: "Find {n} berries",                  tiers: [{t:5,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
+
+    { id: "gifts_sent",      cat: "social",   stat: "giftsSent",     title: "Send {n} gifts to friends",         tiers: [{t:5,eb:5,rp:5},{t:50,eb:10,rp:5},{t:500,eb:100,rp:5}] },
+    { id: "gifts_received",  cat: "social",   stat: "giftsReceived", title: "Receive {n} gifts",                 tiers: [{t:5,eb:25,rp:2},{t:50,eb:100,rp:5},{t:500,eb:400,rp:10}] },
+    { id: "referrals_made",  cat: "social",   stat: "referralsMade", title: "Refer {n} new players",             tiers: [{t:1,eb:100,rp:5},{t:5,eb:250,rp:5},{t:25,eb:750,rp:10}] },
+    // NOT derived: friendsMade is counted by recordActivity (js/friends.js calls
+    // Achievements.record("friendsMade") on accept). It was marked derived and
+    // so read `state.friendsCount` — a field nothing ever writes — which made
+    // every friend badge permanently read 0/1 no matter how many friends were
+    // added. The counter in achievementStats was already correct underneath.
+    { id: "friends_made",    cat: "social",   stat: "friendsMade", title: "Make {n} friends",      tiers: [{t:1,eb:25,rp:2},{t:5,eb:100,rp:5},{t:25,eb:400,rp:10}] },
+    { id: "chat_messages",   cat: "social",   stat: "chatMessages",  title: "Send {n} chat messages",            tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:1000,eb:400,rp:10}] },
+
+    { id: "citadels_taken",  cat: "combat",   stat: "citadelsTaken", title: "Capture {n} citadels",              tiers: [{t:1,eb:50,rp:2},{t:10,eb:150,rp:5},{t:50,eb:500,rp:10}] },
+    { id: "defenders_recalled", cat: "combat", stat: "defendersRecalled", title: "Recall {n} citadel defenders", tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:50,eb:400,rp:10}] },
+    { id: "citadels_upgraded", cat: "combat", stat: "citadelsUpgraded", title: "Upgrade {n} citadels",          tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
+    { id: "sieges_held",     cat: "combat",   stat: "citadelsDefended", title: "Defend {n} citadels",           tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
+    { id: "spoils_banked",   cat: "combat",   stat: "spoilsBanked",  title: "Bank citadel spoils {n} times",     tiers: [{t:5,eb:25,rp:2},{t:25,eb:100,rp:5},{t:100,eb:400,rp:10}] },
+
+    { id: "pet_fed",         cat: "mastery",  stat: "berriesFed",    title: "Feed Buddy {n} berries",            tiers: [{t:5,eb:25,rp:2},{t:50,eb:100,rp:5},{t:500,eb:400,rp:10}] },
+    { id: "badges_earned",   cat: "mastery",  stat: "badgesEarned", derived: true, title: "Earn {n} badges",       tiers: [{t:10,eb:50,rp:2},{t:25,eb:150,rp:5},{t:50,eb:500,rp:10}] },
+  ];
+
+  // 33 tracks x 3 tiers = 99, plus one standalone "first step" = 100.
+  const ALL = [];
+  TRACKS.forEach((tr) => {
+    tr.tiers.forEach((tier, i) => {
+      ALL.push({
+        key: `${tr.id}_t${i + 1}`,
+        trackId: tr.id,
+        cat: tr.cat,
+        tier: i + 1,
+        stat: tr.stat,
+        derived: tr.derived === true,
+        target: tier.t,
+        title: tr.title.replace("{n}", String(tier.t)),
+        eb: tier.eb,
+        rp: tier.rp,
+      });
+    });
+  });
+  ALL.unshift({
+    key: "first_step_t1", trackId: "first_step", cat: "mastery", tier: 1,
+    stat: "daysPlayed", derived: false, target: 1,
+    title: "Take your first step into the Realm", eb: 10, rp: 2,
+  });
+
+  const BY_KEY = new Map(ALL.map((a) => [a.key, a]));
+
+  const el = (id) => document.getElementById(id);
+  const toast = (msg, ms = 4000) => {
+    if (typeof window !== "undefined" && typeof window.showToast === "function") window.showToast(msg, ms);
+    else console.log("[Achievements]", msg);
+  };
+
+  // ---------- progress ----------
+
+  function claims() {
+    try { return Store.get()?.achievementsClaimed || {}; } catch (e) { return {}; }
+  }
+
+  function stats() {
+    try { return Store.get()?.achievementStats || {}; } catch (e) { return {}; }
+  }
+
+  function statValue(def) {
+    const state = (() => { try { return Store.get(); } catch (e) { return null; } })();
+    if (!state) return 0;
+    const s = stats();
+    if (!def.derived) return Number(s[def.stat]) || 0;
+
+    switch (def.stat) {
+      case "plotsOwned":     return Object.keys(state.plots || {}).length;
+      case "legendaryOwned":
+      case "luckyOwned": {
+        // Lucky is a boolean FLAG on the plot (p.lucky === true) and bagged
+        // lucky plots live in luckyBagItems — it is NOT a rarity tier.
+        // Counting `rarity === "lucky"` matched nothing and pinned the lucky
+        // badges at 0/N no matter how many you owned. Rarity can also arrive
+        // as {key}, so normalize it exactly like the profile counter does.
+        if (def.stat === "luckyOwned") {
+          const placed = Object.values(state.plots || {}).filter((p) => p && p.lucky === true).length;
+          const bagged = Object.keys(state.luckyBagItems || {}).length;
+          return placed + bagged;
+        }
+        return Object.values(state.plots || {}).filter((p) => {
+          const r = p && (p.rarity?.key || p.rarity);
+          return String(r) === "legendary";
+        }).length;
+      }
+      case "lifetimeRent":   return Number(state.lifetimeRent) || 0;
+      case "totalDividends": return Number(state.totalDividends) || 0;
+      case "extractorLevel": return Number(state.extractor && state.extractor.level) || 0;
+      // friendsMade is a counter (recordActivity), not derived — see the note
+      // on the friends_made track definition.
+      case "badgesEarned":   return Object.keys(claims()).length;
+      default: return 0;
+    }
+  }
+
+  function isClaimed(key) { return Boolean(claims()[key]); }
+
+  function claimable() {
+    return ALL.filter((a) => !isClaimed(a.key) && statValue(a) >= a.target);
+  }
+
+  // ---------- badge art ----------
+
+  function badgeMarkup(def, opts = {}) {
+    const cat = CATEGORIES[def.cat] || CATEGORIES.mastery;
+    const rim = TIER_RIMS[(def.tier - 1) % TIER_RIMS.length];
+    const earned = opts.earned !== false;
+    return `
+      <div class="ach-badge ${earned ? "earned" : "locked"}" data-ach-key="${def.key}"
+           style="--ach-color:${cat.color};--ach-rim:${rim}">
+        <span class="ach-badge-glyph">${cat.glyph}</span>
+        <span class="ach-badge-tier">${def.tier}</span>
+      </div>`;
+  }
+
+  // ---------- achievements tab ----------
+
+  function renderTab(container) {
+    if (!container) return;
+    const c = claims();
+    const ready = claimable();
+
+    const summary = `
+      <div class="ach-summary">
+        <span><strong>${Object.keys(c).length}</strong> / ${ALL.length} unlocked</span>
+        <span class="ach-summary-hint">Badges you earn appear in your profile</span>
+        ${ready.length
+          ? `<button class="ach-claim-all" id="ach-claim-all">Claim all ${ready.length}</button>`
+          : ""}
+      </div>`;
+
+    // Group by category so the list reads as sections rather than a wall.
+    const byCat = {};
+    ALL.forEach((a) => { (byCat[a.cat] = byCat[a.cat] || []).push(a); });
+
+    const sections = Object.keys(byCat).map((catKey) => {
+      const cat = CATEGORIES[catKey];
+      const rows = byCat[catKey].map((a) => {
+        const done = isClaimed(a.key);
+        const prog = Math.min(statValue(a), a.target);
+        const complete = prog >= a.target;
+        const pct = Math.round((prog / a.target) * 100);
+        const action = done
+          ? `<div class="quest-check done" title="Unlocked">✓</div>`
+          : complete
+            ? `<button class="cal-claim-btn ach-claim-btn" data-ach-key="${a.key}">Claim</button>`
+            : `<div class="quest-check">○</div>`;
+        return `
+          <div class="ach-row ${complete && !done ? "ready-claim" : ""} ${done ? "ach-done" : ""}">
+            ${badgeMarkup(a, { earned: done || complete })}
+            <div class="ach-body">
+              <div class="ach-title">${a.title}</div>
+              <div class="ach-reward">+${a.eb} EB${a.rp ? ` <span class="quest-rp">+${a.rp}RP</span>` : ""}</div>
+              ${done ? "" : `
+                <div class="quest-progress">
+                  <div class="quest-progress-track"><div class="quest-progress-fill" style="width:${pct}%"></div></div>
+                  <span class="quest-progress-label">${prog}/${a.target}</span>
+                </div>`}
+            </div>
+            <div class="quest-action-slot">${action}</div>
+          </div>`;
+      }).join("");
+
+      return `
+        <div class="ach-cat">
+          <div class="ach-cat-head" style="--ach-color:${cat.color}">
+            <span class="ach-cat-glyph">${cat.glyph}</span>${cat.label}
+          </div>
+          ${rows}
+        </div>`;
+    }).join("");
+
+    container.innerHTML = summary + sections;
+
+    container.querySelectorAll(".ach-claim-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        claim(btn.getAttribute("data-ach-key"));
+      });
+    });
+
+    el("ach-claim-all")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      claimAll();
+    });
+  }
+
+  async function claim(key) {
+    const def = BY_KEY.get(key);
+    if (!def || isClaimed(key)) return;
+    if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+      toast("⚠️ Server connection required.", 3500);
+      return;
+    }
+    try {
+      const fn = firebase.functions().httpsCallable("claimAchievement");
+      const res = (await fn({ key })).data;
+      if (!res?.ok) {
+        if (res?.reason === "already_claimed") {
+          // Someone/something else claimed it — refresh so the row settles.
+          renderAll();
+        } else if (res?.reason === "not_complete") {
+          toast(`🔒 ${res.progress}/${res.target} — not complete yet.`, 3000);
+        }
+        return;
+      }
+
+      const state = Store.get();
+      if (state) {
+        state.achievementsClaimed = Object.assign({}, state.achievementsClaimed || {}, {
+          [key]: { claimedAt: Date.now(), tier: def.tier, target: def.target },
+        });
+        state.eb = Math.max(0, Number(res.nextEb) || Number(state.eb) || 0);
+        state.rewardPoints = Math.max(0, Number(res.nextRewardPoints) || Number(state.rewardPoints) || 0);
+        Store.save && Store.save(false);
+      }
+
+      toast(`🏅 Achievement unlocked! ${def.title} · +${def.eb} EB${def.rp ? ` · +${def.rp}RP` : ""}`, 5000);
+      renderAll();
+    } catch (e) {
+      console.warn("[Achievements] claim failed:", e);
+      toast("⚠️ Could not claim that achievement.", 3500);
+    }
+  }
+
+  // ---------- badges in the player profile ----------
+
+  function renderBadges(container, isOtherPlayer) {
+    if (!container) return;
+    // Never show anyone else's badges — the collection is private and their
+    // unlocks are not fetched either.
+    if (isOtherPlayer) {
+      container.innerHTML = "";
+      container.classList.add("hidden");
+      return;
+    }
+    container.classList.remove("hidden");
+
+    const c = claims();
+    const earned = ALL.filter((a) => isClaimed(a.key));
+    const shown = earned.slice(-12).reverse(); // newest twelve
+
+    container.innerHTML = `
+      <div class="info-section-title">BADGES:</div>
+      <div class="badge-strip">
+        ${shown.length
+          ? shown.map((a) => badgeMarkup(a, { earned: true })).join("")
+          : `<div class="badge-empty">No badges yet — check the Achievements tab.</div>`}
+      </div>
+      <button class="badge-open-btn" id="badge-open-grid">
+        ${earned.length ? `View all ${earned.length} badges` : `View all ${ALL.length} badges`}
+      </button>`;
+
+    el("badge-open-grid")?.addEventListener("click", openGrid);
+  }
+
+  // ---------- badge grid modal ----------
+
+  function openGrid() {
+    const modal = el("badge-grid-modal");
+    if (!modal) return;
+    renderGrid();
+    modal.classList.remove("hidden");
+  }
+
+  function renderGrid(detailKey) {
+    const grid = el("badge-grid-list");
+    if (!grid) return;
+    const c = claims();
+
+    grid.innerHTML = ALL.map((a) => badgeMarkup(a, { earned: isClaimed(a.key) })).join("");
+
+    grid.querySelectorAll(".ach-badge").forEach((node) => {
+      node.addEventListener("click", () => {
+        renderDetail(node.getAttribute("data-ach-key"));
+      });
+    });
+
+    renderDetail(detailKey || ALL[0].key);
+  }
+
+  function renderDetail(key) {
+    const box = el("badge-grid-detail");
+    if (!box) return;
+    const def = BY_KEY.get(key);
+    if (!def) { box.innerHTML = ""; return; }
+    const c = claims();
+    const rec = c[def.key];
+    const earned = Boolean(rec);
+    const prog = Math.min(statValue(def), def.target);
+    const cat = CATEGORIES[def.cat] || CATEGORIES.mastery;
+
+    box.innerHTML = `
+      <div class="badge-detail-top">
+        ${badgeMarkup(def, { earned: earned || prog >= def.target })}
+        <div>
+          <div class="badge-detail-title">${def.title}</div>
+          <div class="badge-detail-cat" style="color:${cat.color}">${cat.glyph} ${cat.label} · Tier ${def.tier}</div>
+        </div>
+      </div>
+      <div class="badge-detail-req">
+        <span class="badge-detail-label">Requirement</span>
+        <span>${def.title}</span>
+      </div>
+      <div class="badge-detail-req">
+        <span class="badge-detail-label">Progress</span>
+        <span>${earned ? "Complete" : `${prog} / ${def.target}`}</span>
+      </div>
+      <div class="badge-detail-req">
+        <span class="badge-detail-label">Reward</span>
+        <span>+${def.eb} EB${def.rp ? ` · +${def.rp} RP` : ""}</span>
+      </div>
+      <div class="badge-detail-req">
+        <span class="badge-detail-label">Unlocked</span>
+        <span>${earned
+          ? new Date(Number(rec.claimedAt) || 0).toLocaleString()
+          : "Not yet unlocked"}</span>
+      </div>`;
+  }
+
+  /**
+   * Report a client-only action for achievement progress. The server never sees
+   * these happen (gifts, feeding Buddy, surveys and chat are all direct
+   * Firestore writes), so this is a best-effort report — the server clamps and
+   * rate-limits it, and the RP caps bound the damage. Everything else is bumped
+   * server-side and cannot be reported through here at all.
+   */
+  function record(kind, n) {
+    if (typeof firebase === "undefined" || !firebase.functions) {
+      console.warn("[Achievements] record skipped — firebase.functions missing:", kind);
+      return;
+    }
+    try {
+      const fn = firebase.functions().httpsCallable("recordActivity");
+      fn({ kind, n: n || 1 }).then((res) => {
+        const d = res && res.data;
+        if (d && d.ok) {
+          console.log(`[Achievements] ${kind} +${d.n} -> ${d.total}`);
+        } else {
+          // Server refused — the reason is the whole point of logging it.
+          console.warn("[Achievements] recordActivity rejected:", kind, d);
+        }
+      }).catch((e) => {
+        console.warn("[Achievements] recordActivity failed:", kind, e && e.message, e);
+      });
+    } catch (e) {
+      console.warn("[Achievements] record threw:", kind, e);
+    }
+  }
+
+  /**
+   * Live listener on saves_private.
+   *
+   * Every achievement counter lives server-side, so without this the client
+   * only learns about progress on the next full save — which is why badges
+   * appeared to "catch up after closing out the game and reloading". The
+   * snapshot fires the instant any server-side bump lands (a wheel spin, a
+   * citadel recall, a gift) and re-renders, so the bar moves as it happens.
+   */
+  let unsub = null;
+  let refreshTimer = null;
+  function startRealtime() {
+    if (unsub) return;
+    try {
+      const db = Store.getDb && Store.getDb();
+      const uid = Store.get()?.player?.id;
+      if (!db || !uid) return;
+      unsub = db.collection("saves_private").doc(uid).onSnapshot((snap) => {
+        if (!snap || !snap.exists) return;
+        const priv = snap.data() || {};
+        const state = Store.get();
+        if (!state) return;
+        // Server-owned fields replace local values outright — never
+        // Store.save() them back, they are not client-writable anyway.
+        // Adopt UNCONDITIONALLY — including empty. The old "only when present"
+        // guard kept stale local badges on screen forever after a server-side
+        // reset (claimed 66 badges showing against a zeroed account).
+        state.achievementStats = (priv.stats && typeof priv.stats === "object") ? priv.stats : {};
+        state.achievementsClaimed = (priv.achievements && typeof priv.achievements === "object") ? priv.achievements : {};
+        if (priv.citadelSpoils && typeof priv.citadelSpoils === "object") state.citadelSpoils = priv.citadelSpoils;
+        if (priv.citadelRecallCooldownUntil) state.citadelRecallCooldownUntil = Number(priv.citadelRecallCooldownUntil) || 0;
+        if (priv.rewardPoints !== undefined) state.rewardPoints = Number(priv.rewardPoints) || 0;
+        renderAll();
+        // Light the red dot on the side-hub Daily button the moment something
+        // becomes claimable.
+        if (typeof window.updateCalendarHUD === "function") window.updateCalendarHUD();
+      }, (e) => {
+        console.warn("[Achievements] realtime listener error:", e && e.message);
+      });
+
+      // Derived stats (lifetimeRent, plotsOwned, extractorLevel...) are read
+      // live off the save and never bump a counter, so the snapshot above never
+      // fires for them. Refresh on a slow tick while the badges tab is open so
+      // e.g. "Accrue N in lifetime rent" keeps moving.
+      if (!refreshTimer) {
+        refreshTimer = setInterval(() => {
+          const modal = el("calendar-modal");
+          const panel = el("calendar-achievements-panel");
+          if (modal && !modal.classList.contains("hidden") && panel && !panel.classList.contains("hidden")) {
+            renderAll();
+          }
+        }, 5000);
+      }
+    } catch (e) {
+      console.warn("[Achievements] realtime listener failed:", e);
+    }
+  }
+
+  /** True when anything is ready to claim — drives the red dot on Daily. */
+  function hasClaimable() {
+    return claimable().length > 0;
+  }
+
+  /**
+   * Claim every completed achievement at once.
+   *
+   * Claims are sent one at a time (each is its own server transaction that
+   * verifies the progress) with a short stagger between them so the
+   * claimAchievement rate limit is not tripped and the toasts stack rather
+   * than overwrite each other.
+   */
+  let claimingAll = false;
+  async function claimAll() {
+    const ready = claimable();
+    if (!ready.length) {
+      toast("Nothing ready to claim yet.", 2500);
+      return;
+    }
+    if (claimingAll) return;
+    claimingAll = true;
+
+    let granted = 0, skipped = 0, ebTotal = 0, rpTotal = 0;
+
+    for (let i = 0; i < ready.length; i++) {
+      const def = ready[i];
+      try {
+        const fn = firebase.functions().httpsCallable("claimAchievement");
+        const res = (await fn({ key: def.key })).data;
+        if (res && res.ok) {
+          granted++;
+          ebTotal += Number(res.eb) || 0;
+          rpTotal += Number(res.rp) || 0;
+
+          const state = Store.get();
+          if (state) {
+            state.achievementsClaimed = Object.assign({}, state.achievementsClaimed || {}, {
+              [def.key]: { claimedAt: Date.now(), tier: def.tier, target: def.target },
+            });
+            state.eb = Math.max(0, Number(res.nextEb) || Number(state.eb) || 0);
+            state.rewardPoints = Math.max(0, Number(res.nextRewardPoints) || Number(state.rewardPoints) || 0);
+            Store.save && Store.save(false);
+          }
+
+          // Staggered so the toasts stack up instead of replacing each other.
+          setTimeout(() => {
+            toast(`🏅 ${def.title} · +${def.eb} EB${def.rp ? ` · +${def.rp}RP` : ""}`, 3500);
+          }, i * 300);
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        console.warn("[Achievements] claimAll failed for", def.key, e && e.message);
+        skipped++;
+      }
+      // Small gap between requests so we stay under the per-minute rate limit.
+      if (i < ready.length - 1) await new Promise((r) => setTimeout(r, 120));
+    }
+
+    renderAll();
+    if (typeof window.updateCalendarHUD === "function") window.updateCalendarHUD();
+
+    setTimeout(() => {
+      if (skipped) toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP (${skipped} skipped)`, 5000);
+      else toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP`, 5000);
+    }, ready.length * 300 + 150);
+
+    claimingAll = false;
+  }
+
+  function renderAll() {
+    const list = el("calendar-achievements-list");
+    if (list) renderTab(list);
+    const badges = el("info-badges-section");
+    if (badges) {
+      const modal = el("player-info-modal");
+      const showingOther = modal ? Boolean(modal.dataset.otherPlayer === "true") : false;
+      renderBadges(badges, showingOther);
+    }
+  }
+
+  function init() {
+    startRealtime();
+    renderAll();
+  }
+
+  return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, claimAll, hasClaimable, ALL, CATEGORIES, BY_KEY };
+})();
+
+window.Achievements = Achievements;
+console.log("[EldenEarth] Achievements module loaded —", Achievements.ALL.length, "milestones");

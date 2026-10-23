@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trading Guide — Elden Earth</title>
+<meta name="description" content="How friend-to-friend trading works in Elden Earth: the sealed commit-reveal flow, requirements, fair trade values and collection hunting.">
+<link rel="icon" href="assets/icon512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site/css/portal.css">
+<script async id="adsense-portal" crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5972331036113330"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-functions-compat.js"></script>
+<script defer src="site/js/portal.js"></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<section class="page-hero">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Home</a> / Trading</div>
+    <h1>Trading between players</h1>
+    <p class="lead">Every trade in Elden Earth is friend-to-friend and protected by a sealed commit-reveal flow — nobody can swap a legendary for a common after you've committed.</p>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <div class="wrap prose">
+    <h2>How trading works</h2>
+    <p>Trading exists to complete collections and build friendships — not to run a marketplace. There are no listing fees, no middlemen and no strangers: you trade with friends you've added in the game, one plot for one plot.</p>
+
+    <h3>The sealed commit-reveal flow</h3>
+    <ol>
+      <li><strong>Open a trade</strong> from a friend's profile. Either side can start one.</li>
+      <li><strong>Both players select a plot</strong> — selections are sealed, so neither side can see what the other picked.</li>
+      <li><strong>Both commit.</strong> Once both plots are committed, the trade is locked in.</li>
+      <li><strong>The reveal.</strong> The plots swap atomically on the server — if either side walks away, nothing moves and both plots stay where they were.</li>
+    </ol>
+    <div class="callout">
+      <p><strong>Why sealed?</strong> The classic trade scam is "I'll show you mine if you show me yours" — then swapping to something worse. Sealed commit-reveal makes that impossible: the choice is final before anything is revealed.</p>
+    </div>
+
+    <h2>Requirements</h2>
+    <ul class="checklist">
+      <li>Both players must be friends in the game (friend requests live in the Friends tab)</li>
+      <li>Accounts must be at least <strong>14 days old</strong> — this blocks throwaway accounts from being trade mules</li>
+      <li>Both sides need at least one tradeable plot (plots in your bag work too)</li>
+      <li>Trades expire automatically if the other player doesn't respond</li>
+    </ul>
+
+    <h2>What makes a trade fair?</h2>
+    <table class="table">
+      <tr><th>Plot tier</th><th>Relative value</th><th>Notes</th></tr>
+      <tr><td>Common</td><td>Baseline</td><td>Abundant — the building block of collections</td></tr>
+      <tr><td>Rare</td><td>~3× common</td><td>Stronger income rate</td></tr>
+      <tr><td>Epic</td><td>~10× common</td><td>Scarce; key for Ascension chains</td></tr>
+      <tr><td>Legendary</td><td>Very high</td><td>Top-tier income; only trade for other legendaries or a great bundle</td></tr>
+      <tr><td>🍀 Lucky (any tier)</td><td>+premium</td><td>+10% income on that plot — prices move around the 0.5% rarity odds</td></tr>
+    </table>
+    <p>These multipliers are community conventions, not game rules — the game never forces a trade. If a deal feels rushed or too good, walk away; the plot isn't going anywhere.</p>
+
+    <h2>Tips for collection hunters</h2>
+    <ul>
+      <li><strong>Trade duplicates, never progress.</strong> Keep one of everything before trading spares.</li>
+      <li><strong>Lucky plots compound.</strong> A lucky plot earns +10% forever — over months that outvalues its trade premium.</li>
+      <li><strong>Friendship hearts matter.</strong> Max friendship (10 hearts) improves lucky re-roll odds on gifts and trades.</li>
+      <li><strong>Use the community hub.</strong> Post in the Trading tag to find partners outside your friend list.</li>
+    </ul>
+
+    <div class="callout red">
+      <p><strong>Scam protection:</strong> the game will never ask for your password, and no staff member will ever ask for account access. Report anyone who does via the in-game report button or <a href="about.html">contact</a>.</p>
+    </div>
+
+    <h2>Daily gifts</h2>
+    <p>Every friend pair can exchange one gift per day — small EB and a friendship XP boost. It's free, it's fast, and it's the cheapest way to level hearts toward those lucky trade bonuses.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="ad-slot">
+    <div class="ad-label">Advertisement</div>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5972331036113330" data-ad-slot="4287691766" data-ad-format="auto" data-full-width-responsive="true"></ins>
+  </div>
+</div>
+
+<div id="site-footer"></div>
+</body>
+</html>

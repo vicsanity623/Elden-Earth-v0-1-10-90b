@@ -1,0 +1,760 @@
+// ============================================================
+// Elden Earth — ServerAntiCheat
+// Client-side bridge to Firebase Cloud Functions for
+// server-side position validation, purchase verification,
+// and diamond collection integrity.
+// ============================================================
+const ServerAntiCheat = (() => {
+  let functions = null;
+  let lastServerSync = 0;
+  const MIN_SYNC_INTERVAL_MS = 20000; // Don't ping server more than every 20s
+
+  function init() {
+    if (typeof firebase === "undefined" || !firebase.functions) {
+      console.warn("[ServerAntiCheat] Firebase Functions SDK not loaded.");
+      return;
+    }
+    functions = firebase.functions();
+  }
+
+  // ======================== KEEP-ALIVE (cold-start suppression) ========================
+  // Cloud Functions scale to zero: after ~10 idle minutes GCP reclaims the
+  // container and the next real call pays a 3-15s boot. Every function is its
+  // OWN container, so warming has to address each hot one individually. The
+  // server answers { __warm: 1 } before touching Firestore, so a ping costs a
+  // single round trip, zero reads, and effectively nothing in billing.
+  // Callables that must not be cold when the player taps something. A cold
+  // Cloud Functions container costs 1-3s on cell data, which is exactly why
+  // buying land / spinning a stop felt like you had to stand still and wait.
+  // validatePurchase was missing from this list entirely, so every land
+  // purchase was a cold start.
+  const KEEPALIVE_FNS = [
+    "validatePosition",
+    "validateCollect",
+    "validatePurchase",
+    "spinWheel",
+    "spinEldenStop",
+    "plantEldenStop",
+    "spawnDiamonds",
+    "ascendPlot",
+    "citadelAction",
+    "recallCitadel",
+    "conquerCitadel",
+    "claimDailyReward",
+    "claimQuestReward",
+    "claimAchievement",
+    "claimMailbox",
+    "claimWeeklyPool",
+    "recordActivity",
+    "convertCash",
+  ];
+  // 3 minutes: containers idle out somewhere around 5-15 min, so anything
+  // longer risks them going cold between actions.
+  const KEEPALIVE_INTERVAL_MS = 3 * 60 * 1000;
+  let keepAliveTimer = null;
+  let keepAliveHooked = false;
+
+  function pingHotFunctions() {
+    if (!functions) return;
+    // Nobody is playing while the tab is hidden — don't burn invocations.
+    if (typeof document !== "undefined" && document.hidden) return;
+    KEEPALIVE_FNS.forEach((name) => {
+      try {
+        functions.httpsCallable(name)({ __warm: 1 }).catch(() => {});
+      } catch (e) {
+        // A failed ping must never surface to the player.
+      }
+    });
+  }
+
+  function startKeepAlive() {
+    if (typeof document === "undefined" || keepAliveTimer !== null) return;
+    pingHotFunctions();
+    keepAliveTimer = setInterval(pingHotFunctions, KEEPALIVE_INTERVAL_MS);
+    if (!keepAliveHooked) {
+      keepAliveHooked = true;
+      // Coming back to the tab: warm everything before the first real action.
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) pingHotFunctions();
+      });
+    }
+  }
+
+  /**
+   * Send current GPS position to server for velocity validation.
+   * Returns { valid, speed, reason, strikes } or null on failure.
+   */
+  async function sendPosition(coords, force = false) {
+    if (!functions) return null;
+
+    const now = Date.now();
+    if (!force && now - lastServerSync < MIN_SYNC_INTERVAL_MS) return null;
+
+    lastServerSync = now;
+
+    try {
+      const validatePosition = functions.httpsCallable("validatePosition");
+      const result = await validatePosition({
+        lat: coords.latitude,
+        lon: coords.longitude,
+        accuracy: coords.accuracy,
+        altitude: coords.altitude,
+        speed: coords.speed,
+        altitudeAccuracy: coords.altitudeAccuracy,
+        timestamp: coords.timestamp || now,
+      });
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Position sync failed:", e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Request server validation for a land purchase.
+   * Returns { allowed, reason, plotData?, tid? }
+   */
+  async function validatePurchase(lat, lon, tx, ty, territory) {
+    if (!functions) {
+      return { allowed: false, reason: "functions_not_initialized" };
+    }
+
+    try {
+      const validatePurchaseFn = functions.httpsCallable("validatePurchase");
+      const result = await validatePurchaseFn({ lat, lon, tx, ty, territory });
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Purchase validation failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
+  /**
+   * Request server validation for a diamond collection.
+   * Returns { allowed, reason }
+   * Throws on transport/auth failures so callers can fail open using the
+   * client-side proximity check instead of wrongly treating it as "too far".
+   */
+  async function validateCollect(lat, lon, diamondId, diamondLat, diamondLon, byPet) {
+    if (!functions) {
+      return { allowed: false, reason: "functions_not_initialized" };
+    }
+
+    const validateCollectFn = functions.httpsCallable("validateCollect");
+    const result = await validateCollectFn({
+      lat,
+      lon,
+      diamondId,
+      diamondLat,
+      diamondLon,
+      byPet: Boolean(byPet),
+    });
+    return result.data;
+  }
+
+  async function relocatePlot(slot, tx, ty, plotItemId) {
+    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    try {
+      const relocatePlotFn = functions.httpsCallable("relocatePlot");
+      const result = await relocatePlotFn({ slot, tx, ty, plotItemId: plotItemId || undefined });
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Plot relocation failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
+  async function pickupPlot(tid) {
+    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("pickupPlot");
+      const result = await fn({ tid });
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Plot pickup failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
+  async function ascendPlot(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("ascendPlot");
+      const result = await fn(payload || {});
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Plot ascension failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function getGlobalEvent() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("getGlobalEvent");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getGlobalEvent failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function claimGlobalEventReward() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimGlobalEventReward");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimGlobalEventReward failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function processEventPayouts() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("processEventPayouts");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] processEventPayouts failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function spinWheel(multiplier = 1) {
+    if (!functions) return { spun: false, reason: "functions_not_initialized" };
+    try {
+      const spinWheelFn = functions.httpsCallable("spinWheel");
+      // Pass the multiplier (1 or 10) to the Firebase Cloud Function
+      const result = await spinWheelFn({ multiplier });
+      return result.data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Wheel spin failed:", e.message);
+      return { spun: false, reason: "server_error" };
+    }
+  }
+
+  async function activateBoost() {
+    if (!functions) return { activated: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("activateBoost");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Boost activation failed:", e.message);
+      return { activated: false, reason: "server_error" };
+    }
+  }
+
+  async function claimBoost() {
+    if (!functions) return { claimed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimBoost");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Boost claim failed:", e.message);
+      return { claimed: false, reason: "server_error" };
+    }
+  }
+
+  async function recallCitadel(citadelId, adCredit = false) {
+    if (!functions) return { recalled: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("recallCitadel");
+      return (await fn({ citadelId, adCredit: !!adCredit })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Citadel recall failed:", e.message);
+      return { recalled: false, reason: "server_error" };
+    }
+  }
+
+  async function conquerCitadel(citadelId, lat, lon, name, avatar) {
+    if (!functions) return { conquered: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("conquerCitadel");
+      return (await fn({ citadelId, lat, lon, name, avatar })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Citadel conquest failed:", e.message);
+      return { conquered: false, reason: "server_error" };
+    }
+  }
+
+  async function spawnDiamonds(lat, lon, count) {
+    if (!functions) return { spawned: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("spawnDiamonds");
+      return (await fn({ lat, lon, count })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Diamond spawn failed:", e.message);
+      return { spawned: false, reason: "server_error" };
+    }
+  }
+
+  async function citadelAction(action, payload = {}) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("citadelAction");
+      return (await fn({ action, ...payload })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Citadel action failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function claimQuestReward(questId) {
+    if (!functions) return { claimed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimQuestReward");
+      return (await fn({ questId })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Quest claim failed:", e.message);
+      return { claimed: false, reason: "server_error" };
+    }
+  }
+
+  async function collectExtractor(useAdDouble = false) {
+    if (!functions) return { collected: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("collectExtractor");
+      return (await fn({ useAdDouble: !!useAdDouble })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Extractor collect failed:", e.message);
+      return { collected: false, reason: "server_error" };
+    }
+  }
+
+  // Server-side grant for a finished rewarded ad. The server owns the reward
+  // (daily caps, anti-spam) — finishing the ad client-side grants nothing by
+  // itself. kinds: "wheel_spin" | "citadel_recall" | "extractor_double".
+  async function claimAdReward(kind) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimAdReward");
+      return (await fn({ kind })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimAdReward failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  // Closed-beta opt-in: server records the verified Google email in
+  // testers/{uid} and grants the Founders Pack once (idempotent).
+  async function joinClosedBeta() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("joinClosedBeta");
+      return (await fn({ platform: "web" })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] joinClosedBeta failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  // New Explorer Bonus (4,000 EB + 500 Diamonds) — server-side and
+  // idempotent; the old client-side grant was stomped by the sync mirror.
+  async function claimNewPlayerBonus() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimNewPlayerBonus");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimNewPlayerBonus failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  // Unified Global Challenge claim — delivers the Top-10 plots bundle AND the
+  // EB share in one server transaction (each half idempotent).
+  async function claimEventReward() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("claimEventReward");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimEventReward failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function upgradeExtractor() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("upgradeExtractor");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Extractor upgrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function submitWithdrawalRequest(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("submitWithdrawalRequest");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Withdrawal request failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function approveWithdrawal(requestId) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("approveWithdrawal");
+      return (await fn({ requestId })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Approve withdrawal failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function rejectWithdrawal(requestId, reason) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("rejectWithdrawal");
+      return (await fn({ requestId, reason })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Reject withdrawal failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function listWithdrawals(status, limit) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("listWithdrawals");
+      return (await fn({ status, limit })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] List withdrawals failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function checkCountryAccess(countryCode, usStateCode) {
+    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("checkCountryAccess");
+      return (await fn({ countryCode, usStateCode })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Country access check failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
+  async function retroactiveWeeklyPoolPayout(weeksBack) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("retroactiveWeeklyPoolPayout");
+      return (await fn({ weeksBack })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] Retroactive weekly pool payout failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function getWeeklyPoolInfo() {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("getWeeklyPoolInfo");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getWeeklyPoolInfo failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function claimReferralBonuses() {
+    if (!functions) return { claimed: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("claimReferralBonuses");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[AntiCheat] claimReferralBonuses error:", e);
+      return { claimed: false, reason: e.message };
+    }
+  }
+
+  async function claimReferralRoyalties() {
+    if (!functions) return { totalRoyalty: 0, referralCount: 0 };
+    try {
+      const fn = functions.httpsCallable("claimReferralRoyalties");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[AntiCheat] claimReferralRoyalties error:", e);
+      return { totalRoyalty: 0, referralCount: 0 };
+    }
+  }
+
+  function isReady() {
+    return functions !== null;
+  }
+
+  async function fixAllPlotData(targetUid) {
+    if (!functions) return { fixed: 0, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("fixAllPlotData");
+      return (await fn({ targetUid })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] fixAllPlotData failed:", e.message);
+      return { fixed: 0, reason: e.message };
+    }
+  }
+
+  async function reconcilePlotData() {
+    if (!functions) return { ghostsRemoved: 0, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("reconcilePlotData");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] reconcilePlotData failed:", e.message);
+      return { ghostsRemoved: 0, reason: e.message };
+    }
+  }
+
+  // Admin-only gift into your own (or a target's) bag.
+  // Default: 2 of each rarity, all 🍀 Lucky = 8 plots.
+  //   ServerAntiCheat.giftPlots()
+  //   ServerAntiCheat.giftPlots({ targetUid: "<uid>", perRarity: 3 })
+  //   ServerAntiCheat.giftPlots({ plots: [{ rarity: "epic" }] })
+  async function giftPlots(opts) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("giftPlots");
+      return (await fn(opts || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] giftPlots failed:", e.message);
+      return { ok: false, reason: e.message };
+    }
+  }
+
+  async function claimMailbox() {
+    if (!functions) return { claimed: 0, dividendsEb: 0, giftsEb: 0 };
+    try {
+      const fn = functions.httpsCallable("claimMailbox");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimMailbox failed:", e.message);
+      return { claimed: 0, dividendsEb: 0, giftsEb: 0 };
+    }
+  }
+
+  /** Receipts for trades that settled while this player was offline. */
+  async function listTradeResults() {
+    if (!functions) return { ok: false, results: [] };
+    try {
+      const fn = functions.httpsCallable("listTradeResults");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] listTradeResults failed:", e.message);
+      return { ok: false, results: [] };
+    }
+  }
+
+  /** Mark receipts as seen (only after the result screen is up). */
+  async function ackTradeResults(ids) {
+    if (!functions) return { ok: false, acked: 0 };
+    // Accept either an array or a { ids: [...] } payload — callers use both.
+    const list = Array.isArray(ids) ? ids : (Array.isArray(ids && ids.ids) ? ids.ids : []);
+    try {
+      const fn = functions.httpsCallable("ackTradeResults");
+      return (await fn({ ids: list })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] ackTradeResults failed:", e.message);
+      return { ok: false, acked: 0 };
+    }
+  }
+
+  /** Read-only age check — is a DOB already on record for this account? */
+  async function getAgeStatus() {
+    if (!functions) return { ok: false, verified: false };
+    try {
+      const fn = functions.httpsCallable("getAgeStatus");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getAgeStatus failed:", e.message);
+      return { ok: false, verified: false };
+    }
+  }
+
+  /** Request a display-name change for admin approval. */
+  async function requestNameChange(name) {    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("requestNameChange");
+      return (await fn({ name })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] requestNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  /** Admin: pending name-change queue. */
+  async function listNameChangeRequests() {
+    if (!functions) return { ok: false, requests: [] };
+    try {
+      const fn = functions.httpsCallable("listNameChangeRequests");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] listNameChangeRequests failed:", e.message);
+      return { ok: false, requests: [] };
+    }
+  }
+
+  /** Admin: apply a requested name change. */
+  async function approveNameChange(uid) {
+    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("approveNameChange");
+      return (await fn({ uid })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] approveNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  /** Admin: reject a requested name change. */
+  async function rejectNameChange(uid, reason) {
+    if (!functions) return { ok: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("rejectNameChange");
+      return (await fn({ uid, reason })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] rejectNameChange failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function claimWeeklyPool() {
+    if (!functions) return { claimed: false, reason: "not_ready" };
+    try {
+      const fn = functions.httpsCallable("claimWeeklyPool");
+      return (await fn({})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] claimWeeklyPool failed:", e.message);
+      return { claimed: false, reason: e.message };
+    }
+  }
+
+  async function plantEldenStop(tx, ty) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("plantEldenStop");
+      return (await fn({ tx, ty })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] plantEldenStop failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function spinEldenStop(stopId, lat, lon) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("spinEldenStop");
+      return (await fn({ stopId, lat, lon })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] spinEldenStop failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function checkChatEligibility() {
+    if (!functions) return { chatUnlocked: false, plotCount: 0 };
+    try {
+      const fn = functions.httpsCallable("checkChatEligibility");
+      return (await fn()).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] checkChatEligibility failed:", e.message);
+      return { chatUnlocked: false, plotCount: 0 };
+    }
+  }
+
+  async function validateUsername(name) {
+    if (!functions) return { valid: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("validateUsername");
+      return (await fn({ name })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] validateUsername failed:", e.message);
+      return { valid: false, reason: "server_error" };
+    }
+  }
+
+  async function filterChatMessage(text, senderName) {
+    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("filterChatMessage");
+      return (await fn({ text, senderName })).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] filterChatMessage failed:", e.message);
+      return { allowed: false, reason: "server_error" };
+    }
+  }
+
+  async function fixTerritoryNames(opts = {}) {
+    if (!functions) return { fixed: 0, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("fixTerritoryNames");
+      return (await fn(opts)).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] fixTerritoryNames failed:", e.message);
+      return { fixed: 0, reason: e.message };
+    }
+  }
+
+  // ---- Plot trading (Local ≤500m / Remote 25 EB relay) ----
+  async function createTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("createTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] createTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function selectTradePlot(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("selectTradePlot");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] selectTradePlot failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function confirmTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("confirmTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] confirmTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function cancelTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("cancelTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] cancelTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  async function getTrade(payload) {
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("getTrade");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] getTrade failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimAdReward, joinClosedBeta, claimNewPlayerBonus, claimEventReward, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange, getAgeStatus };
+})();

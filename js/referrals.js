@@ -1,0 +1,409 @@
+// ============================================================
+// Elden Earth — Referral System (Firestore-Backed)
+// ============================================================
+var Referrals;
+
+(function () {
+  // Initialize with fallback stubs immediately to avoid TDZ
+  Referrals = {
+    applyReferral: () => {},
+    claimReferralBonuses: () => {},
+    renderReferralsTab: () => {},
+    copyCode: () => {},
+    copyInviteUrl: () => {},
+    applyInviteFromUrl: () => {},
+    applyFromInput: () => {},
+    generateCode: () => "CODE",
+    REFERRAL_BONUS_EB: 25
+  };
+
+  try {
+    const REFERRAL_BONUS_EB = 25;
+
+    function db() { return Store.getDb(); }
+    function myId() { return Store.get()?.player?.id; }
+    function myName() { return Store.get()?.player?.name || "Traveler"; }
+    function myAvatar() { return Store.get()?.player?.avatar || "🙂"; }
+
+    function toast(msg, dur) {
+      if (typeof window.showToast === "function") window.showToast(msg, dur);
+      else console.log("[Referrals]", msg);
+    }
+
+    function formatRoyalty(val) {
+      if (val >= 1) return val.toFixed(2);
+      if (val >= 0.01) return val.toFixed(3);
+      return val.toFixed(4);
+    }
+
+    // ======================== CODE GENERATION ========================
+    function generateCode(playerName) {
+      const base = (playerName || "traveler").replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase();
+      const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+      return `${base}${rand}`;
+    }
+
+    // ======================== INVITE URL HANDLING ========================
+    function getInviteRefFromUrl() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get("ref");
+        if (ref && /^[A-Z0-9]{6,12}$/i.test(ref)) {
+          return ref.toUpperCase();
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function getInviteUrl(myCode) {
+      const base = window.location.origin + window.location.pathname;
+      return `${base}?ref=${myCode}`;
+    }
+
+    // ======================== APPLY REFERRAL ========================
+    async function applyReferral(referralCode) {
+      const id = myId();
+      if (!id || !referralCode) return false;
+
+      const state = Store.get();
+      if (state.player?.referredBy) return false;
+
+      if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+        toast("⚠️ Server connection required.", 3500);
+        return false;
+      }
+
+      try {
+        const result = await ServerAntiCheat.applyReferral({ referralCode: referralCode.trim().toUpperCase() });
+        if (!result?.ok) {
+          const msgs = {
+            invalid_code: "❌ Invalid referral code.",
+            already_referred: "You have already been referred.",
+            account_too_new: "Account must be at least 1 day old.",
+            self_referral: "⚠️ You cannot refer yourself!",
+            referrer_region_restricted: "Referrer's region does not allow referrals.",
+          };
+          toast(msgs[result?.reason] || `⚠️ ${result?.reason || "Invalid code"}`, 3000);
+          return false;
+        }
+
+        const state = Store.get();
+        state.player.referredBy = result.referrerId;
+        state.player.referredByName = result.referrerName || "Unknown";
+        Store.save(true);
+
+        const input = document.getElementById("referral-code-input");
+        if (input) {
+          input.value = "";
+          input.disabled = true;
+          const btn = document.querySelector(".referral-apply-btn");
+          if (btn) {
+            btn.textContent = "Applied";
+            btn.disabled = true;
+          }
+        }
+
+        toast(`🎉 Thanks for joining — your referral bonus has been claimed! (Referrer: ${result.referrerName})`, 4000);
+        return true;
+      } catch (e) {
+        console.warn("[Referrals] Apply error:", e);
+        toast("⚠️ Could not verify code.", 3000);
+        return false;
+      }
+    }
+
+    // ======================== CLAIM REFERRAL BONUSES ========================
+    async function claimReferralBonuses() {
+      const id = myId();
+      if (!id) return;
+
+      if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
+        try {
+          const result = await ServerAntiCheat.claimReferralBonuses();
+          if (result && result.claimed && result.totalClaimed > 0) {
+            const state = Store.get();
+            if (state) {
+              state.eb = Number(result.nextEb) || (Number(state.eb) || 0) + result.totalClaimed;
+              Store.save(true);
+              if (typeof updateTopbar === "function") updateTopbar();
+            }
+            toast(`🎁 Claimed ${result.totalClaimed} EB referral bonus${result.totalClaimed > 1 ? 'es' : ''}!`, 4000);
+          }
+        } catch (e) {
+          console.warn("[Referrals] Claim bonuses error:", e);
+        }
+      }
+    }
+
+    // ======================== RENDER REFERRALS TAB ========================
+    async function renderReferralsTab() {
+      const id = myId();
+      const d = db();
+      if (!id || !d) return;
+
+      const panel = document.querySelector('[data-pi-panel="referrals"]');
+      if (!panel) return;
+
+      const state = Store.get();
+      let myCode = state.player?.referralCode;
+
+      // Generate code if missing + save to Firestore
+      if (!myCode) {
+        myCode = generateCode(state.player?.name || "traveler");
+        state.player.referralCode = myCode;
+        Store.save(true);
+        try {
+          await db.collection("players").doc(myId()).set({ referralCode: myCode }, { merge: true });
+        } catch (e) {
+          console.warn("[Referrals] Could not save code to Firestore:", e);
+        }
+      }
+
+      // Count referrals
+      let referrals = [];
+      let totalBonusEarned = 0;
+      try {
+        const snap = await db.collection("referrals")
+          .where("referrerId", "==", id)
+          .get();
+        const referralDocs = snap.docs.map(doc => doc.data());
+        referrals = referralDocs;
+        totalBonusEarned = referralDocs.reduce((sum, r) => sum + (r.bonusGiven || 0), 0);
+      } catch (e) {
+        console.warn("[Referrals] Could not fetch referrals:", e);
+      }
+      const totalReferrals = referrals.length;
+
+      codeHtml = `
+        <div class="referral-code-card">
+          <div class="referral-code-label">Your Referral Code</div>
+          <div class="referral-code-value" id="referral-code-display">${myCode}</div>
+          <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyCode('${myCode}')">📋 Copy Code</button>
+        </div>
+        <div class="referral-invite-card">
+          <div class="referral-code-label">Your Invite Link</div>
+          <div class="referral-invite-url" id="referral-invite-url">${getInviteUrl(myCode)}</div>
+          <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyInviteUrl()">📋 Copy Invite Link</button>
+        </div>`;
+
+      let referredSection = "";
+      const referredByName = state.player?.referredByName;
+      if (referredByName) {
+        referredSection = `
+          <div class="referred-by-card">
+            <span class="referred-by-icon">🔗</span>
+            <span>Referred by <strong>${referredByName}</strong></span>
+          </div>`;
+      }
+
+      // Referral input (if not yet referred)
+      let inputHtml = "";
+      if (!state.player?.referredBy) {
+        inputHtml = `
+          <div class="referral-input-card">
+            <div class="referral-input-title">Have a referral code?</div>
+            <div class="referral-input-row">
+              <input type="text" id="referral-code-input" class="referral-input" placeholder="Enter code..." maxlength="12" autocomplete="off" />
+              <button class="btn btn-primary referral-apply-btn" onclick="Referrals.applyFromInput()">Apply</button>
+            </div>
+          </div>`;
+      }
+
+      let pendingBonus = 0;
+      let bonusRows = [];
+      try {
+        const bonusSnap = await db.collection("referral_bonuses")
+          .where("toId", "==", id)
+          .get();
+        const bonusDocs = bonusSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        pendingBonus = bonusDocs.filter(doc => !doc.claimed).reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
+        bonusRows = bonusDocs;
+      } catch (e) {
+        console.warn("[Referrals] Could not fetch referral bonuses:", e);
+      }
+
+      // Fetch royalty stats from cloud
+      let royaltyTotal = 0;
+      let serverReferralCount = 0;
+      try {
+        if (typeof ServerAntiCheat !== "undefined" && ServerAntiCheat.isReady()) {
+          const royaltyResult = await ServerAntiCheat.claimReferralRoyalties();
+          royaltyTotal = Number(royaltyResult?.totalRoyalty) || 0;
+          serverReferralCount = Number(royaltyResult?.referralCount) || 0;
+        }
+      } catch (e) {}
+
+      // The server counts `referrals` authoritatively. If the client-side query
+      // came back empty (stale session, rules hiccup) trust the server count so
+      // the panel never claims "0 REFERRALS" while royalties are accruing.
+      const referralCountShown = Math.max(referrals.length, serverReferralCount);
+
+      let statsHtml = "";
+      if (referralCountShown > 0 || bonusRows.length > 0 || royaltyTotal > 0) {
+        statsHtml = `
+          <div class="referral-stats-card">
+            <div class="referral-stat">
+              <span class="referral-stat-val">${referralCountShown}</span>
+              <span class="referral-stat-label">Referrals</span>
+            </div>
+            <div class="referral-stat">
+              <span class="referral-stat-val">${totalBonusEarned} <span class="eb-coin-icon"></span></span>
+              <span class="referral-stat-label">Bonus Earned</span>
+            </div>
+            <div class="referral-stat">
+              <span class="referral-stat-val">${pendingBonus} <span class="eb-coin-icon"></span></span>
+              <span class="referral-stat-label">Pending</span>
+            </div>
+            <div class="referral-stat referral-stat-royalty">
+              <span class="referral-stat-val">${Math.floor(royaltyTotal)} <span class="eb-coin-icon"></span></span>
+              <span class="referral-stat-label">Royalties</span>
+            </div>
+          </div>`;
+
+        if (referrals.length > 0) {
+          statsHtml += `<div class="referral-section-title">👥 Players You Referred</div>`;
+          referrals.forEach(r => {
+            const av = r.referredAvatar && r.referredAvatar.startsWith("img:")
+              ? `<img src="${r.referredAvatar.slice(4)}">` : `<span>${r.referredAvatar || "🙂"}</span>`;
+            statsHtml += `
+              <div class="friend-row">
+                <div class="friend-avatar">${av}</div>
+                <div class="friend-info">
+                  <span class="friend-name">${escapeHtml(r.referredName)}</span>
+                  <span class="friend-status">+${r.bonusGiven} EB bonus</span>
+                </div>
+              </div>`;
+          });
+        }
+
+        if (bonusRows.length > 0) {
+          statsHtml += `<div class="referral-section-title">🎁 Pending Bonuses</div>`;
+          bonusRows.forEach(b => {
+            const status = b.claimed ? "Claimed" : "Ready";
+            statsHtml += `
+              <div class="friend-row">
+                <div class="friend-avatar"><span>${b.fromName ? b.fromName.charAt(0).toUpperCase() : "R"}</span></div>
+                <div class="friend-info">
+                  <span class="friend-name">${escapeHtml(b.fromName || "Referral")}</span>
+                  <span class="friend-status">+${Number(b.amount || 0)} EB • ${status}</span>
+                </div>
+              </div>`;
+          });
+        }
+      }
+
+      codeHtml = `
+        <div class="referral-code-card">
+          <div class="referral-code-label">Your Referral Code</div>
+          <div class="referral-code-value" id="referral-code-display">${myCode}</div>
+          <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyCode('${myCode}')">📋 Copy Code</button>
+        </div>
+        <div class="referral-invite-card">
+          <div class="referral-code-label">Your Invite Link</div>
+          <div class="referral-invite-url" id="referral-invite-url">${getInviteUrl(myCode)}</div>
+          <button class="btn btn-primary referral-copy-btn" onclick="Referrals.copyInviteUrl()">📋 Copy Invite Link</button>
+        </div>`;
+
+      referredSection = "";
+      const currentReferredByName = state.player?.referredByName;
+      if (currentReferredByName) {
+        referredSection = `
+          <div class="referred-by-card">
+            <span class="referred-by-icon">🔗</span>
+            <span>Referred by <strong>${currentReferredByName}</strong></span>
+          </div>`;
+      }
+
+      // Referral input (if not yet referred)
+      inputHtml = "";
+      if (!state.player?.referredBy) {
+        inputHtml = `
+          <div class="referral-input-card">
+            <div class="referral-input-title">Have a referral code?</div>
+            <div class="referral-input-row">
+              <input type="text" id="referral-code-input" class="referral-input" placeholder="Enter code..." maxlength="12" autocomplete="off" />
+              <button class="btn btn-primary referral-apply-btn" onclick="Referrals.applyFromInput()">Apply</button>
+            </div>
+          </div>`;
+      }
+
+      panel.innerHTML = `
+        <div class="referrals-placeholder">
+          <div class="referrals-placeholder-icon">🎁</div>
+          <h3>Referral Program</h3>
+          <p>Share your code. Earn +${REFERRAL_BONUS_EB} EB per referral + 1% of every land plot they buy!</p>
+        </div>
+        ${codeHtml}
+        ${referredSection}
+        ${inputHtml}
+        ${statsHtml}
+      `;
+    }
+
+    function copyCode(code) {
+      navigator.clipboard.writeText(code).then(() => {
+        toast("📋 Referral code copied!", 2500);
+      }).catch(() => {
+        toast("⚠️ Could not copy. Code: " + code, 4000);
+      });
+    }
+
+    function copyInviteUrl() {
+      const state = Store.get();
+      const myCode = state.player?.referralCode;
+      if (!myCode) return;
+      const url = getInviteUrl(myCode);
+      navigator.clipboard.writeText(url).then(() => {
+        toast("📋 Invite link copied!", 2500);
+      }).catch(() => {
+        toast("⚠️ Could not copy. Link: " + url, 4000);
+      });
+    }
+
+    function applyInviteFromUrl() {
+      // Check URL first, then sessionStorage for pending code
+      let ref = getInviteRefFromUrl();
+      if (!ref) {
+        ref = sessionStorage.getItem("pendingReferralCode");
+      }
+      if (!ref) return;
+      const state = Store.get();
+      if (state.player?.referredBy) return; // Already referred
+      // Store the invite code for when player signs up
+      sessionStorage.setItem("pendingReferralCode", ref);
+      // If already signed in, apply immediately
+      if (myId()) {
+        applyReferral(ref);
+      }
+    }
+
+    function applyFromInput() {
+      const input = document.getElementById("referral-code-input");
+      if (input && input.value.trim()) {
+        applyReferral(input.value.trim());
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Assign the fully initialized Referrals object
+    Referrals = {
+      applyReferral,
+      claimReferralBonuses,
+      renderReferralsTab,
+      copyCode,
+      copyInviteUrl,
+      applyInviteFromUrl,
+      applyFromInput,
+      generateCode,
+      REFERRAL_BONUS_EB
+    };
+  } catch (e) {
+    console.error("[Referrals] Initialization failed:", e);
+    // Fallback already set at top
+  }
+})();

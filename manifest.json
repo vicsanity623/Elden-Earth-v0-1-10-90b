@@ -1,0 +1,27 @@
+{
+  "name": "Elden Earth",
+  "short_name": "EldenEarth",
+  "start_url": "./game.html",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "description": "Walk the real world, claim tiles, earn passive rent, and become ruler of your territory in this geo-location idle game.",
+  "id": "eldenearth",
+  "categories": [
+    "entertainment",
+    "games"
+  ]
+}

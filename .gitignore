@@ -1,0 +1,65 @@
+# Android build outputs
+
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/app/release/
+android/app/debug/
+*.keystore
+google-services.json
+.env
+.changelog-last-posted
+post-changelog.sh
+post-changelogzen.sh
+/play-store
+/server/audit-new-players.js
+/server/ban-farm-accounts.js
+/server/purge-farm-accounts.js
+/server/seed-demo.js
+
+# Peer
+SCPR.md
+PLAN.md
+PEER.md
+FINANCIALPLAN.md
+CHANGELOG.md
+IMPLEMENTATIONADMOB.md
+PLAY-SUBMISSION.md
+PLAY-LISTING.md
+
+# Firebase
+.firebase/
+firestore.rules
+deploy-functions.sh
+storage.rules
+functions/
+*.service-account.json
+server/access-control.log
+server/access-control.js
+
+# IDE
+*.iml
+.gradle/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Android local project (do not publish)
+android/
+
+# Play upload keystore config (secrets — never commit)
+android/keystore.properties
+
+# Admin/ops tooling — contains economy tuning values and anti-bot
+# heuristics. NEVER publish these.
+server/
+
+# Internal docs — never publish.
+*.md
