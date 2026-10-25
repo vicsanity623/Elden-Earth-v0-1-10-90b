@@ -14,7 +14,8 @@
 // v71.06: capsule mirror (plant button learns cloud state) + truthful
 // stronghold status text.
 // v71.07: Turnstile human gate active on sign-in (bot sign-up defense).
-const CACHE_NAME = 'elden-EARTH-v71.07';
+// v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
+const CACHE_NAME = 'elden-EARTH-v71.08';
 
 const ASSETS_TO_CACHE = [
     './',

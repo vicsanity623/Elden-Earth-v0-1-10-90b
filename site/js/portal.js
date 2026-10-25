@@ -294,6 +294,13 @@
 
   // ---------- Boot ----------
   function boot() {
+    // App Check attestation (monitor mode) — shared module with the game.
+    if (!window.EEAppCheck) {
+      var ac = document.createElement("script");
+      ac.src = "/js/appcheck.js";
+      ac.defer = true;
+      document.head.appendChild(ac);
+    }
     var h = document.getElementById("site-header");
     if (h) h.outerHTML = headerHTML();
     var f = document.getElementById("site-footer");
