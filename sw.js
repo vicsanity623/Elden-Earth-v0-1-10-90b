@@ -13,7 +13,8 @@
 // v71.05: remove-friend confirmation dialog (accidental taps wiped friends).
 // v71.06: capsule mirror (plant button learns cloud state) + truthful
 // stronghold status text.
-const CACHE_NAME = 'elden-EARTH-v71.06';
+// v71.07: Turnstile human gate active on sign-in (bot sign-up defense).
+const CACHE_NAME = 'elden-EARTH-v71.07';
 
 const ASSETS_TO_CACHE = [
     './',
