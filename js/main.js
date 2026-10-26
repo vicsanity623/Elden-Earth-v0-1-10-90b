@@ -1369,22 +1369,33 @@
   }
 
   // Shared object visibility (normal view + Bird's Eye; outer IIFE scope).
+  //
+  // The player collection radius ring is GAMEPLAY information, not decoration.
+  // It used to be culled together with foliage/citadel parcels at
+  // MAP_CULL_MIN_ZOOM, which made it vanish the moment you zoomed out — so it
+  // gets its own (much lower) floor instead.
+  const PLAYER_RING_MIN_ZOOM = 12;
+
   function applyBirdsEyeLayerVisibility() {
     if (typeof map === "undefined" || !map) return;
     const off = (k) => document.body.classList.contains("be-off-" + k);
     const culled = document.body.classList.contains("map-culled-far") ||
       map.getZoom() < (CONFIG.MAP_CULL_MIN_ZOOM || 14);
+    const ringVisible = !off("player") && map.getZoom() >= PLAYER_RING_MIN_ZOOM;
     const setVis = (id, visible) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
     };
     setVis("plots-grass-base", !off("plots"));
     setVis("plots-fill", !off("plots"));
     setVis("plots-line", !off("plots"));
-    setVis("player-sonar-fill", !off("player") && !culled);
-    setVis("player-sonar-line", !off("player") && !culled);
+    setVis("player-sonar-fill", ringVisible);
+    setVis("player-sonar-line", ringVisible);
     setVis("foliage-layer", !off("foliage") && !culled);
     setVis("citadel-parcels-fill", !off("citadel") && !culled);
     setVis("citadel-parcels-line", !off("citadel") && !culled);
+    setVis("empty-grid-fill", !culled);
+    setVis("empty-grid-line", !culled);
+    setVis("3d-buildings", !culled);
   }
 
   function _finishGameLaunch() {
@@ -1545,29 +1556,12 @@
       const scale = Math.min(maxScale, Math.max(minScale, Math.pow(2, zoom - refZoom)));
       document.documentElement.style.setProperty("--eld-stop-scale", scale.toFixed(3));
 
-      // Layer visibility only when the culled flag actually flips
-      if (culled !== lastCulledState) {
-        lastCulledState = culled;
-        const beOff = (k) => document.body.classList.contains("be-off-" + k);
-        const setVis = (id, visible) => {
-          if (map.getLayer(id)) {
-            map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
-          }
-        };
-        // Keep ONLY landplot tiles when culled (unless Bird's Eye toggle hides them)
-        setVis("plots-grass-base", !beOff("plots"));
-        setVis("plots-fill", !beOff("plots"));
-        setVis("plots-line", !beOff("plots"));
-        setVis("player-sonar-fill", !culled && !beOff("player"));
-        setVis("player-sonar-line", !culled && !beOff("player"));
-        setVis("foliage-layer", !culled && !beOff("foliage"));
-        setVis("citadel-parcels-fill", !culled && !beOff("citadel"));
-        setVis("citadel-parcels-line", !culled && !beOff("citadel"));
-        setVis("empty-grid-fill", !culled);
-        setVis("empty-grid-line", !culled);
-        setVis("3d-buildings", !culled);
-        applyBirdsEyeLayerVisibility();
-      }
+      // All layer visibility is owned by applyBirdsEyeLayerVisibility() and is
+      // re-applied on EVERY pass. The old "only when the culled flag flips"
+      // optimisation is gone: it saved a handful of setLayoutProperty calls but
+      // was exactly how the player collection ring ended up stuck at
+      // visibility:none after a Bird's Eye pass or a style reload.
+      applyBirdsEyeLayerVisibility();
     }
 
     function refreshMapModulesAfterZoom() {
@@ -1674,17 +1668,26 @@
       }
 
       // 3. Mount 3D Animated Character
-      Character3D.init(map, currentPos.lon, currentPos.lat);
+      // Each subsystem below is isolated. They all share this function with
+      // the player sonar ring (3.5) and Grid/Diamonds (4) — one throw must
+      // never leave the map without its collection radius ring or with
+      // unlit roads.
+      try {
+        Character3D.init(map, currentPos.lon, currentPos.lat);
+      } catch (err) {
+        console.warn("[MapEngine] Character3D init failed (map setup continues):", err);
+      }
 
       // 3.1. Mount 3D Companion Pet System
-      if (typeof CompanionPet !== "undefined") {
-        CompanionPet.init(map, currentPos.lon, currentPos.lat);
+      try {
+        if (typeof CompanionPet !== "undefined") {
+          CompanionPet.init(map, currentPos.lon, currentPos.lat);
+        }
+      } catch (err) {
+        console.warn("[CompanionPet] init failed (map setup continues):", err);
       }
 
       // 3.1b. Mount Buddy System (wild spawns, Buddy Bag, battles).
-      // HARD ISOLATION: everything after this point (foliage, the player sonar
-      // ring, Grid/Diamonds init — i.e. the whole visible map) must never be
-      // skipped because a new feature threw. Fail soft, always.
       try {
         if (typeof BuddySystem !== "undefined") {
           BuddySystem.init(map, currentPos.lon, currentPos.lat);
@@ -1701,8 +1704,12 @@
       }
 
       // 3.2. Initialize 3D Standing Foliage Engine
-      if (typeof Foliage !== "undefined") {
-        Foliage.init(map);
+      try {
+        if (typeof Foliage !== "undefined") {
+          Foliage.init(map);
+        }
+      } catch (err) {
+        console.warn("[Foliage] init failed (map setup continues):", err);
       }
       
       // 3.5. Mount 3D Ground Sonar Layer (Locked to exact real-world meters)
