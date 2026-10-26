@@ -101,11 +101,12 @@ const BuddyCompanion = (() => {
     if (currentAnim === name && currentAction) return;
     currentAnim = name;
 
-    const lower = String(name || "idle").toLowerCase();
-    let clip = clips.find(c => c.name.toLowerCase() === lower)
-      || clips.find(c => c.name.toLowerCase().includes(lower))
-      || clips.find(c => c.name.toLowerCase().includes("idle"))
-      || clips[0];
+    // Semantic name -> whatever this model actually has (the voodoo doll only
+    // offers idle/running; the robot has 14 named clips).
+    const best = (typeof BuddyData !== "undefined" && BuddyData.resolveAnim)
+      ? BuddyData.resolveAnim(name, clips.map(c => c.name))
+      : null;
+    const clip = (best && clips.find(c => c.name === best)) || clips[0];
     if (!clip) return;
     try {
       const action = mixer.clipAction(clip);

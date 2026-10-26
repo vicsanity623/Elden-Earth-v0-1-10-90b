@@ -260,6 +260,59 @@ const BuddyData = (() => {
     [50, "Eldenborn"], [65, "Realmwalker"], [80, "Legend"], [100, "Elden Earth"],
   ];
 
+  /* --------------------------------------------------------- Animations */
+  // Clip names vary by model: RobotExpressive ships 14 named clips, while the
+  // voodoo doll exports from Mixamo with everything called "mixamo.com" (we
+  // rename them to "idle" / "running" at merge time). Callers ask for a
+  // semantic name ("walk", "punch") and this maps it onto whatever actually
+  // exists on the loaded model.
+  const ANIM_ALIAS = {
+    // locomotion
+    walk: "running", walking: "running", run: "running", running: "running",
+    move: "running", chase: "running",
+    // resting
+    idle: "idle", stand: "idle", standing: "idle", wait: "idle",
+    // actions — fall back to a sensible clip when the model has no dedicated
+    // one for it (the voodoo doll only has idle + running).
+    punch: "running", attack: "running", hit: "running", bite: "running",
+    wave: "idle", dance: "running", jump: "running", cheer: "running",
+    thumbsup: "idle", yes: "idle", no: "idle",
+    sitting: "idle", sit: "idle",
+    death: "idle", dead: "idle", faint: "idle", hurt: "idle",
+    walkjump: "running",
+  };
+
+  /**
+   * Pick the best available clip name for a requested animation.
+   * @param {string}   name       requested semantic name ("walk", "punch")
+   * @param {string[]} available  clip names actually on the loaded model
+   * @returns {string|null}
+   */
+  function resolveAnim(name, available) {
+    if (!available || !available.length) return null;
+    const want = String(name || "idle").toLowerCase();
+
+    let hit = available.find((n) => n.toLowerCase() === want);
+    if (hit) return hit;
+
+    // Substring next, so "walk" finds the robot's "walking" clip before the
+    // alias table routes it to "running".
+    hit = available.find((n) => n.toLowerCase().includes(want) || want.includes(n.toLowerCase()));
+    if (hit) return hit;
+
+    const aliased = ANIM_ALIAS[want];
+    if (aliased) {
+      hit = available.find((n) => n.toLowerCase() === aliased);
+      if (hit) return hit;
+      hit = available.find((n) => n.toLowerCase().includes(aliased));
+      if (hit) return hit;
+    }
+
+    hit = available.find((n) => n.toLowerCase().includes("idle"))
+      || available.find((n) => n.toLowerCase().includes("stand"));
+    return hit || available[0];
+  }
+
   /* ------------------------------------------------------------ Lookups */
   function getSpecies(id) { return SPECIES.find(s => s.id === id) || null; }
   function getMove(id) { return MOVES[id] || null; }
@@ -339,6 +392,8 @@ const BuddyData = (() => {
     PLAYER_LEVEL_TITLES,
     buddyXpToNext,
     playerXpToNext,
+    ANIM_ALIAS,
+    resolveAnim,
     getSpecies,
     getMove,
     getNature,

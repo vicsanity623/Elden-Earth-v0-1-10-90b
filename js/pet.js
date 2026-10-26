@@ -312,7 +312,7 @@ const CompanionPet = (() => {
       if (!inst) return fallback;
       const sp = (typeof BuddyData !== "undefined") ? BuddyData.getSpecies(inst.speciesId) : null;
       const path = sp && sp.model === "voodoo"
-        ? "models/Voodoo-Dool.glb"
+        ? "models/Voodoo-Dool-Animated.glb"   // rigged, has idle + running
         : "models/RobotExpressive.glb";
       return {
         path,
@@ -439,12 +439,19 @@ const CompanionPet = (() => {
     if (!petModel || !mixer) return;
 
     const lower = animName.toLowerCase();
-    
-    // 🛡️ Prevent restarting an animation that is already active!
-    if (currentAnimState === lower) return;
 
-    const key = Object.keys(animationsMap).find((k) => k.includes(lower));
-    if (!key || !animationsMap[key]) return;
+    // Semantic name -> whichever clip this model actually has. The voodoo doll
+    // only offers idle/running; RobotExpressive has 14 named clips.
+    const available = Object.keys(animationsMap);
+    const resolved = (typeof BuddyData !== "undefined" && BuddyData.resolveAnim)
+      ? BuddyData.resolveAnim(lower, available)
+      : available.find((k) => k.includes(lower));
+    if (!resolved || !animationsMap[resolved]) return;
+
+    // 🛡️ Prevent restarting an animation that is already active!
+    if (currentAnimState === resolved) return;
+
+    const key = resolved;
 
     const nextAction = animationsMap[key];
     if (currentAction === nextAction) return;

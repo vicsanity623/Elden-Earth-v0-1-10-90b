@@ -11,8 +11,15 @@ const BuddyPreview = (() => {
   "use strict";
 
   const MODEL_PATHS = {
-    voodoo: "models/Voodoo-Dool.glb",
+    // Merged by tools/merge-voodoo.js: rig + mesh + BOTH Mixamo clips renamed
+    // to "idle" / "running". The two original exports each carried a full
+    // duplicate of the 117k-vert mesh, so one merged file halves the download
+    // and is the only way to tell the clips apart at runtime (both were
+    // exported with the name "mixamo.com").
+    voodoo: "models/Voodoo-Dool-Animated.glb",
     robot:  "models/RobotExpressive.glb",
+    // Legacy static mesh — fallback if the merged file is missing.
+    voodooStatic: "models/Voodoo-Dool.glb",
   };
 
   // Raw GLB bytes are cached; each preview re-parses them so two previews can
@@ -38,7 +45,19 @@ const BuddyPreview = (() => {
         return r.arrayBuffer();
       })
       .then(buf => { rawCache[path] = buf; cb(null, buf); })
-      .catch(err => cb(err || new Error("model load failed")));
+      .catch(err => {
+        // Graceful fallback: if the merged animated voodoo model is missing,
+        // use the legacy static mesh rather than showing nothing at all.
+        const fallback = (modelKey === "voodoo") ? MODEL_PATHS.voodooStatic : null;
+        if (fallback && fallback !== path) {
+          fetch(fallback)
+            .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+            .then(buf => { rawCache[path] = buf; cb(null, buf); })
+            .catch(() => cb(err || new Error("model load failed")));
+          return;
+        }
+        cb(err || new Error("model load failed"));
+      });
   }
 
   /* ------------------------------------------------------- Hue tinting */
@@ -356,11 +375,12 @@ const BuddyPreview = (() => {
 
     function playAnim(name) {
       if (!mixer || !clips.length) return;
-      const lower = String(name || "idle").toLowerCase();
-      let clip = clips.find(c => c.name.toLowerCase() === lower)
-        || clips.find(c => c.name.toLowerCase().includes(lower))
-        || clips.find(c => c.name.toLowerCase().includes("idle"))
-        || clips[0];
+      // Semantic name ("walk", "punch") -> whatever the loaded model actually
+      // offers. The voodoo doll has idle/running; the robot has 14 clips.
+      const best = (typeof BuddyData !== "undefined" && BuddyData.resolveAnim)
+        ? BuddyData.resolveAnim(name, clips.map(c => c.name))
+        : null;
+      const clip = (best && clips.find(c => c.name === best)) || clips[0];
       if (!clip) return;
       try {
         const action = mixer.clipAction(clip);

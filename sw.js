@@ -17,9 +17,9 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v77.00: Pet adopts the active buddy's species, colour and cosmetics;
-// colorway names now match the rendered paint (Ivory looks ivory).
-const CACHE_NAME = 'elden-EARTH-v77.00';
+// v78.00: Voodoo doll is rigged + animated (idle/running merged into one GLB);
+// semantic animation names resolve across both model rigs.
+const CACHE_NAME = 'elden-EARTH-v78.00';
 
 const ASSETS_TO_CACHE = [
     './',
