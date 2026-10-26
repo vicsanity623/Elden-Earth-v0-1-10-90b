@@ -15,7 +15,9 @@
 // stronghold status text.
 // v71.07: Turnstile human gate active on sign-in (bot sign-up defense).
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
-const CACHE_NAME = 'elden-EARTH-v71.08';
+// v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
+// battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
+const CACHE_NAME = 'elden-EARTH-v72.00';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -52,6 +54,12 @@ const ASSETS_TO_CACHE = [
     './js/referrals.js',
     './js/server-anticheat.js',
     './js/pet.js',
+    './js/buddy-data.js',
+    './js/buddy-engine.js',
+    './js/buddy-preview.js',
+    './js/player-xp.js',
+    './js/buddy-battle.js',
+    './js/buddy.js',
     './js/profanity-filter.js',
     './js/format.js',
     './assets/trophy.png',

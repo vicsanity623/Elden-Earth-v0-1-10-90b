@@ -1,0 +1,1365 @@
+/* ==========================================================================
+   Elden Earth — Buddy System
+   The Pokemon-GO-style overworld layer for Gen-0 buddies:
+     - the Buddy Bag (collection, active buddy, stats, progressive cosmetics)
+     - wild buddy spawns driven by real walking distance
+     - strict anti-cheat on spawn accrual (no ceiling-fan / no drive-by farming)
+     - classic battle entry -> BuddyBattle
+     - Feast vs Tame outcome handling
+     - Trainer level (PlayerXP) integration
+
+   Everything self-mounts: styles, modals and the HUD button are injected from
+   here so no existing markup has to change.
+   ========================================================================== */
+const BuddySystem = (() => {
+  "use strict";
+
+  /* ------------------------------------------------------------ config */
+  const METERS_PER_SPAWN = 152.4;      // 500 feet
+  const MAX_DAILY_SPAWNS = 10;
+  const MAX_ACTIVE_SPAWNS = 3;
+  const SPAWN_TTL_MS = 8 * 60 * 1000;  // wild spawns despawn after 8 minutes
+  const SPAWN_RENDER_RADIUS_M = 1400;
+
+  // Anti-cheat: how "real" walking must look before it counts.
+  const MIN_STEP_M = 8;                // ignore GPS jitter below this
+  const MAX_STEP_M = 260;              // never credit a single hop above this
+  const MIN_SPEED_MPS = 0.35;          // slower = standing still / drifting
+  const MAX_SPEED_MPS = 12;            // faster = vehicle / teleport
+  const REVISIT_RADIUS_M = 25;         // new ground only — kills fan loops
+  const REVISIT_GRACE_MS = 45 * 1000;  // ignore points this recent when checking
+  const REVISIT_HISTORY = 60;
+  const CREDIT_WINDOW_MS = 60 * 1000;
+  const CREDIT_WINDOW_CAP_M = 250;     // hard cap on credited meters / minute
+  const MAX_ACCURACY_M = 60;
+
+  const STYLE_ID = "buddy-system-style";
+  const HUD_ID = "buddy-hud-btn";
+  const BAG_ID = "buddy-bag-modal";
+  const DETAIL_ID = "buddy-detail-modal";
+  const ENCOUNTER_ID = "buddy-encounter-modal";
+  const TRAINER_ID = "buddy-trainer-modal";
+  const CUSTOMIZE_ID = "buddy-customize-modal";
+
+  let mapInstance = null;
+  let markers = {};        // spawnId -> mapboxgl.Marker
+  let playerPos = null;    // { lat, lon }
+  let detailPreview = null;
+  let encounterPreview = null;
+  let customizePreview = null;
+
+  /* ============================================================= STATE */
+  function ensureState() {
+    const state = (typeof Store !== "undefined" && Store.get) ? Store.get() : null;
+    if (!state) return null;
+
+    if (!state.buddy || typeof state.buddy !== "object") {
+      state.buddy = {
+        bag: [],
+        activeUid: null,
+        spawns: [],
+        distCredit: 0,
+        spawnsToday: 0,
+        spawnDate: null,
+        lastPoint: null,
+        recentPoints: [],
+        creditWindowStart: 0,
+        creditWindowMeters: 0,
+        totalSpawns: 0,
+        totalBattles: 0,
+        totalWins: 0,
+        totalTamed: 0,
+        totalFeasted: 0,
+        starterChosen: false,
+      };
+    }
+
+    const b = state.buddy;
+    if (!Array.isArray(b.bag)) b.bag = [];
+    if (!Array.isArray(b.spawns)) b.spawns = [];
+    if (!Array.isArray(b.recentPoints)) b.recentPoints = [];
+    if (typeof b.distCredit !== "number") b.distCredit = 0;
+    if (typeof b.spawnsToday !== "number") b.spawnsToday = 0;
+    if (typeof b.totalSpawns !== "number") b.totalSpawns = 0;
+    if (typeof b.totalBattles !== "number") b.totalBattles = 0;
+    if (typeof b.totalWins !== "number") b.totalWins = 0;
+    if (typeof b.totalTamed !== "number") b.totalTamed = 0;
+    if (typeof b.totalFeasted !== "number") b.totalFeasted = 0;
+
+    // UTC day rollover for the daily spawn cap.
+    const today = new Date().toISOString().slice(0, 10);
+    if (b.spawnDate !== today) {
+      b.spawnDate = today;
+      b.spawnsToday = 0;
+      b.creditWindowStart = 0;
+      b.creditWindowMeters = 0;
+    }
+
+    // Drop expired spawns on load.
+    const now = Date.now();
+    const before = b.spawns.length;
+    b.spawns = b.spawns.filter(s => s && s.expiresAt > now);
+    if (b.spawns.length !== before) {
+      // markers are rebuilt on init anyway
+    }
+
+    return b;
+  }
+
+  function buddyState() {
+    return ensureState() || {
+      bag: [], activeUid: null, spawns: [], distCredit: 0, spawnsToday: 0,
+      spawnDate: null, lastPoint: null, recentPoints: [],
+      creditWindowStart: 0, creditWindowMeters: 0,
+      totalSpawns: 0, totalBattles: 0, totalWins: 0, totalTamed: 0, totalFeasted: 0,
+      starterChosen: false,
+    };
+  }
+
+  let saveTimer = null;
+  function persist() {
+    if (typeof Store === "undefined" || !Store.save) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try { Store.save(false); } catch (e) {}
+    }, 350);
+  }
+
+  /* ============================================================= GEO */
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6378137;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  /* ============================================== ANTI-CHEAT DISTANCE */
+  /**
+   * Feed every GPS fix in here. Returns { credited, reason } where `credited`
+   * is the meters added toward the next wild spawn.
+   *
+   * Defences against phone-on-a-ceiling-fan / treadmill / fake-GPS farms:
+   *   1. accuracy gate — mushy fixes never credit distance
+   *   2. minimum step  — sub-8m wobble is drift, not walking
+   *   3. speed window  — 0.35..12 m/s is human ground travel
+   *   4. NEW GROUND    — a fix only counts if it is 25m clear of the last 25
+   *                      credited points, so any loop (fan, treadmill, car
+   *                      circling a block) stops crediting almost immediately
+   *   5. per-minute cap — no burst can outrun 250 m/min of credit
+   */
+  function trackPosition(lat, lon, accuracy, timestamp) {
+    const b = buddyState();
+    const now = timestamp || Date.now();
+    const out = { credited: 0, reason: "ok" };
+
+    if (typeof accuracy === "number" && accuracy > MAX_ACCURACY_M) {
+      out.reason = "low_accuracy";
+      return out;
+    }
+
+    if (!b.lastPoint) {
+      b.lastPoint = { lat, lon, t: now };
+      persist();
+      return out;
+    }
+
+    const last = b.lastPoint;
+    const dist = haversine(last.lat, last.lon, lat, lon);
+    const dt = Math.max(0.5, (now - last.t) / 1000);
+
+    if (dist < MIN_STEP_M) {
+      out.reason = "jitter";
+      return out;
+    }
+    if (dist > MAX_STEP_M) {
+      // A huge jump is a teleport or a bad fix — resync the anchor, no credit.
+      b.lastPoint = { lat, lon, t: now };
+      out.reason = "teleport";
+      persist();
+      return out;
+    }
+
+    const speed = dist / dt;
+    if (speed < MIN_SPEED_MPS) {
+      out.reason = "too_slow";
+      return out;
+    }
+    if (speed > MAX_SPEED_MPS) {
+      b.lastPoint = { lat, lon, t: now };
+      out.reason = "too_fast";
+      persist();
+      return out;
+    }
+
+    // NEW GROUND check — the ceiling-fan killer.
+    //
+    // A fix only counts if it is REVISIT_RADIUS_M clear of every credited
+    // point older than REVISIT_GRACE_MS. The grace window matters: while
+    // walking straight you are always close to where you were a few seconds
+    // ago, so only older history may condemn a point. A ceiling fan, a
+    // treadmill or a car circling the block never leaves its own footprint,
+    // so points from 45s+ ago are still right next to the current fix and
+    // the credit stops dead after the first lap.
+    const graceCutoff = now - REVISIT_GRACE_MS;
+    for (let i = b.recentPoints.length - 1; i >= 0; i--) {
+      const p = b.recentPoints[i];
+      if (p.t > graceCutoff) continue;
+      if (haversine(p.lat, p.lon, lat, lon) < REVISIT_RADIUS_M) {
+        b.lastPoint = { lat, lon, t: now };
+        out.reason = "revisit";
+        persist();
+        return out;
+      }
+    }
+
+    // Per-minute credit cap.
+    if (now - b.creditWindowStart > CREDIT_WINDOW_MS) {
+      b.creditWindowStart = now;
+      b.creditWindowMeters = 0;
+    }
+    const remaining = CREDIT_WINDOW_CAP_M - b.creditWindowMeters;
+    if (remaining <= 0) {
+      b.lastPoint = { lat, lon, t: now };
+      out.reason = "window_cap";
+      persist();
+      return out;
+    }
+
+    const credited = Math.min(dist, remaining);
+    b.creditWindowMeters += credited;
+    b.distCredit += credited;
+    out.credited = credited;
+
+    // Record this as settled ground.
+    b.recentPoints.push({ lat, lon, t: now });
+    if (b.recentPoints.length > REVISIT_HISTORY) {
+      b.recentPoints.splice(0, b.recentPoints.length - REVISIT_HISTORY);
+    }
+    b.lastPoint = { lat, lon, t: now };
+
+    persist();
+
+    // Enough ground covered and the daily cap not hit -> request a spawn.
+    if (b.distCredit >= METERS_PER_SPAWN && b.spawnsToday < MAX_DAILY_SPAWNS) {
+      b.distCredit -= METERS_PER_SPAWN;
+      persist();
+      setTimeout(() => requestWildSpawn(), 60);
+    }
+
+    return out;
+  }
+
+  /* ======================================================= WILD SPAWNS */
+  function localRollSpawn() {
+    const b = buddyState();
+    const topLevel = b.bag.reduce((m, x) => Math.max(m, x.level || 1), 1);
+    const speciesId = BuddyData.rollSpecies();
+    const sp = BuddyData.getSpecies(speciesId);
+    const rarity = sp ? sp.rarity : "common";
+    const level = BuddyEngine.rollWildLevel(topLevel, rarity);
+    const inst = BuddyEngine.makeInstance(speciesId, level, { source: "wild" });
+    return {
+      id: BuddyEngine.newId("spawn"),
+      speciesId,
+      level: inst.level,
+      ivs: inst.ivs,
+      natureId: inst.natureId,
+      hue: inst.hue,
+      colorway: inst.colorway,
+      rarity,
+      source: "local",
+    };
+  }
+
+  async function requestWildSpawn() {
+    const b = buddyState();
+    if (b.spawns.length >= MAX_ACTIVE_SPAWNS) return;
+    if (b.spawnsToday >= MAX_DAILY_SPAWNS) return;
+    if (!playerPos) return;
+
+    let spawn = null;
+
+    // Prefer the server roll (authoritative stats + daily cap enforcement).
+    try {
+      if (typeof firebase !== "undefined" && firebase.functions) {
+        const fn = firebase.functions().httpsCallable("buddyClaimSpawn");
+        const res = await fn({
+          lat: playerPos.lat,
+          lon: playerPos.lon,
+          clientTs: Date.now(),
+        });
+        if (res.data && res.data.ok && res.data.spawn) {
+          spawn = res.data.spawn;
+          spawn.source = "server";
+          if (typeof res.data.spawnsToday === "number") b.spawnsToday = res.data.spawnsToday;
+        } else if (res.data && res.data.reason === "daily_cap") {
+          b.spawnsToday = MAX_DAILY_SPAWNS;
+          persist();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("[Buddy] server spawn claim failed, using local roll:", e.message);
+    }
+
+    if (!spawn) spawn = localRollSpawn();
+
+    // Place the spawn a short walk from the player so it is discoverable but
+    // never directly on top of them.
+    const angle = Math.random() * Math.PI * 2;
+    const offsetM = 22 + Math.random() * 48;
+    const dLat = (offsetM * Math.cos(angle)) / 111320;
+    const dLon = (offsetM * Math.sin(angle)) / (111320 * Math.cos(playerPos.lat * Math.PI / 180));
+
+    const record = {
+      id: spawn.id,
+      speciesId: spawn.speciesId,
+      level: spawn.level,
+      ivs: spawn.ivs,
+      natureId: spawn.natureId,
+      hue: spawn.hue,
+      colorway: spawn.colorway,
+      rarity: spawn.rarity || (BuddyData.getSpecies(spawn.speciesId) || {}).rarity,
+      lat: playerPos.lat + dLat,
+      lon: playerPos.lon + dLon,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + SPAWN_TTL_MS,
+      source: spawn.source || "local",
+    };
+
+    b.spawns.push(record);
+    b.spawnsToday += 1;
+    b.totalSpawns += 1;
+    persist();
+
+    addSpawnMarker(record);
+    toast(`✨ A wild ${BuddyData.getSpecies(record.speciesId)?.name || "buddy"} appeared nearby!`);
+
+    if (typeof PlayerXP !== "undefined") {
+      PlayerXP.addXP(PlayerXP.XP.spawnSeen, "wild_spawn");
+    }
+    renderHudBadge();
+  }
+
+  /* ============================================================ MARKERS */
+  function markerElement(spawn) {
+    const sp = BuddyData.getSpecies(spawn.speciesId) || {};
+    const type = BuddyData.getType((sp.types && sp.types[0]) || "metal") || { color: "#94a3b8", icon: "🐾" };
+    const hueDeg = Math.round((((spawn.hue % 1) + 1) % 1) * 360);
+    const rar = BuddyData.getRarity(spawn.rarity || (sp.rarity || "common"));
+
+    const el = document.createElement("div");
+    el.className = "buddy-spawn-marker";
+    el.innerHTML = `
+      <div class="bsm-glow" style="filter:hue-rotate(${hueDeg}deg)"></div>
+      <div class="bsm-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 46%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)"></div>
+      <div class="bsm-ring" style="border-color:${rar.color}"></div>
+      <div class="bsm-icon" style="filter:hue-rotate(${hueDeg}deg)">${type.icon}</div>
+      <div class="bsm-label" style="border-color:${rar.color}40">
+        ${sp.name || "?"} · Lv.${spawn.level}
+      </div>
+    `;
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEncounter(spawn.id);
+    });
+    return el;
+  }
+
+  function addSpawnMarker(spawn) {
+    if (!mapInstance || typeof mapboxgl === "undefined") return;
+    if (markers[spawn.id]) return;
+    try {
+      const marker = new mapboxgl.Marker({
+        element: markerElement(spawn),
+        anchor: "center",
+        pitchAlignment: "map",
+        rotationAlignment: "map",
+      }).setLngLat([spawn.lon, spawn.lat]).addTo(mapInstance);
+      markers[spawn.id] = marker;
+    } catch (e) {
+      console.warn("[Buddy] marker add failed:", e.message);
+    }
+  }
+
+  function removeSpawnMarker(spawnId) {
+    const m = markers[spawnId];
+    if (m) {
+      try { m.remove(); } catch (e) {}
+      delete markers[spawnId];
+    }
+  }
+
+  function rebuildMarkers() {
+    const b = buddyState();
+    const now = Date.now();
+    // Clear stale.
+    Object.keys(markers).forEach(id => {
+      if (!b.spawns.find(s => s.id === id)) removeSpawnMarker(id);
+    });
+    b.spawns.forEach(s => {
+      if (s.expiresAt > now) addSpawnMarker(s);
+      else removeSpawnMarker(s.id);
+    });
+  }
+
+  function cullMarkersByDistance() {
+    if (!playerPos) return;
+    const b = buddyState();
+    b.spawns.forEach(s => {
+      const d = haversine(playerPos.lat, playerPos.lon, s.lat, s.lon);
+      const m = markers[s.id];
+      if (d > SPAWN_RENDER_RADIUS_M) {
+        if (m) removeSpawnMarker(s.id);
+      } else if (!m && s.expiresAt > Date.now()) {
+        addSpawnMarker(s);
+      }
+    });
+  }
+
+  /* ============================================================== CSS */
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    const css = `
+/* ---- floating HUD button ---- */
+#${HUD_ID}{
+  position:fixed; left:10px; bottom:calc(10px + env(safe-area-inset-bottom,0px));
+  z-index:1540; width:56px; height:56px; border-radius:17px;
+  background:linear-gradient(150deg,#3b2d7a,#6d28d9 55%,#0ea5e9);
+  border:1px solid rgba(190,210,255,.35); color:#fff; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  box-shadow:0 10px 26px rgba(0,0,0,.42); font-family:inherit;
+  transition:transform .14s ease;
+}
+#${HUD_ID}:active{transform:scale(.94);}
+#${HUD_ID} .bh-icon{font-size:21px; line-height:1;}
+#${HUD_ID} .bh-count{
+  font-size:9px; font-weight:800; letter-spacing:.4px; opacity:.92; margin-top:1px;
+}
+#${HUD_ID} .bh-badge{
+  position:absolute; top:-5px; right:-5px; min-width:19px; height:19px; padding:0 5px;
+  border-radius:99px; background:#f43f5e; color:#fff; font-size:10px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; border:2px solid #0b1020;
+}
+#${HUD_ID}.bh-alert{animation:bhPulse 1.5s ease-in-out infinite;}
+@keyframes bhPulse{
+  0%,100%{box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 0 rgba(244,63,94,.55);}
+  50%{box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 12px rgba(244,63,94,0);}
+}
+
+/* ---- map spawn markers ---- */
+.buddy-spawn-marker{
+  position:relative; width:58px; height:58px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.buddy-spawn-marker .bsm-orb{
+  width:40px; height:40px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.75);
+  box-shadow:0 6px 18px rgba(0,0,0,.5), inset 0 -6px 12px rgba(0,0,0,.35);
+  animation:bsmFloat 2.6s ease-in-out infinite;
+}
+.buddy-spawn-marker .bsm-glow{
+  position:absolute; width:74px; height:74px; border-radius:50%;
+  background:radial-gradient(circle, rgba(160,120,255,.55), transparent 66%);
+  animation:bsmGlow 2.6s ease-in-out infinite; pointer-events:none;
+}
+.buddy-spawn-marker .bsm-ring{
+  position:absolute; width:52px; height:52px; border-radius:50%;
+  border:2px dashed rgba(255,255,255,.55); animation:bsmSpin 9s linear infinite;
+}
+.buddy-spawn-marker .bsm-icon{
+  position:absolute; font-size:15px; pointer-events:none;
+  animation:bsmFloat 2.6s ease-in-out infinite;
+}
+.buddy-spawn-marker .bsm-label{
+  position:absolute; top:46px; white-space:nowrap;
+  font-size:9.5px; font-weight:800; letter-spacing:.3px; color:#eaf1ff;
+  background:rgba(10,14,26,.9); border:1px solid rgba(160,190,255,.3);
+  padding:2px 7px; border-radius:99px;
+}
+@keyframes bsmFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-6px);}}
+@keyframes bsmGlow{0%,100%{opacity:.45; transform:scale(1);} 50%{opacity:.85; transform:scale(1.12);}}
+@keyframes bsmSpin{to{transform:rotate(360deg);}}
+
+/* ---- shared modal bits (namespaced so we never collide) ---- */
+.bd-modal .bd-card{
+  width:100%; max-width:430px; max-height:88vh; overflow-y:auto;
+  padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));
+  border-radius:18px; position:relative;
+  background:linear-gradient(165deg,rgba(28,36,64,.98),rgba(16,20,36,.99));
+  border:1px solid rgba(150,180,240,.26);
+  box-shadow:0 24px 70px rgba(0,0,0,.6);
+  animation:bdPop .28s cubic-bezier(.22,1,.36,1);
+}
+@keyframes bdPop{from{opacity:0; transform:translateY(16px) scale(.97);} to{opacity:1; transform:none;}}
+.bd-modal h2{
+  margin:0 0 4px; font-size:20px; font-weight:900; letter-spacing:.2px; color:#fff;
+}
+.bd-modal .bd-sub{margin:0 0 14px; font-size:12px; color:#a9bede; line-height:1.55;}
+.bd-close{
+  position:absolute; top:11px; right:11px; width:32px; height:32px; border-radius:10px;
+  background:rgba(255,255,255,.08); border:1px solid rgba(150,180,240,.2);
+  color:#dbe6fb; font-size:15px; cursor:pointer; font-family:inherit;
+}
+.bd-close:active{transform:scale(.94);}
+
+.bd-preview{
+  width:100%; height:190px; border-radius:16px; overflow:hidden;
+  background:radial-gradient(circle at 50% 30%, rgba(120,90,220,.18), rgba(10,14,26,.55));
+  border:1px solid rgba(150,180,240,.18); margin-bottom:12px;
+}
+.bd-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0;}
+.bd-stat{
+  padding:10px 11px; border-radius:12px; background:rgba(255,255,255,.055);
+  border:1px solid rgba(150,180,240,.14);
+}
+.bd-stat .k{font-size:9.5px; letter-spacing:1.1px; text-transform:uppercase; color:#7f97ba;}
+.bd-stat .v{font-size:17px; font-weight:800; margin-top:2px; color:#fff; font-variant-numeric:tabular-nums;}
+.bd-row{display:flex; gap:8px; margin:8px 0;}
+.bd-btn{
+  flex:1 1 auto; padding:12px 10px; border-radius:12px; cursor:pointer;
+  font-family:inherit; font-size:12.5px; font-weight:800; letter-spacing:.3px;
+  border:1px solid rgba(150,180,240,.22); background:rgba(32,42,70,.9); color:#eaf1ff;
+  transition:transform .12s ease;
+}
+.bd-btn:active{transform:scale(.97);}
+.bd-btn.primary{background:linear-gradient(135deg,#2b6cf0,#7c3aed); border-color:transparent;}
+.bd-btn.gold{background:linear-gradient(135deg,#b45309,#d97706); border-color:transparent;}
+.bd-btn.danger{background:rgba(190,50,60,.28); border-color:rgba(248,113,113,.35);}
+.bd-btn:disabled{opacity:.45; cursor:not-allowed;}
+
+.bd-progress{
+  height:9px; border-radius:99px; background:rgba(255,255,255,.12); overflow:hidden;
+}
+.bd-progress > i{
+  display:block; height:100%; border-radius:99px;
+  background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc);
+  transition:width .4s ease;
+}
+
+.bd-chip{
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:10.5px; padding:4px 9px; border-radius:99px; font-weight:700;
+  color:#0b1020; letter-spacing:.3px;
+}
+.bd-tag{
+  display:inline-block; font-size:10px; padding:3px 9px; border-radius:99px;
+  background:rgba(255,255,255,.1); color:#dbe6fb; border:1px solid rgba(150,180,240,.2);
+  margin:0 5px 5px 0; letter-spacing:.4px;
+}
+
+/* ---- buddy bag list ---- */
+.bd-bag-list{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(94px,1fr));
+  gap:9px; margin:10px 0 4px;
+}
+.bd-bag-cell{
+  position:relative; padding:9px 7px; border-radius:14px; cursor:pointer;
+  background:rgba(255,255,255,.055); border:1px solid rgba(150,180,240,.16);
+  text-align:center; transition:transform .12s ease, border-color .18s ease;
+}
+.bd-bag-cell:active{transform:scale(.96);}
+.bd-bag-cell.active{
+  border-color:rgba(139,92,246,.85);
+  box-shadow:0 0 0 1px rgba(139,92,246,.4), 0 8px 22px rgba(109,40,217,.28);
+}
+.bd-bag-cell .bd-orb{
+  width:46px; height:46px; border-radius:50%; margin:0 auto 6px;
+  border:2px solid rgba(255,255,255,.55);
+}
+.bd-bag-cell .bd-nm{
+  font-size:10.5px; font-weight:800; color:#eaf1ff;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.bd-bag-cell .bd-lv{font-size:9px; color:#9db8dd; margin-top:1px;}
+.bd-bag-cell .bd-act{
+  position:absolute; top:5px; right:5px; font-size:9px; padding:1px 6px;
+  border-radius:99px; background:#7c3aed; color:#fff; font-weight:800;
+}
+
+/* ---- encounter modal ---- */
+.bd-vs{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  margin:12px 0; font-size:12px; color:#9db8dd;
+}
+.bd-vs .line{flex:1 1 auto; height:1px; background:rgba(150,180,240,.22);}
+.bd-vs .vs{
+  font-size:15px; font-weight:900; letter-spacing:2px; color:#c4b5fd;
+}
+
+/* ---- customization ---- */
+.bd-cos-list{display:flex; flex-direction:column; gap:7px; margin:10px 0;}
+.bd-cos-item{
+  display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:12px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(150,180,240,.14);
+}
+.bd-cos-item.locked{opacity:.42;}
+.bd-cos-item .ci-icon{
+  width:34px; height:34px; border-radius:10px; flex:0 0 auto;
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+  background:rgba(139,92,246,.2);
+}
+.bd-cos-item .ci-body{flex:1 1 auto; min-width:0;}
+.bd-cos-item .ci-name{font-size:12px; font-weight:800; color:#eaf1ff;}
+.bd-cos-item .ci-desc{font-size:10px; color:#9db8dd; margin-top:2px; line-height:1.45;}
+.bd-cos-item .ci-btn{
+  flex:0 0 auto; padding:7px 11px; border-radius:9px; cursor:pointer;
+  font-family:inherit; font-size:10.5px; font-weight:800;
+  border:1px solid rgba(150,180,240,.22); background:rgba(32,42,70,.9); color:#eaf1ff;
+}
+.bd-cos-item .ci-btn.on{background:linear-gradient(135deg,#2b6cf0,#7c3aed); border-color:transparent;}
+
+/* ---- toast ---- */
+.bd-toast{
+  position:fixed; left:50%; top:16%; transform:translateX(-50%);
+  z-index:4200; padding:11px 18px; border-radius:13px;
+  background:rgba(18,24,42,.95); border:1px solid rgba(150,180,240,.3);
+  color:#eaf1ff; font-size:12.5px; font-weight:700; letter-spacing:.2px;
+  box-shadow:0 16px 44px rgba(0,0,0,.5); pointer-events:none;
+  animation:bdToast 2.8s ease forwards;
+}
+@keyframes bdToast{
+  0%{opacity:0; transform:translate(-50%,-10px);}
+  12%{opacity:1; transform:translate(-50%,0);}
+  80%{opacity:1;}
+  100%{opacity:0; transform:translate(-50%,-8px);}
+}
+.bd-empty{
+  padding:26px 14px; text-align:center; color:#8aa0bd; font-size:12.5px; line-height:1.7;
+}
+`;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  function toast(message) {
+    try {
+      const t = document.createElement("div");
+      t.className = "bd-toast";
+      t.textContent = message;
+      document.body.appendChild(t);
+      setTimeout(() => { try { t.remove(); } catch (e) {} }, 3000);
+    } catch (e) {}
+  }
+
+  /* ========================================================== MODALS */
+  function openModal(id) {
+    if (typeof window !== "undefined" && typeof window.openModal === "function") {
+      window.openModal(id);
+    } else {
+      const m = document.getElementById(id);
+      if (m) m.classList.remove("hidden");
+    }
+  }
+
+  function closeModal(id) {
+    if (typeof window !== "undefined" && typeof window.closeModal === "function") {
+      window.closeModal(id);
+    } else {
+      const m = document.getElementById(id);
+      if (m) m.classList.add("hidden");
+    }
+  }
+
+  function buildModal(id, inner) {
+    let m = document.getElementById(id);
+    if (m) return m;
+    m = document.createElement("div");
+    m.id = id;
+    m.className = "modal hidden bd-modal";
+    m.innerHTML = `<div class="bd-card">${inner}</div>`;
+    // Backdrop dismiss.
+    m.addEventListener("click", (e) => {
+      if (e.target === m) closeModal(id);
+    });
+    document.body.appendChild(m);
+    return m;
+  }
+
+  function wireClose(id) {
+    const btn = document.querySelector(`#${id} .bd-close`);
+    if (btn) btn.addEventListener("click", () => closeModal(id));
+  }
+
+  /* ------------------------------------------------------ starter pick */
+  function maybeForceStarter() {
+    const b = buddyState();
+    if (b.starterChosen && b.bag.length > 0) return true;
+    openStarterPicker();
+    return false;
+  }
+
+  function openStarterPicker() {
+    injectStyle();
+    const starters = ["emberling", "aqualit", "voltkit", "terrapod", "wispurr"];
+    buildModal("buddy-starter-modal", `
+      <h2>Choose your Starter Buddy</h2>
+      <p class="bd-sub">
+        Every journey across Elden Earth begins with a companion. Pick one of
+        the Gen-0 starters — you can find all 28 species out in the wild.
+      </p>
+      <div class="bd-bag-list" id="bd-starter-list"></div>
+      <div class="bd-empty">You can change your active buddy any time from the Buddy Bag.</div>
+    `);
+
+    const list = document.getElementById("bd-starter-list");
+    starters.forEach(id => {
+      const sp = BuddyData.getSpecies(id);
+      if (!sp) return;
+      const type = BuddyData.getType(sp.types[0]) || { color: "#94a3b8", icon: "🐾" };
+      const cell = document.createElement("div");
+      cell.className = "bd-bag-cell";
+      cell.innerHTML = `
+        <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92))"></div>
+        <div class="bd-nm">${sp.name}</div>
+        <div class="bd-lv">${type.icon} ${sp.types.map(t => (BuddyData.getType(t) || {}).name).join(" / ")}</div>
+      `;
+      cell.addEventListener("click", () => claimStarter(id));
+      list.appendChild(cell);
+    });
+
+    openModal("buddy-starter-modal");
+  }
+
+  function claimStarter(speciesId) {
+    const b = buddyState();
+    const inst = BuddyEngine.makeInstance(speciesId, 5, { source: "starter" });
+    b.bag.push(inst);
+    b.activeUid = inst.uid;
+    b.starterChosen = true;
+    persist();
+
+    closeModal("buddy-starter-modal");
+    const m = document.getElementById("buddy-starter-modal");
+    if (m) m.remove();
+
+    toast(`🎉 ${inst.nickname} joined you!`);
+    if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.tame, "starter");
+    renderHudBadge();
+  }
+
+  /* --------------------------------------------------------- Buddy Bag */
+  function openBag() {
+    injectStyle();
+    const b = buddyState();
+    buildModal(BAG_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🎒 Buddy Bag</h2>
+      <p class="bd-sub">
+        ${b.bag.length} / 30 buddies collected &middot; ${b.totalTamed} tamed &middot;
+        ${b.totalFeasts} feasted &middot; ${b.totalSpawns} wild spawns seen
+      </p>
+      <div class="bd-bag-list" id="bd-bag-list"></div>
+      <div class="bd-row">
+        <button class="bd-btn" id="bd-bag-trainer">🏆 Trainer</button>
+        <button class="bd-btn" id="bd-bag-customize">✨ Customize</button>
+      </div>
+      <div class="bd-empty" id="bd-bag-empty" style="display:${b.bag.length ? "none" : "block"}">
+        No buddies yet. Walk around the map to find wild buddies, then battle
+        and tame them.
+      </div>
+    `);
+    wireClose(BAG_ID);
+
+    const list = document.getElementById("bd-bag-list");
+    b.bag.forEach(inst => {
+      const sp = BuddyData.getSpecies(inst.speciesId) || {};
+      const type = BuddyData.getType((sp.types && sp.types[0]) || "metal") || { color: "#94a3b8" };
+      const hueDeg = Math.round((((inst.hue % 1) + 1) % 1) * 360);
+      const cell = document.createElement("div");
+      cell.className = "bd-bag-cell" + (inst.uid === b.activeUid ? " active" : "");
+      cell.innerHTML = `
+        ${inst.uid === b.activeUid ? '<div class="bd-act">ACTIVE</div>' : ""}
+        <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)"></div>
+        <div class="bd-nm">${inst.nickname}</div>
+        <div class="bd-lv">Lv.${inst.level} · ${inst.colorway}</div>
+      `;
+      cell.addEventListener("click", () => openDetail(inst.uid));
+      list.appendChild(cell);
+    });
+
+    document.getElementById("bd-bag-trainer").addEventListener("click", () => {
+      closeModal(BAG_ID);
+      openTrainerModal();
+    });
+    document.getElementById("bd-bag-customize").addEventListener("click", () => {
+      const active = activeBuddy();
+      if (!active) { toast("Choose a buddy first"); return; }
+      closeModal(BAG_ID);
+      openCustomizeModal(active.uid);
+    });
+
+    openModal(BAG_ID);
+  }
+
+  /* ------------------------------------------------------- Buddy detail */
+  function openDetail(uid) {
+    const b = buddyState();
+    const inst = b.bag.find(x => x.uid === uid);
+    if (!inst) return;
+
+    injectStyle();
+    const sp = BuddyData.getSpecies(inst.speciesId) || {};
+    const nature = BuddyData.getNature(inst.natureId);
+    const pct = BuddyEngine.ivPercent(inst.ivs);
+    const grade = BuddyEngine.ivGrade(pct);
+    const xp = BuddyEngine.xpProgress(inst);
+
+    buildModal(DETAIL_ID, `
+      <button class="bd-close">✕</button>
+      <h2>${inst.nickname}</h2>
+      <p class="bd-sub">
+        ${sp.name || inst.speciesId} &middot; ${(sp.types || []).map(t => (BuddyData.getType(t) || {}).icon + " " + (BuddyData.getType(t) || {}).name).join(" / ")}
+      </p>
+
+      <div class="bd-preview" id="bd-detail-preview"></div>
+
+      <div style="margin:2px 0 10px">
+        <span class="bd-tag">${inst.colorway} hue</span>
+        <span class="bd-tag">${nature.name} nature</span>
+        <span class="bd-tag">${(sp.rarity || "common")} rarity</span>
+        <span class="bd-tag">Grade ${grade.letter} · ${pct}% IV</span>
+      </div>
+
+      <div class="bd-grid">
+        <div class="bd-stat"><div class="k">Level</div><div class="v">${inst.level}</div></div>
+        <div class="bd-stat"><div class="k">Battles Won</div><div class="v">${inst.battlesWon || 0}</div></div>
+        <div class="bd-stat"><div class="k">HP</div><div class="v">${inst.stats.hp}</div></div>
+        <div class="bd-stat"><div class="k">Attack</div><div class="v">${inst.stats.atk}</div></div>
+        <div class="bd-stat"><div class="k">Defense</div><div class="v">${inst.stats.def}</div></div>
+        <div class="bd-stat"><div class="k">Speed</div><div class="v">${inst.stats.spd}</div></div>
+      </div>
+
+      <div style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#7f97ba; margin:6px 0 5px">
+        Experience ${xp.maxed ? "· MAX" : `· ${xp.current} / ${xp.need}`}
+      </div>
+      <div class="bd-progress"><i style="width:${xp.maxed ? 100 : xp.pct}%"></i></div>
+
+      <div style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#7f97ba; margin:14px 0 5px">
+        Individual Values
+      </div>
+      ${ivBar("HP", inst.ivs.hp)}
+      ${ivBar("ATK", inst.ivs.atk)}
+      ${ivBar("DEF", inst.ivs.def)}
+      ${ivBar("SPD", inst.ivs.spd)}
+
+      <div style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#7f97ba; margin:14px 0 5px">
+        Moves
+      </div>
+      <div>
+        ${inst.moves.map(id => {
+          const mv = BuddyData.getMove(id);
+          const t = mv ? BuddyData.getType(mv.type) : null;
+          return `<span class="bd-chip" style="background:${t ? t.color : "#94a3b8"}">${mv ? mv.name : id}</span>`;
+        }).join(" ")}
+      </div>
+
+      <div class="bd-row" style="margin-top:16px">
+        <button class="bd-btn primary" id="bd-detail-active">
+          ${inst.uid === b.activeUid ? "✓ Currently Active" : "Set as Active"}
+        </button>
+        <button class="bd-btn" id="bd-detail-rename">Rename</button>
+      </div>
+      <div class="bd-row">
+        <button class="bd-btn" id="bd-detail-cos">✨ Customize</button>
+      </div>
+    `);
+    wireClose(DETAIL_ID);
+
+    try {
+      const box = document.getElementById("bd-detail-preview");
+      if (box) {
+        if (detailPreview) { try { detailPreview.dispose(); } catch (e) {} }
+        detailPreview = BuddyPreview.create(box, inst, { animate: true, anim: "idle" });
+      }
+    } catch (e) {}
+
+    document.getElementById("bd-detail-active").addEventListener("click", () => {
+      b.activeUid = inst.uid;
+      persist();
+      toast(`${inst.nickname} is now your active buddy`);
+      openDetail(uid);
+    });
+
+    document.getElementById("bd-detail-rename").addEventListener("click", () => {
+      const name = window.prompt("New nickname (max 16 characters):", inst.nickname);
+      if (name == null) return;
+      const clean = String(name).trim().slice(0, 16);
+      if (!clean) return;
+      inst.nickname = clean;
+      persist();
+      openDetail(uid);
+    });
+
+    document.getElementById("bd-detail-cos").addEventListener("click", () => {
+      closeModal(DETAIL_ID);
+      openCustomizeModal(inst.uid);
+    });
+
+    openModal(DETAIL_ID);
+  }
+
+  function ivBar(label, value) {
+    const pct = Math.round((value / BuddyEngine.IV_MAX) * 100);
+    return `
+      <div style="display:flex; align-items:center; gap:8px; margin:4px 0">
+        <div style="width:38px; font-size:10px; color:#9db8dd; letter-spacing:.7px">${label}</div>
+        <div class="bd-progress" style="flex:1 1 auto"><i style="width:${pct}%"></i></div>
+        <div style="width:22px; text-align:right; font-size:11px; font-weight:700">${value}</div>
+      </div>
+    `;
+  }
+
+  /* ------------------------------------------------------- Customization */
+  function openCustomizeModal(uid) {
+    const b = buddyState();
+    const inst = b.bag.find(x => x.uid === uid);
+    if (!inst) return;
+
+    injectStyle();
+    buildModal(CUSTOMIZE_ID, `
+      <button class="bd-close">✕</button>
+      <h2>✨ Customize ${inst.nickname}</h2>
+      <p class="bd-sub">
+        Cosmetic pieces unlock as your buddy levels up. Level ${inst.level} right now.
+      </p>
+      <div class="bd-preview" id="bd-cos-preview"></div>
+      <div class="bd-cos-list" id="bd-cos-list"></div>
+    `);
+    wireClose(CUSTOMIZE_ID);
+
+    try {
+      const box = document.getElementById("bd-cos-preview");
+      if (box) {
+        if (customizePreview) { try { customizePreview.dispose(); } catch (e) {} }
+        customizePreview = BuddyPreview.create(box, inst, { animate: true, anim: "dance" });
+      }
+    } catch (e) {}
+
+    const list = document.getElementById("bd-cos-list");
+    BuddyData.CUSTOMIZATION_TIERS.forEach(tier => {
+      const unlocked = inst.level >= tier.level;
+      const equipped = inst.customization && inst.customization[tier.slot] === tier.id;
+      const item = document.createElement("div");
+      item.className = "bd-cos-item" + (unlocked ? "" : " locked");
+      item.innerHTML = `
+        <div class="ci-icon">${unlocked ? "✨" : "🔒"}</div>
+        <div class="ci-body">
+          <div class="ci-name">${tier.name} <span style="color:#7f97ba;font-weight:600">· Lv.${tier.level}</span></div>
+          <div class="ci-desc">${tier.desc}</div>
+        </div>
+        ${unlocked ? `<button class="ci-btn ${equipped ? "on" : ""}">${equipped ? "Equipped" : "Equip"}</button>` : ""}
+      `;
+      if (unlocked) {
+        item.querySelector(".ci-btn").addEventListener("click", () => {
+          if (!inst.customization) inst.customization = {};
+          if (equipped) {
+            inst.customization[tier.slot] = null;
+          } else {
+            inst.customization[tier.slot] = tier.id;
+          }
+          persist();
+          openCustomizeModal(uid);
+        });
+      }
+      list.appendChild(item);
+    });
+
+    openModal(CUSTOMIZE_ID);
+  }
+
+  /* ---------------------------------------------------------- Encounter */
+  function openEncounter(spawnId) {
+    const b = buddyState();
+    const spawn = b.spawns.find(s => s.id === spawnId);
+    if (!spawn) { toast("That wild buddy has moved on"); return; }
+
+    const sp = BuddyData.getSpecies(spawn.speciesId) || {};
+    const nature = BuddyData.getNature(spawn.natureId);
+    const rar = BuddyData.getRarity(spawn.rarity || (sp.rarity || "common"));
+    const inst = BuddyEngine.makeInstance(spawn.speciesId, spawn.level, {
+      ivs: spawn.ivs,
+      natureId: spawn.natureId,
+      hue: spawn.hue,
+      source: "wild",
+    });
+
+    injectStyle();
+    buildModal(ENCOUNTER_ID, `
+      <button class="bd-close">✕</button>
+      <h2>Wild Buddy Sighted!</h2>
+      <p class="bd-sub">
+        A wild <b>${sp.name || "buddy"}</b> is nearby. Tap Battle to challenge
+        it with your active buddy.
+      </p>
+
+      <div class="bd-preview" id="bd-enc-preview"></div>
+
+      <div style="margin:2px 0 12px; text-align:center">
+        <span class="bd-tag" style="border-color:${rar.color}60; color:${rar.color}">${rar.name}</span>
+        <span class="bd-tag">${inst.colorway} hue</span>
+        <span class="bd-tag">${nature.name} nature</span>
+      </div>
+
+      <div class="bd-grid">
+        <div class="bd-stat"><div class="k">Level</div><div class="v">${inst.level}</div></div>
+        <div class="bd-stat"><div class="k">Type</div><div class="v" style="font-size:13px">${(sp.types || []).map(t => (BuddyData.getType(t) || {}).name).join(" / ")}</div></div>
+      </div>
+
+      <div class="bd-vs">
+        <div class="line"></div>
+        <div class="vs">VS</div>
+        <div class="line"></div>
+      </div>
+
+      <div id="bd-enc-ally"></div>
+
+      <div class="bd-row" style="margin-top:12px">
+        <button class="bd-btn primary" id="bd-enc-battle">⚔️ Battle</button>
+        <button class="bd-btn" id="bd-enc-ignore">Leave</button>
+      </div>
+    `);
+    wireClose(ENCOUNTER_ID);
+
+    try {
+      const box = document.getElementById("bd-enc-preview");
+      if (box) {
+        if (encounterPreview) { try { encounterPreview.dispose(); } catch (e) {} }
+        encounterPreview = BuddyPreview.create(box, inst, { animate: true, anim: "idle" });
+      }
+    } catch (e) {}
+
+    const active = activeBuddy();
+    const allyBox = document.getElementById("bd-enc-ally");
+    if (active) {
+      const asp = BuddyData.getSpecies(active.speciesId) || {};
+      allyBox.innerHTML = `
+        <div style="display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:13px; background:rgba(139,92,246,.14); border:1px solid rgba(139,92,246,.32)">
+          <div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${ (BuddyData.getType((asp.types && asp.types[0]) || "metal") || {color:"#94a3b8"}).color } 48%, rgba(10,14,26,.92)); filter:hue-rotate(${Math.round((((active.hue % 1) + 1) % 1) * 360)}deg)"></div>
+          <div style="flex:1 1 auto; min-width:0">
+            <div style="font-size:13px;font-weight:800;color:#fff">${active.nickname}</div>
+            <div style="font-size:10.5px;color:#a9bede">Lv.${active.level} · ${asp.name || active.speciesId} · HP ${active.currentHp == null ? active.stats.hp : active.currentHp}/${active.stats.hp}</div>
+          </div>
+          <div style="font-size:11px;color:#c4b5fd;font-weight:800">YOUR BUDDY</div>
+        </div>
+      `;
+    } else {
+      allyBox.innerHTML = `
+        <div class="bd-empty">
+          You have no buddy ready. Open the Buddy Bag to claim a starter first.
+        </div>
+      `;
+    }
+
+    document.getElementById("bd-enc-battle").addEventListener("click", () => {
+      if (!active) {
+        toast("You need a buddy before you can battle");
+        return;
+      }
+      startBattle(spawn, active);
+    });
+    document.getElementById("bd-enc-ignore").addEventListener("click", () => {
+      closeModal(ENCOUNTER_ID);
+    });
+
+    if (typeof PlayerXP !== "undefined") {
+      PlayerXP.addXP(PlayerXP.XP.encounter, "encounter");
+    }
+
+    openModal(ENCOUNTER_ID);
+  }
+
+  /* -------------------------------------------------------------- Battle */
+  function startBattle(spawn, activeInst) {
+    const b = buddyState();
+    closeModal(ENCOUNTER_ID);
+
+    const wildInst = BuddyEngine.makeInstance(spawn.speciesId, spawn.level, {
+      ivs: spawn.ivs,
+      natureId: spawn.natureId,
+      hue: spawn.hue,
+      source: "wild",
+    });
+
+    b.totalBattles += 1;
+    persist();
+
+    try { if (typeof PlayerXP !== "undefined") PlayerXP.setHidden(true); } catch (e) {}
+
+    BuddyBattle.startEncounter({
+      ally: activeInst,
+      wild: wildInst,
+      spawn,
+      bag: b.bag.slice(),
+      onResult: (summary) => handleBattleResult(summary, spawn, activeInst, wildInst),
+    });
+  }
+
+  async function handleBattleResult(summary, spawn, activeInst, wildInst) {
+    const b = buddyState();
+
+    // Sync the ally's battle HP back into the bag.
+    const bagAlly = b.bag.find(x => x.uid === activeInst.uid);
+    if (bagAlly && typeof summary.allyHp === "number") {
+      bagAlly.currentHp = Math.max(0, summary.allyHp);
+    }
+
+    // The spawn is resolved either way.
+    b.spawns = b.spawns.filter(s => s.id !== spawn.id);
+    removeSpawnMarker(spawn.id);
+
+    const playerXpReason = summary.outcome;
+
+    if (summary.outcome === "tame" && summary.tamed) {
+      const tamed = summary.tamed;
+      if (b.bag.length < 30) {
+        b.bag.push(tamed);
+        b.totalTamed += 1;
+        if (!b.activeUid) b.activeUid = tamed.uid;
+        toast(`🎉 ${tamed.nickname} was tamed and added to your Buddy Bag!`);
+      } else {
+        toast("Your Buddy Bag is full (30 max)");
+      }
+      if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.tame, "tame");
+    } else if (summary.outcome === "feast") {
+      b.totalFeasted += 1;
+      const gained = summary.bonusXp || 0;
+      const result = BuddyEngine.addXp(bagAlly || activeInst, gained + BuddyEngine.battleXpReward(wildInst, "win"));
+      if (bagAlly) {
+        bagAlly.happiness = Math.min(100, (bagAlly.happiness || 50) + (summary.happinessGain || 10));
+        bagAlly.feasts = (bagAlly.feasts || 0) + 1;
+      }
+      if (result.leveled > 0) {
+        toast(`🍖 ${activeInst.nickname} feasted and reached Lv.${(bagAlly || activeInst).level}!`);
+        if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.buddyLevelUp * result.leveled, "buddy_level");
+      } else {
+        toast(`🍖 ${activeInst.nickname} feasted and gained ${gained} XP`);
+      }
+      if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.feast, "feast");
+    } else if (summary.outcome === "lost") {
+      const result = BuddyEngine.addXp(bagAlly || activeInst, BuddyEngine.battleXpReward(wildInst, "loss"));
+      if (result.leveled > 0 && bagAlly) {
+        toast(`💪 ${activeInst.nickname} learned from defeat and reached Lv.${bagAlly.level}!`);
+      }
+      if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.battleLoss, "battle_loss");
+    } else if (summary.outcome === "released") {
+      toast("The wild buddy was released unharmed");
+      if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.battleWin, "battle_win");
+    }
+
+    if (summary.outcome === "tame" || summary.outcome === "feast") {
+      b.totalWins += 1;
+      if (bagAlly) bagAlly.battlesWon = (bagAlly.battlesWon || 0) + 1;
+      if (typeof PlayerXP !== "undefined" && summary.outcome === "tame") {
+        PlayerXP.addXP(PlayerXP.XP.battleWin, "battle_win");
+      }
+    }
+
+    // Restore the ally to at least 1 HP so a won battle never leaves a buddy
+    // stuck at zero in the bag.
+    if (bagAlly && bagAlly.currentHp <= 0 && summary.outcome !== "lost") {
+      bagAlly.currentHp = Math.max(1, Math.floor(bagAlly.stats.hp * 0.25));
+    }
+    if (bagAlly && bagAlly.currentHp <= 0) {
+      bagAlly.currentHp = 1;
+    }
+
+    persist();
+    renderHudBadge();
+
+    // Best-effort server settlement (rewards + anti-cheat telemetry).
+    try {
+      if (typeof firebase !== "undefined" && firebase.functions) {
+        const fn = firebase.functions().httpsCallable("buddyResolveEncounter");
+        await fn({
+          spawnId: spawn.id,
+          outcome: summary.outcome,
+          turns: summary.turns || 0,
+          wildSpecies: summary.wildSpecies,
+          wildLevel: summary.wildLevel,
+          allyUid: summary.allyUid,
+          lat: playerPos ? playerPos.lat : null,
+          lon: playerPos ? playerPos.lon : null,
+        });
+      }
+    } catch (e) {
+      console.warn("[Buddy] server encounter resolve failed:", e.message);
+    }
+  }
+
+  /* ---------------------------------------------------------- Trainer UI */
+  function openTrainerModal() {
+    injectStyle();
+    const b = buddyState();
+    const p = (typeof PlayerXP !== "undefined") ? PlayerXP.progress() : { level: 1, xp: 0, need: 1, pct: 0, title: "Wanderer", totalXp: 0 };
+
+    buildModal(TRAINER_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🏆 Trainer Profile</h2>
+      <p class="bd-sub">
+        You are <b>${p.title}</b>. Earn XP from every action and especially from
+        buddy battle wins.
+      </p>
+
+      <div style="display:flex; align-items:center; gap:14px; margin:6px 0 14px">
+        <div style="width:62px;height:62px;border-radius:18px;background:linear-gradient(140deg,#2b6cf0,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:900;color:#fff;flex:0 0 auto">${p.level}</div>
+        <div style="flex:1 1 auto">
+          <div style="font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#7f97ba">Trainer Level</div>
+          <div style="font-size:16px;font-weight:800;color:#fff">${p.title}</div>
+          <div style="font-size:11px;color:#9db8dd;margin-top:3px">
+            ${p.maxed ? "MAX LEVEL" : `${p.xp.toLocaleString()} / ${p.need.toLocaleString()} XP to Lv.${p.level + 1}`}
+          </div>
+          <div class="bd-progress" style="margin-top:6px"><i style="width:${p.maxed ? 100 : p.pct}%"></i></div>
+        </div>
+      </div>
+
+      <div class="bd-grid">
+        <div class="bd-stat"><div class="k">Total XP</div><div class="v">${(p.totalXp || 0).toLocaleString()}</div></div>
+        <div class="bd-stat"><div class="k">Buddies</div><div class="v">${b.bag.length}</div></div>
+        <div class="bd-stat"><div class="k">Battles</div><div class="v">${b.totalBattles}</div></div>
+        <div class="bd-stat"><div class="k">Wins</div><div class="v">${b.totalWins}</div></div>
+        <div class="bd-stat"><div class="k">Tamed</div><div class="v">${b.totalTamed}</div></div>
+        <div class="bd-stat"><div class="k">Feasted</div><div class="v">${b.totalFeasts}</div></div>
+      </div>
+
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:14px 0 6px">
+        Wild Spawn Progress Today
+      </div>
+      <div class="bd-progress">
+        <i style="width:${Math.min(100, (b.spawnsToday / MAX_DAILY_SPAWNS) * 100)}%"></i>
+      </div>
+      <div style="font-size:11px;color:#9db8dd;margin-top:6px">
+        ${b.spawnsToday} / ${MAX_DAILY_SPAWNS} wild spawns today &middot;
+        ${Math.max(0, Math.round(METERS_PER_SPAWN - b.distCredit))} m until the next spawn
+      </div>
+
+      <div class="bd-row" style="margin-top:16px">
+        <button class="bd-btn primary" id="bd-trainer-bag">🎒 Open Buddy Bag</button>
+      </div>
+    `);
+    wireClose(TRAINER_ID);
+
+    document.getElementById("bd-trainer-bag").addEventListener("click", () => {
+      closeModal(TRAINER_ID);
+      openBag();
+    });
+
+    openModal(TRAINER_ID);
+  }
+
+  /* =========================================================== HELPERS */
+  function activeBuddy() {
+    const b = buddyState();
+    return b.bag.find(x => x.uid === b.activeUid) || b.bag[0] || null;
+  }
+
+  function renderHudBadge() {
+    injectStyle();
+    let btn = document.getElementById(HUD_ID);
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = HUD_ID;
+      btn.innerHTML = `
+        <div class="bh-icon">🐾</div>
+        <div class="bh-count">Buddies</div>
+        <div class="bh-badge" style="display:none">0</div>
+      `;
+      btn.addEventListener("click", () => {
+        if (!maybeForceStarter()) return;
+        openBag();
+      });
+      document.body.appendChild(btn);
+    }
+
+    const b = buddyState();
+    const badge = btn.querySelector(".bh-badge");
+    const count = btn.querySelector(".bh-count");
+    if (count) count.textContent = b.bag.length ? `${b.bag.length}` : "Buddies";
+    if (badge) {
+      if (b.spawns.length > 0) {
+        badge.style.display = "flex";
+        badge.textContent = String(b.spawns.length);
+      } else {
+        badge.style.display = "none";
+      }
+    }
+    btn.classList.toggle("bh-alert", b.spawns.length > 0);
+  }
+
+  /* ============================================================= INIT */
+  function init(map, lng, lat) {
+    mapInstance = map || null;
+    if (typeof lat === "number" && typeof lng === "number") {
+      playerPos = { lat, lon: lng };
+    }
+
+    injectStyle();
+    ensureState();
+    renderHudBadge();
+    rebuildMarkers();
+
+    // Periodic maintenance: expire old spawns, cull by distance.
+    setInterval(() => {
+      const b = buddyState();
+      const now = Date.now();
+      const before = b.spawns.length;
+      b.spawns = b.spawns.filter(s => {
+        if (s.expiresAt <= now) {
+          removeSpawnMarker(s.id);
+          return false;
+        }
+        return true;
+      });
+      if (b.spawns.length !== before) persist();
+      cullMarkersByDistance();
+      renderHudBadge();
+    }, 15000);
+
+    console.log("[Buddy] Buddy system online —", b2(), "species loaded");
+  }
+
+  function b2() { return BuddyData.allSpecies().length; }
+
+  /**
+   * Called from the main GPS loop. Drives spawn accrual.
+   * Signature matches CompanionPet.setPlayerPosition for consistency, with an
+   * optional accuracy argument.
+   */
+  function setPlayerPosition(lat, lon, accuracy) {
+    if (typeof lat !== "number" || typeof lon !== "number") return;
+    const prev = playerPos;
+    playerPos = { lat, lon };
+
+    // Only track distance when the fix is meaningfully new.
+    trackPosition(lat, lon, accuracy);
+    if (prev) cullMarkersByDistance();
+    rebuildMarkersThrottled();
+  }
+
+  let rebuildTimer = 0;
+  function rebuildMarkersThrottled() {
+    const now = Date.now();
+    if (now - rebuildTimer < 2500) return;
+    rebuildTimer = now;
+    rebuildMarkers();
+  }
+
+  return {
+    init,
+    setPlayerPosition,
+    openBag,
+    openTrainerModal,
+    openCustomizeModal,
+    openEncounter,
+    activeBuddy,
+    trackPosition,
+    renderHudBadge,
+    METERS_PER_SPAWN,
+    MAX_DAILY_SPAWNS,
+  };
+})();

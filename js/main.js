@@ -1237,6 +1237,9 @@
     if (typeof CompanionPet !== "undefined") {
       CompanionPet.setPlayerPosition(currentPos.lon, currentPos.lat);
     }
+    if (typeof BuddySystem !== "undefined") {
+      BuddySystem.setPlayerPosition(currentPos.lat, currentPos.lon, coords.accuracy);
+    }
     updatePlayerRadiusLayer();
     Diamonds.setPlayerPosition(currentPos.lat, currentPos.lon);
     // The grid is drawn from its own playerCoords — without this buy mode stays
@@ -1672,6 +1675,14 @@
       // 3.1. Mount 3D Companion Pet System
       if (typeof CompanionPet !== "undefined") {
         CompanionPet.init(map, currentPos.lon, currentPos.lat);
+      }
+
+      // 3.1b. Mount Buddy System (wild spawns, Buddy Bag, battles)
+      if (typeof BuddySystem !== "undefined") {
+        BuddySystem.init(map, currentPos.lon, currentPos.lat);
+      }
+      if (typeof PlayerXP !== "undefined") {
+        PlayerXP.init();
       }
 
       // 3.2. Initialize 3D Standing Foliage Engine
