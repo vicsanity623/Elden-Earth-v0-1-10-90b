@@ -580,7 +580,16 @@ const BuddySystem = (() => {
 .bd-bag-cell .bd-orb{
   width:46px; height:46px; border-radius:50%; margin:0 auto 6px;
   border:2px solid rgba(255,255,255,.55);
+  position:relative; overflow:hidden;
 }
+/* Real 3D render of the buddy — replaces the placeholder gradient orb once
+   the thumbnail has been generated, so the grid matches the map + detail. */
+.bd-bag-cell .bd-orb .bd-orb-img{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; opacity:0; transition:opacity .25s ease;
+}
+.bd-bag-cell .bd-orb.bd-orb-3d{ background:rgba(12,18,32,.85) !important; filter:none !important; }
+.bd-bag-cell .bd-orb.bd-orb-3d .bd-orb-img{ opacity:1; }
 .bd-bag-cell .bd-nm{
   font-size:10.5px; font-weight:800; color:#eaf1ff;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -677,18 +686,22 @@ const BuddySystem = (() => {
     }
   }
 
+  // Always re-renders the card body. Returning a stale shell would leave the
+  // previous list items in place and every re-open would append duplicates.
   function buildModal(id, inner) {
     let m = document.getElementById(id);
-    if (m) return m;
-    m = document.createElement("div");
-    m.id = id;
-    m.className = "modal hidden bd-modal";
+    if (!m) {
+      m = document.createElement("div");
+      m.id = id;
+      m.className = "modal hidden bd-modal";
+      // Backdrop dismiss. Bound once to the shell so a body re-render never
+      // stacks a second listener on the same element.
+      m.addEventListener("click", (e) => {
+        if (e.target === m) closeModal(id);
+      });
+      document.body.appendChild(m);
+    }
     m.innerHTML = `<div class="bd-card">${inner}</div>`;
-    // Backdrop dismiss.
-    m.addEventListener("click", (e) => {
-      if (e.target === m) closeModal(id);
-    });
-    document.body.appendChild(m);
     return m;
   }
 
@@ -752,6 +765,7 @@ const BuddySystem = (() => {
     toast(`🎉 ${inst.nickname} joined you!`);
     if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.tame, "starter");
     renderHudBadge();
+    syncCompanion();
   }
 
   /* --------------------------------------------------------- Buddy Bag */
@@ -786,12 +800,24 @@ const BuddySystem = (() => {
       cell.className = "bd-bag-cell" + (inst.uid === b.activeUid ? " active" : "");
       cell.innerHTML = `
         ${inst.uid === b.activeUid ? '<div class="bd-act">ACTIVE</div>' : ""}
-        <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)"></div>
+        <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)">
+          <img class="bd-orb-img" alt="" />
+        </div>
         <div class="bd-nm">${inst.nickname}</div>
         <div class="bd-lv">Lv.${inst.level} · ${inst.colorway}</div>
       `;
       cell.addEventListener("click", () => openDetail(inst.uid));
       list.appendChild(cell);
+
+      // Swap the placeholder orb for a real render of this buddy so the grid
+      // shows the same creature the map companion and detail screen show.
+      const orb = cell.querySelector(".bd-orb");
+      const img = cell.querySelector(".bd-orb-img");
+      BuddyPreview.thumbnail(inst, 132, (url) => {
+        if (!url || !img || !img.isConnected) return;
+        img.src = url;
+        orb.classList.add("bd-orb-3d");
+      });
     });
 
     document.getElementById("bd-bag-trainer").addEventListener("click", () => {
@@ -894,6 +920,7 @@ const BuddySystem = (() => {
       b.activeUid = inst.uid;
       persist();
       toast(`${inst.nickname} is now your active buddy`);
+      syncCompanion();
       openDetail(uid);
     });
 
@@ -904,6 +931,7 @@ const BuddySystem = (() => {
       if (!clean) return;
       inst.nickname = clean;
       persist();
+      syncCompanion();
       openDetail(uid);
     });
 
@@ -975,6 +1003,7 @@ const BuddySystem = (() => {
             inst.customization[tier.slot] = tier.id;
           }
           persist();
+          syncCompanion();
           openCustomizeModal(uid);
         });
       }
@@ -1182,6 +1211,7 @@ const BuddySystem = (() => {
 
     persist();
     renderHudBadge();
+    syncCompanion();
 
     // Best-effort server settlement (rewards + anti-cheat telemetry).
     try {
@@ -1267,6 +1297,16 @@ const BuddySystem = (() => {
   function activeBuddy() {
     const b = buddyState();
     return b.bag.find(x => x.uid === b.activeUid) || b.bag[0] || null;
+  }
+
+  // Push the current active buddy (and its cosmetics) to the map companion so
+  // the 3D model walking beside the player always matches the Buddy Bag.
+  function syncCompanion() {
+    try {
+      if (typeof BuddyCompanion !== "undefined" && BuddyCompanion.refresh) {
+        BuddyCompanion.refresh();
+      }
+    } catch (e) {}
   }
 
   function renderHudBadge() {
@@ -1357,6 +1397,15 @@ const BuddySystem = (() => {
       }
     } catch (e) {}
 
+    // Mount the active buddy as a real 3D model walking beside the player.
+    if (typeof BuddyCompanion !== "undefined" && mapInstance) {
+      try {
+        BuddyCompanion.init(mapInstance, typeof lng === "number" ? lng : null, typeof lat === "number" ? lat : null);
+      } catch (e) {
+        console.warn("[Buddy] companion mount failed:", e.message);
+      }
+    }
+
     // Periodic maintenance: expire old spawns, cull by distance.
     setInterval(() => {
       const b = buddyState();
@@ -1388,6 +1437,10 @@ const BuddySystem = (() => {
     if (typeof lat !== "number" || typeof lon !== "number") return;
     const prev = playerPos;
     playerPos = { lat, lon };
+
+    if (typeof BuddyCompanion !== "undefined" && BuddyCompanion.setPlayerPosition) {
+      try { BuddyCompanion.setPlayerPosition(lat, lon); } catch (e) {}
+    }
 
     // Only track distance when the fix is meaningfully new.
     trackPosition(lat, lon, accuracy);

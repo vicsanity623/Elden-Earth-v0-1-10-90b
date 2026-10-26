@@ -472,6 +472,17 @@ const BuddyPreview = (() => {
     api.setBuddy = setBuddy;
     api.playAnim = playAnim;
     api.resize = resize;
+    // Render a frame and grab the canvas immediately, while the drawing buffer
+    // is still valid (avoids needing preserveDrawingBuffer on every preview).
+    api.capture = () => {
+      if (api.disposed) return null;
+      try {
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL("image/png");
+      } catch (e) {
+        return null;
+      }
+    };
     api.dispose = () => {
       if (api.disposed) return;
       api.disposed = true;
@@ -498,5 +509,110 @@ const BuddyPreview = (() => {
     return api;
   }
 
-  return { create, MODEL_PATHS };
+  /**
+   * Fetch + cache the raw GLB bytes for a model key ("voodoo" | "robot").
+   * Shared with BuddyCompanion so the map model and the modal previews always
+   * agree on geometry and materials.
+   */
+  function loadRaw(modelKey, cb) { fetchRaw(modelKey, cb); }
+
+  /* ------------------------------------------------------- thumbnails */
+  // Static PNG of a buddy, rendered offscreen once and cached. Used by the
+  // Buddy Bag grid so a cell looks like the same creature as the map
+  // companion and the detail screen — not like a generic coloured ball.
+  const thumbCache = new Map();
+  const thumbQueue = [];
+  let thumbBusy = false;
+
+  function thumbKey(b) {
+    return [
+      b.speciesId, b.hue, b.level,
+      JSON.stringify(b.customization || {}),
+    ].join("|");
+  }
+
+  function drainThumbQueue() {
+    if (thumbBusy) return;
+    const job = thumbQueue.shift();
+    if (!job) return;
+    thumbBusy = true;
+
+    const { buddy, size, cb } = job;
+    const host = document.createElement("div");
+    host.style.cssText =
+      "position:fixed;left:-9999px;top:0;width:" + size + "px;height:" + size +
+      "px;opacity:0;pointer-events:none;";
+    document.body.appendChild(host);
+
+    let settled = false;
+    const finish = (dataUrl) => {
+      if (settled) return;
+      settled = true;
+      try { host.remove(); } catch (e) {}
+      thumbBusy = false;
+      setTimeout(drainThumbQueue, 0);
+      try { cb(dataUrl); } catch (e) {}
+    };
+
+    let preview;
+    try {
+      preview = create(host, buddy, {
+        animate: true,
+        anim: "idle",
+        onReady: () => {
+          // Let one frame land so geometry/materials are fully submitted.
+          requestAnimationFrame(() => {
+            const url = preview.capture ? preview.capture() : null;
+            try { preview.dispose(); } catch (e) {}
+            finish(url);
+          });
+        },
+      });
+    } catch (e) {
+      try { if (preview) preview.dispose(); } catch (e2) {}
+      finish(null);
+      return;
+    }
+
+    // Never let a wedged model load block the whole queue.
+    setTimeout(() => {
+      const url = preview && preview.capture ? preview.capture() : null;
+      try { if (preview) preview.dispose(); } catch (e) {}
+      finish(url);
+    }, 4000);
+  }
+
+  /**
+   * Get (or generate) a PNG data URL for a buddy.
+   * @param {object}   buddy
+   * @param {number}   size  pixel size of the square thumbnail
+   * @param {function} cb    (dataUrl|null) => void
+   * @returns {string|null}  the cached URL if already generated
+   */
+  function thumbnail(buddy, size, cb) {
+    if (!buddy) { if (cb) cb(null); return null; }
+    const key = thumbKey(buddy);
+    if (thumbCache.has(key)) {
+      const url = thumbCache.get(key);
+      if (cb) cb(url);
+      return url;
+    }
+    if (cb) {
+      thumbQueue.push({
+        buddy, size: size || 120,
+        cb: (url) => { if (url) thumbCache.set(key, url); cb(url); },
+      });
+      drainThumbQueue();
+    }
+    return null;
+  }
+
+  return {
+    create,
+    thumbnail,
+    MODEL_PATHS,
+    loadRaw,
+    tintObject,
+    buildCosmetics,
+  };
 })();
