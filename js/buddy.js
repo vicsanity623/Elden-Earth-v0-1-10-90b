@@ -35,6 +35,8 @@ const BuddySystem = (() => {
 
   const STYLE_ID = "buddy-system-style";
   const HUD_ID = "buddy-hud-btn";
+  const INMODAL_ID = "buddy-inmodal";
+  const TARGET_PANEL = '#player-info-modal [data-pi-panel="profile"]';
   const BAG_ID = "buddy-bag-modal";
   const DETAIL_ID = "buddy-detail-modal";
   const ENCOUNTER_ID = "buddy-encounter-modal";
@@ -424,30 +426,39 @@ const BuddySystem = (() => {
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const css = `
-/* ---- floating HUD button ---- */
-#${HUD_ID}{
-  position:fixed; left:10px; bottom:calc(10px + env(safe-area-inset-bottom,0px));
-  z-index:1540; width:56px; height:56px; border-radius:17px;
-  background:linear-gradient(150deg,#3b2d7a,#6d28d9 55%,#0ea5e9);
-  border:1px solid rgba(190,210,255,.35); color:#fff; cursor:pointer;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  box-shadow:0 10px 26px rgba(0,0,0,.42); font-family:inherit;
-  transition:transform .14s ease;
+/* Buddy block lives inside the Player Info modal (Profile tab) under the
+   trainer block — it is the entry point to the Buddy Bag. */
+#${INMODAL_ID}{
+  margin:10px 0 4px; padding:12px 13px; border-radius:15px;
+  background:linear-gradient(140deg, rgba(139,92,246,.16), rgba(14,165,233,.14));
+  border:1px solid rgba(139,92,246,.32);
 }
-#${HUD_ID}:active{transform:scale(.94);}
-#${HUD_ID} .bh-icon{font-size:21px; line-height:1;}
-#${HUD_ID} .bh-count{
-  font-size:9px; font-weight:800; letter-spacing:.4px; opacity:.92; margin-top:1px;
+#${INMODAL_ID} .bdim-row{display:flex; align-items:center; gap:11px;}
+#${INMODAL_ID} .bdim-icon{
+  flex:0 0 auto; width:44px; height:44px; border-radius:13px;
+  background:linear-gradient(150deg,#6d28d9,#0ea5e9); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:20px;
 }
-#${HUD_ID} .bh-badge{
-  position:absolute; top:-5px; right:-5px; min-width:19px; height:19px; padding:0 5px;
-  border-radius:99px; background:#f43f5e; color:#fff; font-size:10px; font-weight:800;
-  display:flex; align-items:center; justify-content:center; border:2px solid #0b1020;
+#${INMODAL_ID} .bdim-meta{flex:1 1 auto; min-width:0;}
+#${INMODAL_ID} .bdim-title{
+  font-size:12.5px; font-weight:800; color:#eaf1ff; letter-spacing:.2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-#${HUD_ID}.bh-alert{animation:bhPulse 1.5s ease-in-out infinite;}
-@keyframes bhPulse{
-  0%,100%{box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 0 rgba(244,63,94,.55);}
-  50%{box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 12px rgba(244,63,94,0);}
+#${INMODAL_ID} .bdim-sub{
+  font-size:10.5px; color:#a9bede; margin-top:3px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+#${INMODAL_ID} .bdim-btn{
+  flex:0 0 auto; padding:9px 13px; border-radius:11px; cursor:pointer;
+  font-family:inherit; font-size:11px; font-weight:800; letter-spacing:.3px;
+  background:linear-gradient(135deg,#2b6cf0,#7c3aed); border-color:transparent;
+  color:#fff;
+}
+#${INMODAL_ID} .bdim-btn:active{transform:scale(.96);}
+#${INMODAL_ID} .bdim-alert{
+  display:inline-flex; align-items:center; gap:4px; margin-left:6px;
+  padding:1px 7px; border-radius:99px; font-size:9px; font-weight:800;
+  background:rgba(244,63,94,.9); color:#fff; letter-spacing:.4px;
 }
 
 /* ---- map spawn markers ---- */
@@ -1260,35 +1271,66 @@ const BuddySystem = (() => {
 
   function renderHudBadge() {
     injectStyle();
-    let btn = document.getElementById(HUD_ID);
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.id = HUD_ID;
-      btn.innerHTML = `
-        <div class="bh-icon">🐾</div>
-        <div class="bh-count">Buddies</div>
-        <div class="bh-badge" style="display:none">0</div>
+
+    // Drop the legacy floating map button if a stale session left one behind.
+    const legacy = document.getElementById(HUD_ID);
+    if (legacy) legacy.remove();
+
+    let el = document.getElementById(INMODAL_ID);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = INMODAL_ID;
+      el.innerHTML = `
+        <div class="bdim-row">
+          <div class="bdim-icon">🐾</div>
+          <div class="bdim-meta">
+            <div class="bdim-title">Buddy Bag</div>
+            <div class="bdim-sub">No buddies yet</div>
+          </div>
+          <button class="bdim-btn" type="button">Open</button>
+        </div>
       `;
-      btn.addEventListener("click", () => {
+      el.querySelector(".bdim-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
         if (!maybeForceStarter()) return;
         openBag();
       });
-      document.body.appendChild(btn);
+    }
+
+    // Place it directly under the trainer block inside the Profile tab.
+    const panel = document.querySelector(TARGET_PANEL);
+    if (panel) {
+      const anchor = document.getElementById("player-xp-inmodal");
+      if (anchor && anchor.parentNode === panel) {
+        anchor.insertAdjacentElement("afterend", el);
+      } else {
+        const header = panel.querySelector(".profile-header-card");
+        if (header && header.parentNode === panel) {
+          header.insertAdjacentElement("afterend", el);
+        } else {
+          panel.insertBefore(el, panel.firstChild);
+        }
+      }
+    } else if (!el.parentNode) {
+      el.style.display = "none";
+      document.body.appendChild(el);
     }
 
     const b = buddyState();
-    const badge = btn.querySelector(".bh-badge");
-    const count = btn.querySelector(".bh-count");
-    if (count) count.textContent = b.bag.length ? `${b.bag.length}` : "Buddies";
-    if (badge) {
-      if (b.spawns.length > 0) {
-        badge.style.display = "flex";
-        badge.textContent = String(b.spawns.length);
-      } else {
-        badge.style.display = "none";
-      }
+    const titleEl = el.querySelector(".bdim-title");
+    const subEl = el.querySelector(".bdim-sub");
+    const hasAlert = b.spawns.length > 0;
+
+    if (titleEl) {
+      titleEl.innerHTML = `Buddy Bag${hasAlert ? '<span class="bdim-alert">✨ ' + b.spawns.length + ' wild</span>' : ""}`;
     }
-    btn.classList.toggle("bh-alert", b.spawns.length > 0);
+    if (subEl) {
+      const nextIn = Math.max(0, Math.round(METERS_PER_SPAWN - b.distCredit));
+      subEl.textContent = b.bag.length
+        ? `${b.bag.length} collected · ${b.totalTamed} tamed · ${nextIn} m to next spawn`
+        : `Walk the realm to find wild buddies · ${nextIn} m to next spawn`;
+    }
+    el.style.display = "";
   }
 
   /* ============================================================= INIT */
@@ -1302,6 +1344,18 @@ const BuddySystem = (() => {
     ensureState();
     renderHudBadge();
     rebuildMarkers();
+
+    // Refresh the in-modal block whenever the Player Info modal opens so the
+    // buddy count / spawn alert never renders stale.
+    try {
+      const modal = document.getElementById("player-info-modal");
+      if (modal && typeof MutationObserver !== "undefined") {
+        const observer = new MutationObserver(() => {
+          if (!modal.classList.contains("hidden")) renderHudBadge();
+        });
+        observer.observe(modal, { attributes: true, attributeFilter: ["class"] });
+      }
+    } catch (e) {}
 
     // Periodic maintenance: expire old spawns, cull by distance.
     setInterval(() => {

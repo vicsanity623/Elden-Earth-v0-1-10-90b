@@ -12,6 +12,8 @@ const PlayerXP = (() => {
 
   const HUD_ID = "player-xp-hud";
   const STYLE_ID = "player-xp-style";
+  const INMODAL_ID = "player-xp-inmodal";
+  const TARGET_PANEL = '#player-info-modal [data-pi-panel="profile"]';
 
   // Small grants for routine actions, bigger for combat outcomes.
   const XP = {
@@ -191,37 +193,43 @@ const PlayerXP = (() => {
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const css = `
-#${HUD_ID}{
-  position:fixed; right:10px; bottom:calc(10px + env(safe-area-inset-bottom,0px));
-  z-index:1540; width:168px; padding:7px 10px 8px;
-  background:rgba(12,18,30,.82); border:1px solid rgba(120,160,220,.28);
-  border-radius:12px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-  pointer-events:auto; user-select:none; cursor:pointer;
-  box-shadow:0 6px 20px rgba(0,0,0,.38); transition:opacity .25s, transform .25s;
-  font-family:inherit;
+/* Trainer block lives inside the Player Info modal (Profile tab), not on the
+   map HUD — it opens the Trainer panel from there. */
+#${INMODAL_ID}{
+  margin:12px 0 4px; padding:12px 13px; border-radius:15px;
+  background:linear-gradient(140deg, rgba(43,108,240,.16), rgba(124,58,237,.16));
+  border:1px solid rgba(139,92,246,.34);
 }
-#${HUD_ID}.px-hidden{opacity:0; transform:translateY(8px); pointer-events:none;}
-#${HUD_ID} .px-top{display:flex; align-items:center; gap:6px; margin-bottom:5px;}
-#${HUD_ID} .px-lvl{
-  flex:0 0 auto; min-width:30px; height:30px; border-radius:9px;
+#${INMODAL_ID} .pxim-row{display:flex; align-items:center; gap:11px;}
+#${INMODAL_ID} .pxim-lvl{
+  flex:0 0 auto; width:44px; height:44px; border-radius:13px;
   background:linear-gradient(140deg,#2b6cf0,#7c3aed); color:#fff;
   display:flex; align-items:center; justify-content:center;
-  font-size:12px; font-weight:800; letter-spacing:.3px;
+  font-size:17px; font-weight:900; letter-spacing:.2px;
 }
-#${HUD_ID} .px-meta{flex:1 1 auto; min-width:0;}
-#${HUD_ID} .px-title{
-  font-size:10px; color:#9db8dd; letter-spacing:.6px; text-transform:uppercase;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+#${INMODAL_ID} .pxim-meta{flex:1 1 auto; min-width:0;}
+#${INMODAL_ID} .pxim-title{
+  font-size:10px; color:#b8a9f0; letter-spacing:1.1px; text-transform:uppercase;
+  font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-#${HUD_ID} .px-xp{font-size:10px; color:#cfe0f5; font-variant-numeric:tabular-nums;}
-#${HUD_ID} .px-bar{
-  height:6px; border-radius:99px; background:rgba(255,255,255,.12); overflow:hidden;
+#${INMODAL_ID} .pxim-bar{
+  height:7px; border-radius:99px; background:rgba(255,255,255,.13);
+  overflow:hidden; margin:5px 0 4px;
 }
-#${HUD_ID} .px-fill{
+#${INMODAL_ID} .pxim-fill{
   height:100%; width:0%; border-radius:99px;
   background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc);
   transition:width .45s cubic-bezier(.22,1,.36,1);
 }
+#${INMODAL_ID} .pxim-xp{
+  font-size:10.5px; color:#c3d2ea; font-variant-numeric:tabular-nums;
+}
+#${INMODAL_ID} .pxim-btn{
+  flex:0 0 auto; padding:9px 13px; border-radius:11px; cursor:pointer;
+  font-family:inherit; font-size:11px; font-weight:800; letter-spacing:.3px;
+  border:1px solid rgba(150,180,240,.24); background:rgba(32,42,70,.92); color:#eaf1ff;
+}
+#${INMODAL_ID} .pxim-btn:active{transform:scale(.96);}
 .px-levelup{
   position:fixed; left:50%; top:22%; transform:translate(-50%,-50%) scale(.9);
   z-index:4000; padding:18px 26px; border-radius:16px; text-align:center;
@@ -248,40 +256,64 @@ const PlayerXP = (() => {
     document.head.appendChild(style);
   }
 
+  // Mounts inside the Player Info modal's Profile tab (see TARGET_PANEL).
+  // Falls back to creating a detached node if the modal markup isn't present
+  // yet — renderHUD() will move it into place on a later call.
   function ensureHud() {
-    let el = document.getElementById(HUD_ID);
-    if (el) return el;
-    el = document.createElement("div");
-    el.id = HUD_ID;
-    el.innerHTML = `
-      <div class="px-top">
-        <div class="px-lvl">1</div>
-        <div class="px-meta">
-          <div class="px-title">Wanderer</div>
-          <div class="px-xp">0 / 0 XP</div>
+    let el = document.getElementById(INMODAL_ID);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = INMODAL_ID;
+      el.innerHTML = `
+        <div class="pxim-row">
+          <div class="pxim-lvl">1</div>
+          <div class="pxim-meta">
+            <div class="pxim-title">Wanderer · Trainer Level 1</div>
+            <div class="pxim-bar"><div class="pxim-fill"></div></div>
+            <div class="pxim-xp">0 / 0 XP</div>
+          </div>
+          <button class="pxim-btn" type="button">🏆 Trainer</button>
         </div>
-      </div>
-      <div class="px-bar"><div class="px-fill"></div></div>
-    `;
-    el.addEventListener("click", () => {
-      if (typeof BuddySystem !== "undefined" && BuddySystem.openTrainerModal) {
-        BuddySystem.openTrainerModal();
+      `;
+      el.querySelector(".pxim-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (typeof BuddySystem !== "undefined" && BuddySystem.openTrainerModal) {
+          BuddySystem.openTrainerModal();
+        }
+      });
+    }
+
+    // Place it directly under the profile header card inside the modal.
+    const panel = document.querySelector(TARGET_PANEL);
+    if (panel && el.parentNode !== panel) {
+      const header = panel.querySelector(".profile-header-card");
+      if (header && header.parentNode === panel) {
+        header.insertAdjacentElement("afterend", el);
+      } else {
+        panel.insertBefore(el, panel.firstChild);
       }
-    });
-    document.body.appendChild(el);
+    } else if (!panel && !el.parentNode) {
+      // Modal not in the DOM yet — keep it attached to body but hidden; the
+      // observer in init() relocates it once the modal appears.
+      el.style.display = "none";
+      document.body.appendChild(el);
+    }
     return el;
   }
 
   function renderHUD() {
     injectStyle();
     const el = ensureHud();
+    if (el && el.style.display === "none" && document.querySelector(TARGET_PANEL)) {
+      el.style.display = "";
+    }
     const p = progress();
-    const lvlEl = el.querySelector(".px-lvl");
-    const titleEl = el.querySelector(".px-title");
-    const xpEl = el.querySelector(".px-xp");
-    const fillEl = el.querySelector(".px-fill");
+    const lvlEl = el.querySelector(".pxim-lvl");
+    const titleEl = el.querySelector(".pxim-title");
+    const xpEl = el.querySelector(".pxim-xp");
+    const fillEl = el.querySelector(".pxim-fill");
     if (lvlEl) lvlEl.textContent = String(p.level);
-    if (titleEl) titleEl.textContent = p.title;
+    if (titleEl) titleEl.textContent = `${p.title} · Trainer Level ${p.level}`;
     if (xpEl) xpEl.textContent = p.maxed ? "MAX LEVEL" : `${p.xp.toLocaleString()} / ${p.need.toLocaleString()} XP`;
     if (fillEl) fillEl.style.width = (p.maxed ? 100 : p.pct) + "%";
   }
@@ -301,10 +333,11 @@ const PlayerXP = (() => {
     } catch (e) {}
   }
 
-  // Hide while a full-screen battle is up so it never fights the battle UI.
+  // Kept for API compatibility with the battle screen — the block is now
+  // inside the modal so there is nothing on the map to hide.
   function setHidden(hidden) {
-    const el = document.getElementById(HUD_ID);
-    if (el) el.classList.toggle("px-hidden", !!hidden);
+    const el = document.getElementById(INMODAL_ID);
+    if (el) el.style.opacity = hidden ? "0.35" : "";
   }
 
   /* -------------------------------------------------------------- Init */
@@ -313,6 +346,21 @@ const PlayerXP = (() => {
     lastLevel = px ? px.level : 1;
     installHooks();
     renderHUD();
+
+    // The Player Info modal markup is static HTML, but the Profile tab content
+    // is refreshed by main.js — re-place + refresh our block whenever the
+    // modal opens so it never gets orphaned or go stale.
+    try {
+      const modal = document.getElementById("player-info-modal");
+      if (modal && typeof MutationObserver !== "undefined") {
+        const observer = new MutationObserver(() => {
+          const isOpen = !modal.classList.contains("hidden");
+          if (isOpen) renderHUD();
+        });
+        observer.observe(modal, { attributes: true, attributeFilter: ["class"] });
+      }
+    } catch (e) {}
+
     try {
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) renderHUD();
