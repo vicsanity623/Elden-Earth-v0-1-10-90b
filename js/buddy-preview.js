@@ -42,13 +42,33 @@ const BuddyPreview = (() => {
   }
 
   /* ------------------------------------------------------- Hue tinting */
-  // Converts a 0..1 hue into a THREE.Color, then re-tints every material.
+  // `hueOrHsl` is either a 0..1 hue or a {h,s,l} triple from the buddy's
+  // rolled colorway. Using the stored triple is what keeps a buddy labelled
+  // "Ivory" actually looking ivory instead of whatever the hue wheel says.
+  function resolveColor(hueOrHsl) {
+    const c = new THREE.Color();
+    if (hueOrHsl === null || hueOrHsl === undefined) {
+      // No rolled colour (classic untinted companion) — neutral, not NaN.
+      c.setHSL(0, 0, 0.55);
+      return c;
+    }
+    if (typeof hueOrHsl === "object") {
+      c.setHSL(
+        ((hueOrHsl.h % 1) + 1) % 1,
+        Math.max(0, Math.min(1, hueOrHsl.s == null ? 0.62 : hueOrHsl.s)),
+        Math.max(0, Math.min(1, hueOrHsl.l == null ? 0.52 : hueOrHsl.l))
+      );
+    } else {
+      c.setHSL(((hueOrHsl % 1) + 1) % 1, 0.62, 0.52);
+    }
+    return c;
+  }
+
   // Textures (the voodoo doll's fabric/camo maps) keep their detail because
   // `color` multiplies the map rather than replacing it.
-  function tintObject(root, hue, strength) {
+  function tintObject(root, hueOrHsl, strength) {
     const s = (typeof strength === "number") ? strength : 0.85;
-    const base = new THREE.Color();
-    base.setHSL(((hue % 1) + 1) % 1, 0.62, 0.52);
+    const base = resolveColor(hueOrHsl);
 
     root.traverse(obj => {
       if (!obj.isMesh) return;
@@ -81,9 +101,9 @@ const BuddyPreview = (() => {
   // Simple additive geometry decorations driven by the buddy's unlocked
   // customization slots. Kept primitive on purpose — cheap to build and
   // dispose, and reads clearly at preview scale.
-  function buildCosmetics(group, hue, customization, size) {
+  function buildCosmetics(group, hueOrHsl, customization, size) {
     const clean = [];
-    const col = new THREE.Color().setHSL(((hue % 1) + 1) % 1, 0.75, 0.58);
+    const col = resolveColor(hueOrHsl);
     const S = size || 1;
 
     function add(mesh) { group.add(mesh); clean.push(mesh); return mesh; }
@@ -360,6 +380,10 @@ const BuddyPreview = (() => {
       const sp = BuddyData.getSpecies(nextBuddy.speciesId);
       const modelKey = (sp && sp.model) || "robot";
       hue = (typeof nextBuddy.hue === "number") ? nextBuddy.hue : 0.5;
+      // Prefer the rolled colorway paint so the label and the render agree.
+      // null/undefined means "no colour rolled" -> leave the model untinted.
+      const paint = (nextBuddy.colorHsl != null) ? nextBuddy.colorHsl
+        : (typeof nextBuddy.hue === "number" ? nextBuddy.hue : null);
 
       fetchRaw(modelKey, (err, buf) => {
         if (api.disposed) return;
@@ -389,7 +413,7 @@ const BuddyPreview = (() => {
           modelRoot.scale.setScalar(scale);
           modelRoot.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
-          tintObject(modelRoot, hue, bo.tintStrength);
+          if (paint != null) tintObject(modelRoot, paint, bo.tintStrength);
 
           // The voodoo doll ships with no animation clips — give it a gentle
           // procedural bob so it doesn't read as a frozen prop.

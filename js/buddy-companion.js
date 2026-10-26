@@ -138,6 +138,8 @@ const BuddyCompanion = (() => {
     const sp = (typeof BuddyData !== "undefined") ? BuddyData.getSpecies(inst.speciesId) : null;
     const modelKey = (sp && sp.model) || "robot";
     const hue = (typeof inst.hue === "number") ? inst.hue : 0.5;
+    // Use the rolled colorway paint so the map buddy matches the Buddy Bag.
+    const paint = inst.colorHsl || hue;
     const token = ++loadToken;
 
     BuddyPreview.loadRaw(modelKey, (err, buf) => {
@@ -164,7 +166,7 @@ const BuddyCompanion = (() => {
         modelRoot.scale.setScalar(scale);
         modelRoot.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
-        BuddyPreview.tintObject(modelRoot, hue, 0.85);
+        BuddyPreview.tintObject(modelRoot, paint, 0.85);
 
         if (!gltf.animations || !gltf.animations.length) {
           modelRoot.userData.procedural = true;
@@ -172,7 +174,7 @@ const BuddyCompanion = (() => {
 
         holder.add(modelRoot);
 
-        cosmeticNodes = BuddyPreview.buildCosmetics(holder, hue, inst.customization || {}, 1);
+        cosmeticNodes = BuddyPreview.buildCosmetics(holder, paint, inst.customization || {}, 1);
 
         if (gltf.animations && gltf.animations.length) {
           mixer = new THREE.AnimationMixer(modelRoot);

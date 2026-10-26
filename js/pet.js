@@ -279,15 +279,92 @@ const CompanionPet = (() => {
     return { x: point.x, y: point.y };
   }
 
+  /**
+   * What the companion should look like right now.
+   *
+   * The pet keeps its own gameplay (mood, berries, diamond fetching) but its
+   * APPEARANCE is the player's active buddy — same species model, same rolled
+   * colour, same cosmetics as the Buddy Bag and the map companion. Falls back
+   * to the classic RobotExpressive look when no buddy is owned yet.
+   */
+  function getPetLook() {
+    // Synthetic "classic companion" descriptor: RobotExpressive, no rolled
+    // colour, no cosmetics — exactly how the pet looked before buddies existed.
+    const classic = {
+      speciesId: null,
+      hue: null,
+      colorHsl: null,
+      customization: {},
+      level: 1,
+      nickname: "Buddy",
+    };
+    const fallback = {
+      path: "models/RobotExpressive.glb",
+      paint: null,
+      customization: {},
+      buddy: classic,
+    };
+    try {
+      if (typeof BuddySystem === "undefined" || typeof BuddySystem.activeBuddy !== "function") {
+        return fallback;
+      }
+      const inst = BuddySystem.activeBuddy();
+      if (!inst) return fallback;
+      const sp = (typeof BuddyData !== "undefined") ? BuddyData.getSpecies(inst.speciesId) : null;
+      const path = sp && sp.model === "voodoo"
+        ? "models/Voodoo-Dool.glb"
+        : "models/RobotExpressive.glb";
+      return {
+        path,
+        paint: (inst.colorHsl != null) ? inst.colorHsl : inst.hue,
+        customization: inst.customization || {},
+        buddy: inst,
+      };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  // Re-skin the map companion and the pet modal after the active buddy (or its
+  // cosmetics) changes. Called from BuddySystem.syncCompanion().
+  function refreshPetLook() {
+    try { loadPetModel(); } catch (e) {}
+    try {
+      // Force the modal preview to rebuild on next open / now if it is open.
+      if (petModalPreview) {
+        try { petModalPreview.dispose(); } catch (e) {}
+        petModalPreview = null;
+      }
+      const modal = document.getElementById("pet-modal");
+      if (modal && !modal.classList.contains("hidden")) {
+        initPetModal3D();
+      }
+    } catch (e) {}
+  }
+
   function loadPetModel() {
     const loader = new THREE.GLTFLoader();
+    const look = getPetLook();
 
     loader.load(
-      "models/RobotExpressive.glb",
+      look.path,
       (gltf) => {
+        // Map layer may not be mounted (or already torn down) — never let an
+        // async model load throw into the window.
+        if (!scene) return;
         if (petModel) {
           scene.remove(petModel);
           disposePetModel(petModel);
+        }
+        if (petExtras && petExtras.length) {
+          petExtras.forEach((n) => {
+            try {
+              scene.remove(n);
+              if (n.geometry) n.geometry.dispose();
+              if (n.material && n.material.dispose) n.material.dispose();
+            } catch (e) {}
+          });
+          petExtras = [];
         }
 
         petModel = gltf.scene;
@@ -320,8 +397,14 @@ const CompanionPet = (() => {
         });
         console.log("[CompanionPet] Morph targets found:", Object.keys(petMorphTargets));
 
+        // Paint the companion with the active buddy's rolled colour so the map
+        // pet and the Buddy Bag always show the same creature.
+        if (look.paint !== null && typeof BuddyPreview !== "undefined" && BuddyPreview.tintObject) {
+          try { BuddyPreview.tintObject(petModel, look.paint, 0.85); } catch (e) {}
+        }
+
         scene.add(petModel);
-        console.log("[CompanionPet] RobotExpressive loaded successfully.");
+        console.log("[CompanionPet] model loaded:", look.path, look.paint ? "(buddy tint)" : "(default)");
       },
       undefined,
       (err) => console.warn("[CompanionPet] Load error:", err)
@@ -478,6 +561,10 @@ const CompanionPet = (() => {
   let idleRoamInterval = null;
   let idleEmoteInterval = null;
   let idleRoamTarget = null;
+  // Cosmetic pieces attached to the map companion (cleared on re-skin).
+  let petExtras = [];
+  // Shared 3D preview used by the pet modal (shows the active buddy).
+  let petModalPreview = null;
   let petModalScene = null;
   let petModalCamera = null;
   let petModalRenderer = null;
@@ -1182,87 +1269,28 @@ const CompanionPet = (() => {
     initPetModal3D();
   }
 
+  /**
+   * Pet modal 3D — renders the ACTIVE BUDDY (species model, rolled colour and
+   * cosmetics) through the shared BuddyPreview, so this screen, the Buddy Bag
+   * and the map companion can never disagree about what the pet looks like.
+   */
   function initPetModal3D() {
     const container = document.getElementById("pet-modal-3d-container");
     if (!container) return;
 
-    if (!petModalRenderer) {
-      petModalScene = new THREE.Scene();
-      petModalCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-      petModalCamera.position.set(0, 0.5, 4);
-      petModalCamera.lookAt(0, -0.3, 0);
+    // Already mounted for this open — BuddyPreview runs its own rAF loop.
+    if (petModalPreview && !petModalPreview.disposed) return;
 
-      petModalRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      petModalRenderer.setSize(140, 140);
-      petModalRenderer.setClearColor(0x000000, 0);
-      container.appendChild(petModalRenderer.domElement);
-
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-      petModalScene.add(ambientLight);
-
-      const dirLight = new THREE.DirectionalLight(0xf0d38a, 1.8);
-      dirLight.position.set(2, 3, 2);
-      petModalScene.add(dirLight);
-
-      loadPetModalModel();
+    const look = getPetLook();
+    try {
+      petModalPreview = BuddyPreview.create(container, look.buddy, {
+        animate: true,
+        anim: "idle",
+      });
+    } catch (e) {
+      console.warn("[CompanionPet] modal preview failed:", e && e.message);
+      petModalPreview = null;
     }
-
-    // Only ever run ONE modal render loop — previously every modal open
-    // stacked another requestAnimationFrame loop on top of the last one.
-    if (!petModalAnimFrameId) animatePetModal();
-  }
-
-  function loadPetModalModel() {
-    const loader = new THREE.GLTFLoader();
-    loader.load(
-      "models/RobotExpressive.glb",
-      (gltf) => {
-        if (petModalModel) {
-          petModalScene.remove(petModalModel);
-        }
-
-        petModalModel = gltf.scene;
-        petModalModel.scale.set(0.3, 0.3, 0.3);
-        petModalModel.position.y = -0.9;
-        petModalMixer = new THREE.AnimationMixer(petModalModel);
-        petModalAnimations = {};
-
-        gltf.animations.forEach((clip) => {
-          petModalAnimations[clip.name.toLowerCase()] = petModalMixer.clipAction(clip);
-        });
-
-        const idleKey = Object.keys(petModalAnimations).find((k) =>
-          k.includes("idle") || k.includes("standing")
-        ) || Object.keys(petModalAnimations)[0];
-
-        if (idleKey && petModalAnimations[idleKey]) {
-          petModalCurrentAction = petModalAnimations[idleKey];
-          petModalCurrentAction.setEffectiveTimeScale(0.8);
-          petModalCurrentAction.play();
-        }
-
-        petModalScene.add(petModalModel);
-      },
-      undefined,
-      (err) => console.warn("[PetModal] Load error:", err)
-    );
-  }
-
-  function animatePetModal() {
-    if (!petModalRenderer || !petModalScene || !petModalCamera) return;
-
-    petModalAnimFrameId = requestAnimationFrame(animatePetModal);
-
-    if (petModalMixer) {
-      const delta = 0.016;
-      petModalMixer.update(delta);
-    }
-
-    if (petModalModel) {
-      petModalModel.rotation.y += 0.008;
-    }
-
-    petModalRenderer.render(petModalScene, petModalCamera);
   }
 
   function openPetModal() {
@@ -1282,7 +1310,13 @@ const CompanionPet = (() => {
     const modal = document.getElementById("pet-modal");
     if (modal) modal.classList.add("hidden");
 
-    // Stop burning GPU while the modal is hidden (restarted on next open)
+    // Stop burning GPU while the modal is hidden (restarted on next open).
+    // Dispose the preview outright: dispose() + forceContextLoss() frees the
+    // WebGL context, which is what kept Safari evicting the map's context.
+    if (petModalPreview) {
+      try { petModalPreview.dispose(); } catch (e) {}
+      petModalPreview = null;
+    }
     if (petModalAnimFrameId) {
       cancelAnimationFrame(petModalAnimFrameId);
       petModalAnimFrameId = null;
@@ -1323,5 +1357,7 @@ const CompanionPet = (() => {
     openPetModal,
     closePetModal,
     renamePet,
+    refreshPetLook,
+    getPetLook,
   };
 })();

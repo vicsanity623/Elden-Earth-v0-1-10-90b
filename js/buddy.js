@@ -1299,12 +1299,19 @@ const BuddySystem = (() => {
     return b.bag.find(x => x.uid === b.activeUid) || b.bag[0] || null;
   }
 
-  // Push the current active buddy (and its cosmetics) to the map companion so
-  // the 3D model walking beside the player always matches the Buddy Bag.
+  // Push the current active buddy (and its cosmetics) to the map companion AND
+  // the companion pet, so the creature walking beside the player and the pet
+  // modal both show the same buddy — same species, same rolled colour, same
+  // cosmetics — as the Buddy Bag.
   function syncCompanion() {
     try {
       if (typeof BuddyCompanion !== "undefined" && BuddyCompanion.refresh) {
         BuddyCompanion.refresh();
+      }
+    } catch (e) {}
+    try {
+      if (typeof CompanionPet !== "undefined" && CompanionPet.refreshPetLook) {
+        CompanionPet.refreshPetLook();
       }
     } catch (e) {}
   }

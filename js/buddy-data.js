@@ -182,13 +182,40 @@ const BuddyData = (() => {
   ];
 
   /* ------------------------------------------------------- Colorway names */
-  // Cosmetic label for the rolled model hue. Purely flavour.
+  // Cosmetic label for the rolled model hue. Each entry is the ACTUAL HSL the
+  // tint is painted with, so "Ivory" really looks ivory and "Jade" really
+  // looks green — the name and the render can never drift apart.
   const COLORWAYS = [
-    "Ashen", "Crimson", "Ember", "Amber", "Gold", "Moss", "Jade", "Teal",
-    "Azure", "Cobalt", "Violet", "Orchid", "Rose", "Copper", "Bronze",
-    "Silver", "Slate", "Onyx", "Pearl", "Ivory", "Rust", "Seafoam",
-    "Lilac", "Bloodmoon", "Voidtouched", "Sunbleached", "Glacier", "Sand",
+    { name: "Crimson",      h: 0.000, s: 0.72, l: 0.52 },
+    { name: "Ember",        h: 0.030, s: 0.75, l: 0.53 },
+    { name: "Rust",         h: 0.052, s: 0.62, l: 0.46 },
+    { name: "Copper",       h: 0.072, s: 0.58, l: 0.50 },
+    { name: "Bronze",       h: 0.092, s: 0.52, l: 0.48 },
+    { name: "Amber",        h: 0.112, s: 0.78, l: 0.56 },
+    { name: "Gold",         h: 0.135, s: 0.72, l: 0.56 },
+    { name: "Sand",         h: 0.158, s: 0.32, l: 0.68 },
+    { name: "Sunbleached",  h: 0.182, s: 0.28, l: 0.74 },
+    { name: "Pearl",        h: 0.205, s: 0.16, l: 0.82 },
+    { name: "Ivory",        h: 0.125, s: 0.22, l: 0.84 },
+    { name: "Moss",         h: 0.230, s: 0.48, l: 0.44 },
+    { name: "Jade",         h: 0.270, s: 0.52, l: 0.50 },
+    { name: "Seafoam",      h: 0.330, s: 0.48, l: 0.62 },
+    { name: "Teal",         h: 0.380, s: 0.58, l: 0.48 },
+    { name: "Glacier",      h: 0.430, s: 0.42, l: 0.72 },
+    { name: "Azure",        h: 0.475, s: 0.68, l: 0.56 },
+    { name: "Cobalt",       h: 0.515, s: 0.70, l: 0.50 },
+    { name: "Slate",        h: 0.555, s: 0.18, l: 0.50 },
+    { name: "Silver",       h: 0.590, s: 0.12, l: 0.72 },
+    { name: "Ashen",        h: 0.620, s: 0.10, l: 0.62 },
+    { name: "Onyx",         h: 0.655, s: 0.12, l: 0.24 },
+    { name: "Voidtouched",  h: 0.690, s: 0.55, l: 0.38 },
+    { name: "Violet",       h: 0.725, s: 0.58, l: 0.54 },
+    { name: "Lilac",        h: 0.760, s: 0.46, l: 0.70 },
+    { name: "Orchid",       h: 0.795, s: 0.52, l: 0.62 },
+    { name: "Rose",         h: 0.900, s: 0.62, l: 0.64 },
+    { name: "Bloodmoon",    h: 0.955, s: 0.58, l: 0.44 },
   ];
+
 
   /* ------------------------------------------------ Customization ladder */
   // Progressive growth: unlocking by buddy level. `slot` is the equip slot

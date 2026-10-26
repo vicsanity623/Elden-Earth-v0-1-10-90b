@@ -43,21 +43,52 @@ const BuddyEngine = (() => {
   }
 
   // Every wild buddy gets a slightly different color hue on its model.
-  // We bias toward the species' rarity hue jitter so commons stay close to
-  // their base look and legendaries get dramatic one-off colorways.
-  function rollHue(rarityId) {
+  //
+  // We pick a named COLORWAY first and then jitter its HSL slightly, rather
+  // than rolling an arbitrary hue and reverse-lookup-ing a name. That keeps
+  // the label and the paint on the model locked together ("Ivory" is always
+  // ivory) while still making every individual buddy visually unique.
+  function rollColorway(rarityId) {
     const rarity = BuddyData.getRarity(rarityId || "common");
     const jitter = rarity.hueJitter || 0.05;
-    const base = Math.random();
-    let hue = base + rf(-jitter, jitter);
-    hue = hue - Math.floor(hue); // wrap into 0..1
-    return Math.round(hue * 1000) / 1000;
+    const list = BuddyData.COLORWAYS;
+    const entry = list[Math.floor(Math.random() * list.length)];
+    const h = entry.h + rf(-jitter, jitter);
+    return {
+      name: entry.name,
+      h: h - Math.floor(h),
+      s: clamp01(entry.s + rf(-0.07, 0.07)),
+      l: clamp01(entry.l + rf(-0.05, 0.05)),
+    };
   }
 
+  function clamp01(v) { return Math.max(0.03, Math.min(0.97, v)); }
+
+  // Legacy/compat: a raw rolled hue.
+  function rollHue(rarityId) {
+    return rollColorway(rarityId).h;
+  }
+
+  // Nearest named colorway to a rolled hue. Returns the FULL HSL the tint uses,
+  // so the label ("Ivory") and the paint on the model always agree.
   function colorwayForHue(hue) {
     const list = BuddyData.COLORWAYS;
-    const idx = Math.floor(((hue % 1) + 1) % 1 * list.length) % list.length;
-    return list[idx];
+    const h = ((hue % 1) + 1) % 1;
+    let best = list[0];
+    let bestDist = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      // Circular distance around the hue wheel.
+      let d = Math.abs(list[i].h - h);
+      if (d > 0.5) d = 1 - d;
+      if (d < bestDist) { bestDist = d; best = list[i]; }
+    }
+    return best;
+  }
+
+  // Convenience for renderers: just the paint triple.
+  function hslForHue(hue) {
+    const c = colorwayForHue(hue);
+    return { h: c.h, s: c.s, l: c.l };
   }
 
   // Total IV quality 0..1 — drives the A/S/B/C grade shown on the tame screen.
@@ -110,7 +141,26 @@ const BuddyEngine = (() => {
     const lvl = Math.max(1, Math.min(BuddyData.BUDDY_MAX_LEVEL, level | 0));
     const ivs = o.ivs || rollIvs();
     const natureId = o.natureId || rollNature();
-    const hue = (typeof o.hue === "number") ? o.hue : rollHue(sp.rarity);
+    // Colour is resolved as ONE unit (name + HSL) so a buddy labelled "Ivory"
+    // is always painted ivory. Precedence: explicit paint > explicit name >
+    // freshly rolled colorway.
+    let cw;
+    if (o.colorHsl && typeof o.colorHsl === "object") {
+      const named = colorwayForHue(o.colorHsl.h);
+      cw = {
+        name: o.colorway || named.name,
+        h: o.colorHsl.h,
+        s: o.colorHsl.s,
+        l: o.colorHsl.l,
+      };
+    } else if (o.colorway) {
+      const entry = BuddyData.COLORWAYS.find(c => c.name === o.colorway) || BuddyData.COLORWAYS[0];
+      cw = { name: entry.name, h: entry.h, s: entry.s, l: entry.l };
+    } else {
+      cw = rollColorway(sp.rarity);
+    }
+
+    const hue = (typeof o.hue === "number") ? o.hue : cw.h;
     const stats = computeStats(speciesId, lvl, ivs, natureId);
     const moves = o.moves || BuddyData.movesAtLevel(speciesId, lvl);
 
@@ -123,7 +173,10 @@ const BuddyEngine = (() => {
       ivs,
       natureId,
       hue,
-      colorway: o.colorway || colorwayForHue(hue),
+      colorway: cw.name,
+      // The exact paint used on the 3D model — kept alongside the name so a
+      // buddy labelled "Ivory" is always rendered ivory.
+      colorHsl: { h: cw.h, s: cw.s, l: cw.l },
       moves: moves.slice(0, 4),
       happiness: (typeof o.happiness === "number") ? o.happiness : 50,
       stats,
@@ -434,7 +487,7 @@ const BuddyEngine = (() => {
   return {
     IV_MAX,
     ri, rf, pick, newId,
-    rollIvs, rollNature, rollHue, colorwayForHue, ivPercent, ivGrade,
+    rollIvs, rollNature, rollHue, rollColorway, colorwayForHue, hslForHue, ivPercent, ivGrade,
     computeStats, makeInstance, refreshStats,
     addXp, xpProgress,
     stageMultiplier, makeBattleSide, effectiveStat,
