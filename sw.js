@@ -17,7 +17,7 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-const CACHE_NAME = 'elden-EARTH-v72.00';
+const CACHE_NAME = 'elden-EARTH-v73.00';
 
 const ASSETS_TO_CACHE = [
     './',
