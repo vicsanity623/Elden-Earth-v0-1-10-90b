@@ -17,9 +17,9 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v74.00: Active buddy renders as a real 3D model on the map (js/buddy-companion.js)
-// with bag-list thumbnails that match it.
-const CACHE_NAME = 'elden-EARTH-v74.00';
+// v75.00: WebGL context-leak fix (Safari/WebView map darkening), HumanGate
+// duplicate-declaration fix, buddy companion layer lifecycle + repaint throttle.
+const CACHE_NAME = 'elden-EARTH-v75.00';
 
 const ASSETS_TO_CACHE = [
     './',
@@ -75,7 +75,6 @@ const ASSETS_TO_CACHE = [
     './assets/20x.png',
     './assets/50x.png',
     './assets/2eb-boost.png',
-    './assets/rickroll.mp4',
     './assets/models/RedMushroom.glb'
 ];
 

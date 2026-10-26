@@ -1238,7 +1238,11 @@
       CompanionPet.setPlayerPosition(currentPos.lon, currentPos.lat);
     }
     if (typeof BuddySystem !== "undefined") {
-      BuddySystem.setPlayerPosition(currentPos.lat, currentPos.lon, coords.accuracy);
+      try {
+        BuddySystem.setPlayerPosition(currentPos.lat, currentPos.lon, coords.accuracy);
+      } catch (err) {
+        console.warn("[Buddy] setPlayerPosition failed:", err);
+      }
     }
     updatePlayerRadiusLayer();
     Diamonds.setPlayerPosition(currentPos.lat, currentPos.lon);
@@ -1677,12 +1681,23 @@
         CompanionPet.init(map, currentPos.lon, currentPos.lat);
       }
 
-      // 3.1b. Mount Buddy System (wild spawns, Buddy Bag, battles)
-      if (typeof BuddySystem !== "undefined") {
-        BuddySystem.init(map, currentPos.lon, currentPos.lat);
+      // 3.1b. Mount Buddy System (wild spawns, Buddy Bag, battles).
+      // HARD ISOLATION: everything after this point (foliage, the player sonar
+      // ring, Grid/Diamonds init — i.e. the whole visible map) must never be
+      // skipped because a new feature threw. Fail soft, always.
+      try {
+        if (typeof BuddySystem !== "undefined") {
+          BuddySystem.init(map, currentPos.lon, currentPos.lat);
+        }
+      } catch (err) {
+        console.warn("[Buddy] init failed (map setup continues):", err);
       }
-      if (typeof PlayerXP !== "undefined") {
-        PlayerXP.init();
+      try {
+        if (typeof PlayerXP !== "undefined") {
+          PlayerXP.init();
+        }
+      } catch (err) {
+        console.warn("[PlayerXP] init failed (map setup continues):", err);
       }
 
       // 3.2. Initialize 3D Standing Foliage Engine

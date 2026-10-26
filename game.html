@@ -2022,7 +2022,10 @@
 <script defer src="js/native-bridge.js"></script>
 <script defer src="js/ads.js"></script>
 <script defer src="js/update-gate.js"></script>
-<script defer src="js/human-gate.js"></script>
+<!-- js/human-gate.js is already loaded above (next to the Firebase SDKs).
+     Loading it twice re-declares `const HumanGate` and throws
+     "SyntaxError: Identifier 'HumanGate' has already been declared" on every
+     page load. Do not re-add it here. -->
 <script defer src="js/demo-mode.js"></script>
 <script defer src="js/geo.js"></script>
 <script defer src="js/anticheat.js"></script>

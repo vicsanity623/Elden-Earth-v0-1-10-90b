@@ -37,6 +37,11 @@ const BuddyCompanion = (() => {
   let mountedKey = null;
   // Monotonic token so a slow GLB parse can never overwrite a newer buddy.
   let loadToken = 0;
+  // Throttle map repaints — triggerRepaint() every rAF frame forces a full
+  // map re-render 60x/second, which makes the map stutter and look wrong.
+  let lastRepaint = 0;
+  const REPAINT_INTERVAL_MS = 50;
+  let layerAttached = false;
 
   // Reusable matrices — allocated on mount so a missing THREE (CDN failure)
   // degrades to a no-op companion instead of throwing at script parse time.
@@ -119,12 +124,14 @@ const BuddyCompanion = (() => {
    * @param {object|null} inst  BuddyEngine instance, or null to hide.
    */
   function setActiveBuddy(inst) {
-    if (!scene) return;
+    if (typeof THREE === "undefined") return;
+    ensureScene();
     const key = buddyKey(inst);
     if (key === mountedKey) return;
 
     if (!inst) {
       clearModel();
+      removeLayerIfIdle();
       return;
     }
 
@@ -175,6 +182,9 @@ const BuddyCompanion = (() => {
         }
 
         mountedKey = buddyKey(inst);
+        // Only now is there something worth a render pass on the shared
+        // MapLibre WebGL context — so only now attach the layer.
+        ensureLayer();
       }, undefined, (e) => {
         console.warn("[BuddyCompanion] model parse failed:", e);
       });
@@ -196,7 +206,12 @@ const BuddyCompanion = (() => {
   }
 
   /* ------------------------------------------------------------ layer */
-  function onAdd(map, gl) {
+  // Scene/camera/lights are independent of the map layer and are built as soon
+  // as the companion boots — a model must be able to load and be prepared
+  // before (or after) the GL layer is attached. Only the renderer needs the
+  // MapLibre WebGL context, so it is created in onAdd.
+  function ensureScene() {
+    if (scene) return;
     ensureMatrices();
     camera = new THREE.Camera();
     scene = new THREE.Scene();
@@ -209,19 +224,25 @@ const BuddyCompanion = (() => {
     fill.position.set(-15, -40, 10);
     scene.add(fill);
 
-    renderer = new THREE.WebGLRenderer({
-      canvas: map.getCanvas(),
-      context: gl,
-      antialias: false,
-      powerPreference: "low-power",
-    });
-    renderer.autoClear = false;
-
     holder = new THREE.Group();
     scene.add(holder);
+  }
 
-    // Mount whatever the active buddy currently is.
-    refresh();
+  function onAdd(map, gl) {
+    ensureScene();
+    if (renderer) return;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl,
+        antialias: false,
+        powerPreference: "low-power",
+      });
+      renderer.autoClear = false;
+    } catch (e) {
+      console.warn("[BuddyCompanion] renderer create failed:", e && e.message);
+      renderer = null;
+    }
   }
 
   function render(gl, matrix) {
@@ -312,16 +333,51 @@ const BuddyCompanion = (() => {
       }
     });
 
-    if (mapInstance && mapInstance.triggerRepaint) {
-      // Only repaint while something is actually changing.
-      if (moving || mixer || cosmeticNodes.length) mapInstance.triggerRepaint();
+    if (mapInstance && mapInstance.triggerRepaint && (moving || cosmeticNodes.length)) {
+      // Only repaint at most ~20x/second, and only while something moves.
+      if (now - lastRepaint >= REPAINT_INTERVAL_MS) {
+        lastRepaint = now;
+        try { mapInstance.triggerRepaint(); } catch (e) {}
+      }
     }
+  }
+
+  // The custom layer shares MapLibre's WebGL context. Only attach it while
+  // there is actually something to draw — an idle layer still runs a render
+  // pass over the shared context and is pure risk for no benefit.
+  function ensureLayer() {
+    if (!mapInstance || layerAttached) return;
+    try {
+      if (mapInstance.getLayer(LAYER_ID)) mapInstance.removeLayer(LAYER_ID);
+      mapInstance.addLayer({
+        id: LAYER_ID,
+        type: "custom",
+        renderingMode: "3d",
+        onAdd,
+        render,
+      });
+      layerAttached = true;
+      // Keep the buddy above plot tiles.
+      setTimeout(() => {
+        try { if (mapInstance && mapInstance.getLayer(LAYER_ID)) mapInstance.moveLayer(LAYER_ID); } catch (e) {}
+      }, 120);
+    } catch (e) {
+      console.warn("[BuddyCompanion] layer mount failed:", e.message);
+      layerAttached = false;
+    }
+  }
+
+  function removeLayerIfIdle() {
+    if (!layerAttached || modelRoot || cosmeticNodes.length) return;
+    try { if (mapInstance && mapInstance.getLayer(LAYER_ID)) mapInstance.removeLayer(LAYER_ID); } catch (e) {}
+    layerAttached = false;
   }
 
   /* --------------------------------------------------------------- API */
   function init(map, lng, lat) {
     if (!map || typeof THREE === "undefined") return;
     mapInstance = map;
+    ensureScene();
 
     if (typeof lat === "number" && typeof lng === "number") {
       playerCoords = { lat, lon: lng };
@@ -329,25 +385,8 @@ const BuddyCompanion = (() => {
       buddyCoords = { lat: off.lat, lon: off.lon };
     }
 
-    const layer = {
-      id: LAYER_ID,
-      type: "custom",
-      renderingMode: "3d",
-      onAdd,
-      render,
-    };
-
-    try {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      map.addLayer(layer);
-      // Keep the buddy above plot tiles.
-      setTimeout(() => {
-        try { if (mapInstance.getLayer(LAYER_ID)) mapInstance.moveLayer(LAYER_ID); } catch (e) {}
-      }, 120);
-    } catch (e) {
-      console.warn("[BuddyCompanion] layer mount failed:", e.message);
-    }
-
+    // NOTE: the layer is NOT added here. setActiveBuddy()/refresh() attaches
+    // it once a model is actually mounted (see ensureLayer).
     if (!animFrameId) {
       lastFrame = performance.now();
       animate(lastFrame);
@@ -356,7 +395,7 @@ const BuddyCompanion = (() => {
     try {
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden && mapInstance && mapInstance.triggerRepaint) {
-          mapInstance.triggerRepaint();
+          try { mapInstance.triggerRepaint(); } catch (e) {}
         }
       });
     } catch (e) {}

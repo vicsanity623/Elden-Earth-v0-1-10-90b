@@ -236,6 +236,7 @@ const BuddyPreview = (() => {
       api.setBuddy = () => {};
       api.playAnim = () => {};
       api.resize = () => {};
+      api.capture = () => null;
       return api;
     }
 
@@ -262,6 +263,7 @@ const BuddyPreview = (() => {
       api.setBuddy = () => {};
       api.playAnim = () => {};
       api.resize = () => {};
+      api.capture = () => null;
       return api;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -487,8 +489,14 @@ const BuddyPreview = (() => {
       if (api.disposed) return;
       api.disposed = true;
       cancelAnimationFrame(raf);
+      try { if (api._ro) api._ro.disconnect(); } catch (e) {}
       clearModel();
       try { renderer.dispose(); } catch (e) {}
+      // dispose() does NOT free the WebGL context. Browsers (Safari and the
+      // Android WebView especially) cap live contexts and silently evict the
+      // OLDEST one when you go over — which is MapLibre's map canvas, and
+      // that is exactly what turns the map dark. Always force the loss.
+      try { if (renderer.forceContextLoss) renderer.forceContextLoss(); } catch (e) {}
       try { if (renderer.domElement && renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       } } catch (e) {}
@@ -517,18 +525,38 @@ const BuddyPreview = (() => {
   function loadRaw(modelKey, cb) { fetchRaw(modelKey, cb); }
 
   /* ------------------------------------------------------- thumbnails */
-  // Static PNG of a buddy, rendered offscreen once and cached. Used by the
-  // Buddy Bag grid so a cell looks like the same creature as the map
-  // companion and the detail screen — not like a generic coloured ball.
+  // Static PNG of a buddy, rendered once and cached. Used by the Buddy Bag
+  // grid so a cell looks like the same creature as the map companion and the
+  // detail screen — not like a generic coloured ball.
+  //
+  // IMPORTANT: every THREE.WebGLRenderer is a live browser WebGL context.
+  // Browsers cap those and evict the oldest when the cap is hit (Safari ~8,
+  // iOS WebView similar), and the oldest is almost always MapLibre's map
+  // canvas. So we allocate exactly ONE shared offscreen renderer for all
+  // thumbnails and keep it for the life of the page — never one per image.
   const thumbCache = new Map();
   const thumbQueue = [];
   let thumbBusy = false;
+  let thumbHost = null;
+  let thumbPreview = null;
 
   function thumbKey(b) {
     return [
       b.speciesId, b.hue, b.level,
       JSON.stringify(b.customization || {}),
     ].join("|");
+  }
+
+  function ensureThumbPreview(size) {
+    if (thumbPreview && !thumbPreview.disposed) return thumbPreview;
+    thumbHost = document.createElement("div");
+    thumbHost.style.cssText =
+      "position:fixed;left:-9999px;top:0;width:" + size + "px;height:" + size +
+      "px;opacity:0;pointer-events:none;";
+    document.body.appendChild(thumbHost);
+    // No buddy yet — setBuddy() is called per job.
+    thumbPreview = create(thumbHost, null, { animate: false });
+    return thumbPreview;
   }
 
   function drainThumbQueue() {
@@ -538,48 +566,46 @@ const BuddyPreview = (() => {
     thumbBusy = true;
 
     const { buddy, size, cb } = job;
-    const host = document.createElement("div");
-    host.style.cssText =
-      "position:fixed;left:-9999px;top:0;width:" + size + "px;height:" + size +
-      "px;opacity:0;pointer-events:none;";
-    document.body.appendChild(host);
-
     let settled = false;
-    const finish = (dataUrl) => {
+    const finish = (url) => {
       if (settled) return;
       settled = true;
-      try { host.remove(); } catch (e) {}
       thumbBusy = false;
       setTimeout(drainThumbQueue, 0);
-      try { cb(dataUrl); } catch (e) {}
+      try { cb(url); } catch (e) {}
     };
 
     let preview;
     try {
-      preview = create(host, buddy, {
-        animate: true,
-        anim: "idle",
-        onReady: () => {
-          // Let one frame land so geometry/materials are fully submitted.
-          requestAnimationFrame(() => {
-            const url = preview.capture ? preview.capture() : null;
-            try { preview.dispose(); } catch (e) {}
-            finish(url);
-          });
-        },
-      });
+      preview = ensureThumbPreview(size);
     } catch (e) {
-      try { if (preview) preview.dispose(); } catch (e2) {}
       finish(null);
       return;
     }
 
-    // Never let a wedged model load block the whole queue.
-    setTimeout(() => {
-      const url = preview && preview.capture ? preview.capture() : null;
-      try { if (preview) preview.dispose(); } catch (e) {}
+    let done = false;
+    const settle = (url) => {
+      if (done) return;
+      done = true;
       finish(url);
-    }, 4000);
+    };
+
+    try {
+      preview.setBuddy(buddy, {
+        anim: "idle",
+        // capture() renders synchronously, so there is no need to wait for a
+        // rAF here — and waiting for one is a deadlock risk, because if rAF is
+        // throttled (background tab, offscreen canvas) finish() would never
+        // run and thumbBusy would stay true, wedging the queue forever.
+        onReady: () => settle(preview.capture()),
+      });
+    } catch (e) {
+      settle(null);
+      return;
+    }
+
+    // Never let a wedged model load block the whole queue.
+    setTimeout(() => settle(preview.capture()), 4000);
   }
 
   /**
@@ -605,6 +631,22 @@ const BuddyPreview = (() => {
       drainThumbQueue();
     }
     return null;
+  }
+
+  // Free the shared thumbnail context on page hide so a long session never
+  // holds more contexts than it needs. Re-allocates lazily on next use.
+  if (typeof document !== "undefined") {
+    try {
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) return;
+        if (!thumbPreview) return;
+        try { thumbPreview.dispose(); } catch (e) {}
+        thumbPreview = null;
+        try { if (thumbHost) thumbHost.remove(); } catch (e) {}
+        thumbHost = null;
+        thumbBusy = false;
+      });
+    } catch (e) {}
   }
 
   return {
