@@ -63,3 +63,8 @@ server/
 
 # Internal docs — never publish.
 *.md
+
+# Raw Blender/Mixamo animation exports — inputs to tools/merge-voodoo.js only.
+# The merged output models/Voodoo-Dool-Animated.glb is what ships and what is
+# tracked. Re-export from Blender if these are ever lost.
+models/_src/

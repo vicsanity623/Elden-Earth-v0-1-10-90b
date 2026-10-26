@@ -2,14 +2,14 @@
 /* ==========================================================================
    Merge the Voodoo Doll's split GLB exports into ONE animated GLB.
 
-   Input  (as exported):
-     models/Voodoo-Dool.glb            static mesh (legacy fallback)
-     models/Voodoo-Dool-Idle.glb       rig + mesh + "idle" clip
-     models/Voodoo-Dool-Running.glb    rig + mesh + "running" clip
-                                      ^^^ 7.4 MB of this is a DUPLICATE mesh
+   Input  (models/_src/ — raw Blender/Mixamo exports, NOT shipped):
+     Voodoo-Dool-Idle.glb              rig + mesh + "idle" clip
+     Voodoo-Dool-Running.glb           rig + mesh + "running" clip
+     Voodoo-Dool-Sad-Mad.glb           rig + mesh + "sad" clip
+                                      ^^^ 7.4 MB of each is a DUPLICATE mesh
 
-   Output:
-     models/Voodoo-Dool-Animated.glb   rig + mesh + both clips, ~7.5 MB
+   Output (models/ — the ONLY voodoo file the game loads):
+     Voodoo-Dool-Animated.glb          rig + mesh + all clips, ~7.5 MB
 
    Also strips the dangling external texture URIs (the .jpg files were never
    shipped — they caused "source image could not be decoded" on every load)
@@ -28,6 +28,8 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 const MODELS = path.join(ROOT, "models");
+// Raw Blender/Mixamo exports live here — inputs to this tool, never shipped.
+const SRC = path.join(MODELS, "_src");
 const OUT = path.join(MODELS, "Voodoo-Dool-Animated.glb");
 
 function readGlb(file) {
@@ -74,9 +76,9 @@ const EXTRA_CLIPS = [
 ];
 
 function main() {
-  const baseFile = path.join(MODELS, "Voodoo-Dool-Idle.glb");
+  const baseFile = path.join(SRC, "Voodoo-Dool-Idle.glb");
   const extras = EXTRA_CLIPS
-    .map((e) => ({ ...e, full: path.join(MODELS, e.file) }))
+    .map((e) => ({ ...e, full: path.join(SRC, e.file) }))
     .filter((e) => fs.existsSync(e.full));
 
   if (!fs.existsSync(baseFile)) {
@@ -84,7 +86,7 @@ function main() {
     process.exit(1);
   }
   if (!extras.length) {
-    console.error("No extra animation GLBs found in models/");
+    console.error("No extra animation GLBs found in models/_src/");
     process.exit(1);
   }
 

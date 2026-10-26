@@ -115,7 +115,7 @@ const BuddyData = (() => {
   };
 
   /* ------------------------------------------------------------- Species */
-  // model: "voodoo" -> models/Voodoo-Dool.glb | "robot" -> models/RobotExpressive.glb
+  // model: "voodoo" -> models/Voodoo-Dool-Animated.glb | "robot" -> models/RobotExpressive.glb
   // rarity drives spawn weight + battle XP payout.
   // learnset: [ [level, moveId], ... ] ascending.
   const SPECIES = [

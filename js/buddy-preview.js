@@ -18,8 +18,6 @@ const BuddyPreview = (() => {
     // exported with the name "mixamo.com").
     voodoo: "models/Voodoo-Dool-Animated.glb",
     robot:  "models/RobotExpressive.glb",
-    // Legacy static mesh — fallback if the merged file is missing.
-    voodooStatic: "models/Voodoo-Dool.glb",
   };
 
   // Raw GLB bytes are cached; each preview re-parses them so two previews can
@@ -45,19 +43,7 @@ const BuddyPreview = (() => {
         return r.arrayBuffer();
       })
       .then(buf => { rawCache[path] = buf; cb(null, buf); })
-      .catch(err => {
-        // Graceful fallback: if the merged animated voodoo model is missing,
-        // use the legacy static mesh rather than showing nothing at all.
-        const fallback = (modelKey === "voodoo") ? MODEL_PATHS.voodooStatic : null;
-        if (fallback && fallback !== path) {
-          fetch(fallback)
-            .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
-            .then(buf => { rawCache[path] = buf; cb(null, buf); })
-            .catch(() => cb(err || new Error("model load failed")));
-          return;
-        }
-        cb(err || new Error("model load failed"));
-      });
+      .catch(err => cb(err || new Error("model load failed")));
   }
 
   /* ------------------------------------------------------- Hue tinting */
