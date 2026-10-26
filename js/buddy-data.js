@@ -278,7 +278,10 @@ const BuddyData = (() => {
     wave: "idle", dance: "running", jump: "running", cheer: "running",
     thumbsup: "idle", yes: "idle", no: "idle",
     sitting: "idle", sit: "idle",
-    death: "idle", dead: "idle", faint: "idle", hurt: "idle",
+    // emotion / defeat — the voodoo doll's slow "sad" clip reads perfectly as
+    // a faint or a loss, so those route here instead of freezing the model.
+    death: "sad", dead: "sad", faint: "sad", hurt: "sad", lose: "sad", lost: "sad",
+    sad: "sad", mad: "sad", angry: "sad", upset: "sad", grief: "sad",
     walkjump: "running",
   };
 

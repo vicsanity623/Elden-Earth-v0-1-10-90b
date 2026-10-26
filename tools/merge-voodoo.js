@@ -66,24 +66,39 @@ function writeGlb(file, json, bin) {
 
 const align4 = (n) => (n + 3) & ~3;
 
+// Each extra file contributes exactly ONE clip (Mixamo exports everything as
+// "mixamo.com"), so the clip name has to come from here.
+const EXTRA_CLIPS = [
+  { file: "Voodoo-Dool-Running.glb", name: "running" },
+  { file: "Voodoo-Dool-Sad-Mad.glb", name: "sad" },
+];
+
 function main() {
   const baseFile = path.join(MODELS, "Voodoo-Dool-Idle.glb");
-  const extraFile = path.join(MODELS, "Voodoo-Dool-Running.glb");
-  if (!fs.existsSync(baseFile) || !fs.existsSync(extraFile)) {
-    console.error("Missing input GLBs in models/");
+  const extras = EXTRA_CLIPS
+    .map((e) => ({ ...e, full: path.join(MODELS, e.file) }))
+    .filter((e) => fs.existsSync(e.full));
+
+  if (!fs.existsSync(baseFile)) {
+    console.error("Missing base GLB: " + baseFile);
+    process.exit(1);
+  }
+  if (!extras.length) {
+    console.error("No extra animation GLBs found in models/");
     process.exit(1);
   }
 
   const A = readGlb(baseFile); // base: mesh + skin + idle clip
-  const B = readGlb(extraFile); // extra: running clip
   const json = A.json;
 
   /* ---- 1. rigs must match, or the merged clips will drive nothing ---- */
   const namesA = json.nodes.map((n) => n.name);
-  const namesB = B.json.nodes.map((n) => n.name);
-  if (JSON.stringify(namesA) !== JSON.stringify(namesB)) {
-    console.error("Node trees differ between exports — cannot merge safely.");
-    process.exit(1);
+  for (const e of extras) {
+    const namesB = readGlb(e.full).json.nodes.map((n) => n.name);
+    if (JSON.stringify(namesA) !== JSON.stringify(namesB)) {
+      console.error("Node trees differ between exports (" + e.file + ") — cannot merge safely.");
+      process.exit(1);
+    }
   }
   const nodeByName = {};
   namesA.forEach((n, i) => (nodeByName[n] = i));
@@ -108,17 +123,18 @@ function main() {
   delete json.images;
   delete json.textures;
 
-  /* ---- 3. append only the extra clip's data to the binary chunk ---- */
+  /* ---- 3. append only the extra clips' data to the binary chunk ---- */
   const binParts = [A.bin];
   let binLen = A.bin.length;
 
-  const viewMap = {}; // B bufferView index -> merged bufferView index
-  const accMap = {}; //  B accessor   index -> merged accessor   index
+  const viewMap = new Map(); // "srcIdx:file" -> merged bufferView index
+  const accMap = new Map(); //  "srcIdx:file" -> merged accessor index
 
-  function ensureView(bIdx) {
-    if (viewMap[bIdx] !== undefined) return viewMap[bIdx];
-    const src = B.json.bufferViews[bIdx];
-    const data = B.bin.slice(src.byteOffset, src.byteOffset + src.byteLength);
+  function ensureView(srcJson, srcBin, bIdx, tag) {
+    const key = bIdx + ":" + tag;
+    if (viewMap.has(key)) return viewMap.get(key);
+    const src = srcJson.bufferViews[bIdx];
+    const data = srcBin.slice(src.byteOffset, src.byteOffset + src.byteLength);
 
     // 4-byte align the start of every appended view.
     const pad = align4(binLen) - binLen;
@@ -129,7 +145,7 @@ function main() {
     binLen += data.byteLength;
 
     const newIdx = json.bufferViews.length;
-    viewMap[bIdx] = newIdx;
+    viewMap.set(key, newIdx);
     json.bufferViews.push({
       buffer: 0,
       byteOffset,
@@ -139,12 +155,13 @@ function main() {
     return newIdx;
   }
 
-  function ensureAccessor(bIdx) {
-    if (accMap[bIdx] !== undefined) return accMap[bIdx];
-    const src = B.json.accessors[bIdx];
-    const newView = ensureView(src.bufferView);
+  function ensureAccessor(srcJson, srcBin, bIdx, tag) {
+    const key = bIdx + ":" + tag;
+    if (accMap.has(key)) return accMap.get(key);
+    const src = srcJson.accessors[bIdx];
+    const newView = ensureView(srcJson, srcBin, src.bufferView, tag);
     const newIdx = json.accessors.length;
-    accMap[bIdx] = newIdx;
+    accMap.set(key, newIdx);
     json.accessors.push({
       bufferView: newView,
       byteOffset: src.byteOffset || 0,
@@ -157,38 +174,37 @@ function main() {
     return newIdx;
   }
 
-  const runAnim = B.json.animations && B.json.animations[0];
-  if (!runAnim) {
-    console.error("No animation found in " + extraFile);
-    process.exit(1);
+  const mergedClips = [];
+  for (const e of extras) {
+    const B = readGlb(e.full);
+    const srcAnim = B.json.animations && B.json.animations[0];
+    if (!srcAnim) {
+      console.warn("  ! no animation in " + e.file + " — skipped");
+      continue;
+    }
+    const tag = e.name;
+    mergedClips.push({
+      name: e.name,
+      samplers: srcAnim.samplers.map((s) => ({
+        input: ensureAccessor(B.json, B.bin, s.input, tag),
+        output: ensureAccessor(B.json, B.bin, s.output, tag),
+        interpolation: s.interpolation || "LINEAR",
+      })),
+      channels: srcAnim.channels.map((c) => {
+        const nodeName = B.json.nodes[c.target.node] && B.json.nodes[c.target.node].name;
+        const targetNode = nodeByName[nodeName];
+        if (targetNode === undefined) {
+          throw new Error("Animation targets unknown node: " + nodeName);
+        }
+        return { sampler: c.sampler, target: { node: targetNode, path: c.target.path } };
+      }),
+    });
   }
-
-  const merged = {
-    name: "running",
-    samplers: runAnim.samplers.map((s) => ({
-      input: ensureAccessor(s.input),
-      output: ensureAccessor(s.output),
-      interpolation: s.interpolation || "LINEAR",
-    })),
-    channels: runAnim.channels.map((c) => {
-      const nodeName = B.json.nodes[c.target.node] && B.json.nodes[c.target.node].name;
-      const targetNode = nodeByName[nodeName];
-      if (targetNode === undefined) {
-        throw new Error("Animation targets unknown node: " + nodeName);
-      }
-      return {
-        sampler: c.sampler,
-        target: { node: targetNode, path: c.target.path },
-      };
-    }),
-  };
 
   /* ---- 4. name the clips so runtime can tell them apart ---- */
-  if (!json.animations || !json.animations.length) {
-    json.animations = [];
-  }
+  if (!json.animations || !json.animations.length) json.animations = [];
   json.animations[0].name = "idle";
-  json.animations.push(merged);
+  mergedClips.forEach((c) => json.animations.push(c));
 
   /* ---- 5. finalise ---- */
   if (!json.buffers || !json.buffers.length) json.buffers = [{ byteLength: 0 }];
@@ -197,18 +213,14 @@ function main() {
   const mergedBin = Buffer.concat(binParts);
   const size = writeGlb(OUT, json, mergedBin);
 
-  const animBytes = merged.samplers.reduce((n, s) => {
-    return n + (json.accessors[s.input].count * 8);
-  }, 0);
-
   console.log("Wrote " + path.relative(ROOT, OUT) + "  (" + (size / 1024 / 1024).toFixed(2) + " MB)");
   console.log("  clips     :", json.animations.map((a) => a.name + " (" + a.channels.length + " ch)").join(", "));
   console.log("  nodes     :", json.nodes.length, "| skins:", (json.skins || []).length);
   console.log("  materials :", (json.materials || []).map((m) => m.name).join(", "), "(textures stripped)");
   console.log("  images    :", (json.images || []).length, "(external URIs removed)");
   console.log("");
-  console.log("Before: 2 x ~7.4 MB  = 14.9 MB of downloads");
-  console.log("After : 1 x " + (size / 1024 / 1024).toFixed(2) + " MB with both animations");
+  console.log("Before: " + (extras.length + 1) + " x ~7.4 MB  = " + ((extras.length + 1) * 7.4).toFixed(1) + " MB of downloads");
+  console.log("After : 1 x " + (size / 1024 / 1024).toFixed(2) + " MB with " + json.animations.length + " animations");
 }
 
 main();
