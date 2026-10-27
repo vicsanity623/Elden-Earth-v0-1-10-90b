@@ -1295,6 +1295,53 @@
   </div>
 </div>
 
+<!-- ===================== PLOT RUSH (monthly challenge) =====================
+     Second community event, entirely separate from the weekly Global
+     Challenge so the two can be live at the same time. Rounds open on the
+     1st and the 15th (UTC) and run for 7 days. -->
+<div id="plot-challenge-modal" class="modal hidden">
+  <div class="modal-card global-event-card-modal">
+    <button id="mc-close-btn" class="close-btn">✕</button>
+    <div class="global-event-header">
+      <div class="global-event-icon">🏗️</div>
+      <h2 id="mc-title">Plot Rush</h2>
+      <p class="modal-sub" id="mc-sub">Buy plots — help the Realm claim 1,000!</p>
+    </div>
+
+    <div class="ge-progress-wrap">
+      <div class="ge-progress-meta"><span>Realm Progress</span><strong id="mc-pct">0.0%</strong></div>
+      <div class="ge-progress-track"><div class="ge-progress-fill" id="mc-progress-bar"></div></div>
+      <div class="ge-progress-nums">
+        <span><strong id="mc-total">0</strong> plots claimed</span>
+        <span>Goal <strong id="mc-goal">1,000</strong> plots</span>
+      </div>
+      <div class="ge-status" id="mc-status">Keep buying plots — every purchase counts!</div>
+      <div class="ge-countdown-row">⏱️ Time Remaining <strong id="mc-countdown">—</strong></div>
+    </div>
+
+    <div class="ge-my-stats">
+      <div class="ge-stat"><span>Your Points</span><strong id="mc-my-points">0</strong></div>
+      <div class="ge-stat"><span>Your Rank</span><strong id="mc-my-rank">—</strong></div>
+      <div class="ge-stat"><span>Pool Share</span><strong id="mc-my-share">0 EB</strong></div>
+    </div>
+
+    <div class="ge-pool-note">
+      Bonus pool = <strong>100,000 EB</strong> split across all participants.
+      Buy plots to climb the board.
+    </div>
+
+    <div id="mc-rewards"></div>
+
+    <div class="ge-top10-header">🏆 LEADERBOARD — TOP CONTRIBUTORS</div>
+    <div id="mc-top" class="ge-top10"></div>
+
+    <div class="modal-actions">
+      <button id="mc-claim-btn" class="btn btn-primary hidden">Claim Rewards</button>
+      <button class="btn btn-secondary" data-close="plot-challenge-modal">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Global Challenge rewards popup: rank + contribution + plots + EB, one CLAIM -->
 <div id="event-rewards-modal" class="modal hidden">
   <div class="modal-card booster-card">
@@ -2053,6 +2100,7 @@
 <script defer src="js/server-anticheat.js"></script>
 <script defer src="js/plot-ascension.js"></script>
 <script defer src="js/global-event.js"></script>
+<script defer src="js/monthly-challenge.js"></script>
 <script defer src="js/cashout.js"></script>
 <script defer src="js/profanity-filter.js"></script>
 <script defer src="js/pet.js"></script>

@@ -3423,17 +3423,26 @@
           </div>`;
       }
 
+      // Plot Rush (monthly) — a second community event with its own schedule.
+      // It pins to "Live now" while its round is open and drops to "Upcoming"
+      // with a countdown between rounds, and it can sit alongside the weekly
+      // Global Challenge whenever their windows overlap.
+      const monthlyRow = (typeof PlotChallenge !== "undefined" && PlotChallenge.hubRow)
+        ? PlotChallenge.hubRow() : "";
+      const monthlyLive = (typeof PlotChallenge !== "undefined" && PlotChallenge.isLive)
+        ? PlotChallenge.isLive() : false;
+
       if (challengeLive || challengePending) {
         if (challengePending) {
           // Ended but not settled: keep everything actionable in one list.
-          liveList.innerHTML = challengeRow + dailyBtn + poolBtn;
-          upList.innerHTML = "";
-          if (upLabel) upLabel.classList.add("hidden");
+          liveList.innerHTML = challengeRow + (monthlyLive ? monthlyRow : "") + dailyBtn + poolBtn;
+          upList.innerHTML = monthlyLive ? "" : monthlyRow;
+          if (upLabel) upLabel.classList.toggle("hidden", monthlyLive);
         } else {
-          liveList.innerHTML = challengeRow;
-          upList.innerHTML = dailyBtn + poolBtn;
+          liveList.innerHTML = challengeRow + (monthlyLive ? monthlyRow : "");
+          upList.innerHTML = dailyBtn + poolBtn + (monthlyLive ? "" : monthlyRow);
           if (upLabel) {
-            upLabel.textContent = "More events";
+            upLabel.textContent = monthlyLive ? "More events" : "Upcoming";
             upLabel.classList.remove("hidden");
           }
         }
@@ -3442,10 +3451,10 @@
           liveLabel.classList.remove("hidden");
         }
       } else {
-        liveList.innerHTML = dailyBtn + poolBtn;
-        upList.innerHTML = challengeRow;
+        liveList.innerHTML = (monthlyLive ? monthlyRow : "") + dailyBtn + poolBtn;
+        upList.innerHTML = challengeRow + (monthlyLive ? "" : monthlyRow);
         if (liveLabel) {
-          liveLabel.textContent = "Available now";
+          liveLabel.textContent = monthlyLive ? "Live now" : "Available now";
           liveLabel.classList.remove("hidden");
         }
         if (upLabel) {
@@ -3469,6 +3478,11 @@
         renderDailyQuests();
         if (typeof Achievements !== "undefined") Achievements.renderAll();
         openModal("calendar-modal");
+      } else if (action === "monthly") {
+        closeModal("events-hub-modal");
+        if (typeof PlotChallenge !== "undefined" && PlotChallenge.openModal) {
+          PlotChallenge.openModal();
+        }
       } else if (action === "pool") {
         closeModal("events-hub-modal");
         // Module is WeeklyPool (see js/pool.js) — the old name `Pool` silently
@@ -5420,6 +5434,18 @@
     if (typeof AgeGate !== "undefined") AgeGate.init();
     if (typeof Achievements !== "undefined") Achievements.init();
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
+    // Plot Rush (monthly challenge) — separate doc/schedule from the weekly
+    // Global Challenge, so the two can be live at the same time.
+    if (typeof PlotChallenge !== "undefined") {
+      try {
+        PlotChallenge.init();
+        window.addEventListener("plotChallengeUpdated", () => {
+          try { renderEventsHub(); } catch (e) {}
+        });
+      } catch (e) {
+        console.warn("[PlotChallenge] init failed:", e);
+      }
+    }
     el("locate-btn")?.addEventListener("click", startLocating);
     el("retry-location-btn")?.addEventListener("click", startLocating);
 
