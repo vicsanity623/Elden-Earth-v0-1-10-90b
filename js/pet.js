@@ -112,6 +112,18 @@ const CompanionPet = (() => {
         const state = Store.get();
         if (!state.pet || !state.pet.unlocked) return;
 
+        // 🛡️ ONE CREATURE ON THE MAP: when the player has an active buddy the
+        // BuddyCompanion owns the map visual — otherwise the same creature is
+        // drawn twice (at two different scales and offsets). The pet keeps its
+        // mood / berries / diamond-fetch gameplay; it just stops drawing itself
+        // while a buddy is out.
+        try {
+          if (typeof BuddySystem !== "undefined" && typeof BuddySystem.activeBuddy === "function"
+              && BuddySystem.activeBuddy()) {
+            return;
+          }
+        } catch (e) {}
+
         const modelCoord = mapboxgl.MercatorCoordinate.fromLngLat(
           [petCoords.lng, petCoords.lat],
           0

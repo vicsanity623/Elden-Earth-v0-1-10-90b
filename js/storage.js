@@ -73,6 +73,18 @@ const Store = (() => {
       extractor: { built: false, level: 1, lastHarvest: Date.now(), stored: 0 },
       pet: { unlocked: false, nickname: "Buddy", mood: 100, lastFedAt: 0, totalFetched: 0, lastFetchedResetDate: null },
       berries: 0,
+      // Buddy System (collection + wild spawns + battle progress) and the
+      // trainer XP/level. Present in the default shape so they are always part
+      // of the sync payload — otherwise a fresh device never sends them and
+      // the cloud copy is never restored on login.
+      buddy: {
+        bag: [], activeUid: null, spawns: [], distCredit: 0, spawnsToday: 0,
+        spawnDate: null, lastPoint: null, recentPoints: [],
+        creditWindowStart: 0, creditWindowMeters: 0,
+        totalSpawns: 0, totalBattles: 0, totalWins: 0, totalTamed: 0, totalFeasted: 0,
+        starterChosen: false, lastRegenAt: 0,
+      },
+      playerXP: { xp: 0, level: 1, totalXp: 0, lastGrantAt: 0 },
       lastTick: Date.now(),
       createdAt: Date.now(),
       antiCheatStrikes: 0,
@@ -546,6 +558,9 @@ const Store = (() => {
                     if (cloudData.lifetimeRent !== undefined) state.lifetimeRent = cloudData.lifetimeRent;
                     if (cloudData.extractor) state.extractor = cloudData.extractor;
                     if (cloudData.pet) state.pet = cloudData.pet;
+                    if (cloudData.buddy) state.buddy = cloudData.buddy;
+                    if (cloudData.playerXP) state.playerXP = cloudData.playerXP;
+                    if (cloudData.berries !== undefined) state.berries = cloudData.berries;
                     if (cloudData.calendar) state.calendar = cloudData.calendar;
                   }
                 }
@@ -1250,6 +1265,9 @@ let lastConflictCheck = {};
           if (cloudData.lifetimeRent !== undefined) state.lifetimeRent = cloudData.lifetimeRent;
           if (cloudData.extractor) state.extractor = cloudData.extractor;
           if (cloudData.pet) state.pet = cloudData.pet;
+          if (cloudData.buddy) state.buddy = cloudData.buddy;
+          if (cloudData.playerXP) state.playerXP = cloudData.playerXP;
+          if (cloudData.berries !== undefined) state.berries = cloudData.berries;
           if (cloudData.calendar) state.calendar = cloudData.calendar;
         }
       }
