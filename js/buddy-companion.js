@@ -14,6 +14,30 @@ const BuddyCompanion = (() => {
   const FOLLOW_OFFSET_M = 4.2;      // metres from the player
   const LERP = 0.12;
 
+  // =====================================================================
+  //  HOW BIG THE BUDDY IS ON THE MAP  <- tune this number
+  // =====================================================================
+  // The model is first normalised to NORMALISE_UNITS tall (see
+  // setActiveBuddy), then drawn at this many METRES in world space. So the
+  // buddy's on-screen height is roughly:
+  //
+  //     NORMALISE_UNITS x BUDDY_WORLD_SCALE   metres
+  //
+  // For reference, the player avatar draws at ~4.8 and the companion pet at
+  // 1.2, which is why the buddy looked tiny next to them.
+  //
+  //   1.25  ->  small (previous default)
+  //   2.20  ->  roughly avatar-adjacent
+  //   3.20  ->  chunky, clearly readable at walking zoom
+  //   4.80  ->  matches the player avatar exactly
+  //
+  // Change it, hard-reload the page, look at the map. Repeat.
+  const BUDDY_WORLD_SCALE = 2.6;
+
+  // Height the model is normalised to before the world scale is applied.
+  // Usually leave this alone — BUDDY_WORLD_SCALE is the knob you want.
+  const NORMALISE_UNITS = 1.75;
+
   let mapInstance = null;
   let scene = null, camera = null, renderer = null;
   let holder = null;                // rotates/positions the model
@@ -172,7 +196,7 @@ const BuddyCompanion = (() => {
         box.getSize(size);
         box.getCenter(center);
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        const scale = 1.75 / maxDim;
+        const scale = NORMALISE_UNITS / maxDim;
         modelRoot.scale.setScalar(scale);
         modelRoot.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
@@ -274,7 +298,8 @@ const BuddyCompanion = (() => {
 
     const modelCoord = mapboxgl.MercatorCoordinate.fromLngLat([lng, lat], 0);
 
-    const scale = modelCoord.meterInMercatorCoordinateUnits() * 1.25;
+    // World size — see BUDDY_WORLD_SCALE at the top of the file.
+    const scale = modelCoord.meterInMercatorCoordinateUnits() * BUDDY_WORLD_SCALE;
     scaleVector.set(scale, -scale, scale);
 
     projMatrix.fromArray(matrix);
