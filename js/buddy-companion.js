@@ -262,10 +262,13 @@ const BuddyCompanion = (() => {
     if (document.hidden) return;
     if (!modelRoot && cosmeticNodes.length === 0) return;
 
-    const modelCoord = mapboxgl.MercatorCoordinate.fromLngLat(
-      [buddyCoords.lng, buddyCoords.lat],
-      0
-    );
+    // Never hand MapLibre a non-finite coordinate: a NaN here throws inside
+    // the map's render pass and takes the whole frame down with it.
+    const lng = buddyCoords.lng;
+    const lat = buddyCoords.lat;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+    const modelCoord = mapboxgl.MercatorCoordinate.fromLngLat([lng, lat], 0);
 
     const scale = modelCoord.meterInMercatorCoordinateUnits() * 1.25;
     scaleVector.set(scale, -scale, scale);
@@ -292,7 +295,11 @@ const BuddyCompanion = (() => {
     // companion pet. Offset is in degrees, derived from ~metres.
     const dLat = FOLLOW_OFFSET_M / 111320;
     const dLon = FOLLOW_OFFSET_M / (111320 * Math.cos(playerCoords.lat * Math.PI / 180));
-    return { lat: playerCoords.lat + dLat * 0.55, lon: playerCoords.lon + dLon };
+    // NOTE: returns `lng`, matching playerCoords/buddyCoords. This used to
+    // return `lon`, so every consumer read `buddyCoords.lng` and got undefined
+    // — MapLibre then threw "Invalid LngLat object: (NaN, ...)" on every frame
+    // and the whole map render pass broke.
+    return { lat: playerCoords.lat + dLat * 0.55, lng: playerCoords.lon + dLon };
   }
 
   function animate(now) {
@@ -304,13 +311,13 @@ const BuddyCompanion = (() => {
 
     const target = offsetFromPlayer();
     const dLat = target.lat - buddyCoords.lat;
-    const dLon = target.lon - buddyCoords.lon;
+    const dLon = target.lng - buddyCoords.lng;
     const dist = Math.hypot(dLat, dLon);
 
     if (dist > 0.0000025) {
       moving = true;
       buddyCoords.lat += dLat * LERP;
-      buddyCoords.lon += dLon * LERP;
+      buddyCoords.lng += dLon * LERP;
 
       targetHeading = Math.atan2(dLon, dLat);
       let diff = targetHeading - heading;
@@ -396,7 +403,7 @@ const BuddyCompanion = (() => {
     if (typeof lat === "number" && typeof lng === "number") {
       playerCoords = { lat, lon: lng };
       const off = offsetFromPlayer();
-      buddyCoords = { lat: off.lat, lon: off.lon };
+      buddyCoords = { lat: off.lat, lng: off.lng };
     }
 
     // NOTE: the layer is NOT added here. setActiveBuddy()/refresh() attaches
@@ -426,7 +433,7 @@ const BuddyCompanion = (() => {
     // First fix: snap the buddy to its slot instead of animating across the map.
     if (!prevLat && !prevLon) {
       const off = offsetFromPlayer();
-      buddyCoords = { lat: off.lat, lon: off.lon };
+      buddyCoords = { lat: off.lat, lng: off.lng };
     }
   }
 

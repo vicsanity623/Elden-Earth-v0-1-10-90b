@@ -363,9 +363,14 @@ const CompanionPet = (() => {
   function loadPetModel() {
     const loader = new THREE.GLTFLoader();
     const look = getPetLook();
+    // Versioned URL — the service worker caches .glb cache-first, so an
+    // unversioned path keeps serving the previous model forever.
+    const loadPath = (typeof BuddyPreview !== "undefined" && BuddyPreview.modelUrl)
+      ? BuddyPreview.modelUrl(look.path)
+      : look.path;
 
     loader.load(
-      look.path,
+      loadPath,
       (gltf) => {
         // Map layer may not be mounted (or already torn down) — never let an
         // async model load throw into the window.

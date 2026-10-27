@@ -17,9 +17,9 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v81.00: Voodoo doll uses the static levitating pose with procedural hover
-// + forward lean — the Mixamo walk/run cycles are gone entirely.
-const CACHE_NAME = 'elden-EARTH-v81.00';
+// v82.00: Fix companion render crash (lng/lon mismatch -> NaN LngLat) and
+// cache-bust .glb URLs so a rebuilt model is never served from the SW cache.
+const CACHE_NAME = 'elden-EARTH-v82.00';
 
 const ASSETS_TO_CACHE = [
     './',

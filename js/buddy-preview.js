@@ -20,6 +20,16 @@ const BuddyPreview = (() => {
     robot:  "models/RobotExpressive.glb",
   };
 
+  // Bump whenever a shipped .glb changes. The service worker serves binary
+  // assets CACHE-FIRST, so without this the browser keeps handing back the old
+  // model and you see stale animations no matter how many times you rebuild.
+  const MODEL_V = 4;
+
+  function modelUrl(path) {
+    if (!path) return path;
+    return path + (path.indexOf("?") >= 0 ? "&" : "?") + "v=" + MODEL_V;
+  }
+
   // Raw GLB bytes are cached; each preview re-parses them so two previews can
   // exist at once without sharing (and fighting over) one material set.
   const rawCache = {};
@@ -34,7 +44,7 @@ const BuddyPreview = (() => {
   }
 
   function fetchRaw(modelKey, cb) {
-    const path = MODEL_PATHS[modelKey] || MODEL_PATHS.robot;
+    const path = modelUrl(MODEL_PATHS[modelKey] || MODEL_PATHS.robot);
     if (rawCache[path]) { cb(null, rawCache[path]); return; }
 
     fetch(path)
@@ -767,6 +777,8 @@ const BuddyPreview = (() => {
     create,
     thumbnail,
     MODEL_PATHS,
+    MODEL_V,
+    modelUrl,
     loadRaw,
     tintObject,
     buildCosmetics,
