@@ -81,8 +81,9 @@ const PlayerXP = (() => {
     if (px.level >= max) px.xp = 0;
 
     if (leveledTo) {
+      const fromLevel = lastLevel;
       lastLevel = leveledTo;
-      toastLevelUp(leveledTo);
+      toastLevelUp(leveledTo, fromLevel);
     }
 
     renderHUD();
@@ -243,6 +244,13 @@ const PlayerXP = (() => {
 }
 .px-levelup .px-lu-level{font-size:38px; font-weight:900; line-height:1.1; margin:2px 0;}
 .px-levelup .px-lu-title{font-size:13px; color:#e9d5ff;}
+.px-levelup .px-lu-rewards{
+  display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:10px;
+}
+.px-levelup .px-lu-rewards span{
+  font-size:11px; font-weight:800; padding:4px 9px; border-radius:99px;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.2); color:#fff;
+}
 @keyframes pxLevelUp{
   0%{opacity:0; transform:translate(-50%,-50%) scale(.86);}
   12%{opacity:1; transform:translate(-50%,-50%) scale(1);}
@@ -318,18 +326,83 @@ const PlayerXP = (() => {
     if (fillEl) fillEl.style.width = (p.maxed ? 100 : p.pct) + "%";
   }
 
-  function toastLevelUp(level) {
+  /**
+   * Claim the level-up payouts from the server, then show what landed.
+   * EB / diamonds / RP are server-owned so the grant has to be requested —
+   * the response is mirrored back into the local save for an instant UI.
+   */
+  function claimLevelRewards(fromLevel, toLevel) {
+    const reward = (typeof BuddyData !== "undefined" && BuddyData.trainerLevelRewards)
+      ? BuddyData.trainerLevelRewards(fromLevel, toLevel)
+      : { berries: 0, eb: 0, diamonds: 0, rp: 0 };
+
+    let settled = false;
+    const finish = (serverReward) => {
+      if (settled) return;
+      settled = true;
+      const r = serverReward || reward;
+      // Optimistic mirror — the next syncSafeState response overwrites these
+      // with the authoritative server values anyway.
+      try {
+        const state = (typeof Store !== "undefined" && Store.get) ? Store.get() : null;
+        if (state) {
+          if (r.berries) state.berries = (state.berries || 0) + r.berries;
+          if (r.eb) state.eb = (state.eb || 0) + r.eb;
+          if (r.diamonds) state.diamonds = (state.diamonds || 0) + r.diamonds;
+          try { if (typeof Store !== "undefined" && Store.save) Store.save(true); } catch (e) {}
+          try { if (typeof updateTopbar === "function") updateTopbar(); } catch (e) {}
+        }
+      } catch (e) {}
+      try { if (typeof BuddySystem !== "undefined" && BuddySystem.renderHudBadge) BuddySystem.renderHudBadge(); } catch (e) {}
+      return r;
+    };
+
+    // Fire the server claim; fall back to the local table if it is unreachable
+    // so the reward still reads correctly in the UI.
+    try {
+      if (typeof firebase !== "undefined" && firebase.functions) {
+        const fn = firebase.functions().httpsCallable("buddyClaimLevelRewards");
+        fn({ level: toLevel })
+          .then((res) => {
+            const d = (res && res.data) || {};
+            if (d.ok) finish({ berries: d.berries || 0, eb: d.eb || 0, diamonds: d.diamonds || 0, rp: d.rp || 0 });
+            else finish(reward);
+          })
+          .catch(() => finish(reward));
+      } else {
+        finish(reward);
+      }
+    } catch (e) {
+      finish(reward);
+    }
+
+    return reward;
+  }
+
+  function rewardChips(r) {
+    const bits = [];
+    if (r.berries) bits.push(`🍓 ${r.berries}`);
+    if (r.eb) bits.push(`🪙 ${r.eb} EB`);
+    if (r.diamonds) bits.push(`💎 ${r.diamonds}`);
+    if (r.rp) bits.push(`⭐ ${r.rp} RP`);
+    return bits;
+  }
+
+  function toastLevelUp(level, fromLevel) {
     try {
       const p = progress();
+      const r = claimLevelRewards(fromLevel || level - 1, level);
+      const chips = rewardChips(r);
       const el = document.createElement("div");
       el.className = "px-levelup";
       el.innerHTML = `
         <div class="px-lu-kicker">Trainer Level Up</div>
         <div class="px-lu-level">Lv. ${level}</div>
         <div class="px-lu-title">${p.title}</div>
+        ${chips.length ? `<div class="px-lu-rewards">${chips.map(c => `<span>${c}</span>`).join("")}</div>` : ""}
       `;
       document.body.appendChild(el);
-      setTimeout(() => { try { el.remove(); } catch (e) {} }, 2800);
+      setTimeout(() => { try { el.remove(); } catch (e) {} }, 3200);
     } catch (e) {}
   }
 
@@ -368,5 +441,5 @@ const PlayerXP = (() => {
     } catch (e) {}
   }
 
-  return { init, addXP, progress, getState, renderHUD, setHidden, XP };
+  return { init, addXP, progress, getState, renderHUD, setHidden, claimLevelRewards, XP };
 })();

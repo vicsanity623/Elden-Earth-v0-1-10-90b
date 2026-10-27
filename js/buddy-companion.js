@@ -184,7 +184,11 @@ const BuddyCompanion = (() => {
 
         holder.add(modelRoot);
 
-        cosmeticNodes = BuddyPreview.buildCosmetics(holder, paint, inst.customization || {}, 1);
+        // Parent under the MODEL (not the holder) so the pieces follow the
+        // levitation bob and the forward lean instead of floating in mid-air.
+        cosmeticNodes = BuddyPreview.attachCosmetics(
+          modelRoot, scale, paint, inst.customization || {}, size.y * scale
+        ) || [];
 
         if (gltf.animations && gltf.animations.length) {
           mixer = new THREE.AnimationMixer(modelRoot);

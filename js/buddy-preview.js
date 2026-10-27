@@ -116,44 +116,60 @@ const BuddyPreview = (() => {
   // Simple additive geometry decorations driven by the buddy's unlocked
   // customization slots. Kept primitive on purpose — cheap to build and
   // dispose, and reads clearly at preview scale.
-  function buildCosmetics(group, hueOrHsl, customization, size) {
+  /**
+   * Cosmetic pieces, positioned against the REAL model bounding box.
+   *
+   * `fitHeight` is the model's height in fitted units (0 at the feet). Every
+   * offset below is a fraction of that, so the eyes land on the head whatever
+   * the model's proportions are — the old version used a hardcoded 1.6 and
+   * dropped the dots in mid-air beside the doll.
+   */
+  function buildCosmetics(group, hueOrHsl, customization, size, fitHeight) {
     const clean = [];
     const col = resolveColor(hueOrHsl);
     const S = size || 1;
+    const H = (typeof fitHeight === "number" && fitHeight > 0) ? fitHeight : 1.85;
 
     function add(mesh) { group.add(mesh); clean.push(mesh); return mesh; }
 
     const c = customization || {};
-    const height = 1.6 * S;
+
+    // Chibi proportions: the head is the top third of the doll and is very
+    // wide. Everything is anchored off these two numbers.
+    const HEAD_Y = H * 0.78;
+    const HEAD_R = H * 0.19;
+    const FACE_Z = HEAD_R * 0.72;
 
     if (c.eyes) {
       [-1, 1].forEach(side => {
-        const g = new THREE.SphereGeometry(0.055 * S, 10, 10);
-        const m = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95 });
+        const g = new THREE.SphereGeometry(H * 0.032 * S, 12, 12);
+        const m = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.96 });
         const eye = new THREE.Mesh(g, m);
-        eye.position.set(side * 0.13 * S, height * 0.78, 0.22 * S);
+        // Sits ON the head, on the face side — roughly where the button eye and
+        // the stitched X are on the voodoo doll.
+        eye.position.set(side * HEAD_R * 0.42 * S, HEAD_Y * S, FACE_Z * S);
         add(eye);
       });
     }
 
     if (c.aura) {
       const strong = c.aura === "aura_b" || c.aura === "aura_c" || c.aura === "ascendant";
-      const g = new THREE.TorusGeometry((strong ? 0.72 : 0.52) * S, 0.035 * S, 10, 42);
+      const g = new THREE.TorusGeometry((strong ? 0.42 : 0.31) * H * S, 0.019 * H * S, 10, 42);
       const m = new THREE.MeshBasicMaterial({
         color: col, transparent: true, opacity: strong ? 0.55 : 0.32,
         blending: THREE.AdditiveBlending, depthWrite: false,
       });
       const ring = new THREE.Mesh(g, m);
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = height * 0.45;
+      ring.position.y = H * 0.46 * S;
       ring.userData.spin = 0.6;
       add(ring);
 
       if (strong) {
-        const g2 = new THREE.TorusGeometry(0.92 * S, 0.022 * S, 8, 40);
+        const g2 = new THREE.TorusGeometry(0.55 * H * S, 0.012 * H * S, 8, 40);
         const ring2 = new THREE.Mesh(g2, m.clone());
         ring2.rotation.x = Math.PI / 2;
-        ring2.position.y = height * 0.22;
+        ring2.position.y = H * 0.24 * S;
         ring2.userData.spin = -0.4;
         add(ring2);
       }
@@ -161,44 +177,46 @@ const BuddyPreview = (() => {
 
     if (c.trail) {
       const ember = c.trail === "trail_b";
-      for (let i = 0; i < (ember ? 10 : 6); i++) {
-        const g = new THREE.SphereGeometry((ember ? 0.045 : 0.03) * S, 8, 8);
+      const n = ember ? 10 : 6;
+      for (let i = 0; i < n; i++) {
+        const g = new THREE.SphereGeometry((ember ? 0.026 : 0.017) * H * S, 8, 8);
         const m = new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: ember ? 0.6 : 0.38,
           blending: THREE.AdditiveBlending, depthWrite: false,
         });
-        const p = new THREE.Mesh(g, m);
-        const a = (i / (ember ? 10 : 6)) * Math.PI * 2;
-        p.position.set(Math.cos(a) * 0.6 * S, 0.12 * S + i * 0.045 * S, Math.sin(a) * 0.6 * S);
-        p.userData.orbit = { a, r: 0.6 * S, speed: 0.5 + i * 0.06 };
-        add(p);
+        const pt = new THREE.Mesh(g, m);
+        const a = (i / n) * Math.PI * 2;
+        const r = 0.34 * H * S;
+        pt.position.set(Math.cos(a) * r, H * 0.1 * S + i * 0.026 * H * S, Math.sin(a) * r);
+        pt.userData.orbit = { a, r, speed: 0.5 + i * 0.06 };
+        add(pt);
       }
     }
 
     if (c.hat) {
       const helm = c.hat === "hat_b";
-      const g = new THREE.ConeGeometry(0.26 * S, (helm ? 0.34 : 0.26) * S, 12);
+      const g = new THREE.ConeGeometry(HEAD_R * 0.78 * S, H * (helm ? 0.19 : 0.15) * S, 12);
       const m = new THREE.MeshStandardMaterial({
         color: helm ? 0x8b9bb4 : 0x3d4a63, metalness: helm ? 0.75 : 0.3, roughness: 0.42,
         emissive: col, emissiveIntensity: 0.18,
       });
       const hat = new THREE.Mesh(g, m);
-      hat.position.y = height * 0.92;
+      hat.position.y = (HEAD_Y + HEAD_R * 0.72) * S;
       add(hat);
     }
 
     if (c.pattern) {
       for (let i = 0; i < 5; i++) {
-        const g = new THREE.TorusGeometry(0.07 * S, 0.012 * S, 6, 16);
+        const g = new THREE.TorusGeometry(H * 0.04 * S, H * 0.007 * S, 6, 16);
         const m = new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: 0.55,
           blending: THREE.AdditiveBlending, depthWrite: false,
         });
         const rune = new THREE.Mesh(g, m);
         rune.position.set(
-          (Math.random() - 0.5) * 0.5 * S,
-          height * (0.32 + Math.random() * 0.32),
-          0.3 * S
+          (Math.random() - 0.5) * HEAD_R * 1.5 * S,
+          H * (0.34 + Math.random() * 0.3) * S,
+          HEAD_R * 0.85 * S
         );
         rune.rotation.z = Math.random() * Math.PI;
         add(rune);
@@ -207,13 +225,13 @@ const BuddyPreview = (() => {
 
     if (c.wings) {
       [-1, 1].forEach(side => {
-        const g = new THREE.PlaneGeometry(0.9 * S, 0.62 * S);
+        const g = new THREE.PlaneGeometry(H * 0.5 * S, H * 0.34 * S);
         const m = new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: 0.32,
           blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
         });
         const wing = new THREE.Mesh(g, m);
-        wing.position.set(side * 0.62 * S, height * 0.62, -0.18 * S);
+        wing.position.set(side * H * 0.34 * S, H * 0.58 * S, -H * 0.1 * S);
         wing.rotation.set(0, side * -0.55, side * 0.32);
         wing.userData.flutter = side;
         add(wing);
@@ -222,29 +240,50 @@ const BuddyPreview = (() => {
 
     if (c.crown) {
       const band = new THREE.Mesh(
-        new THREE.TorusGeometry(0.24 * S, 0.035 * S, 8, 22),
+        new THREE.TorusGeometry(HEAD_R * 0.72 * S, H * 0.019 * S, 8, 22),
         new THREE.MeshStandardMaterial({
           color: 0xfbbf24, metalness: 0.9, roughness: 0.25,
           emissive: col, emissiveIntensity: 0.35,
         })
       );
       band.rotation.x = Math.PI / 2;
-      band.position.y = height * 0.98;
+      band.position.y = (HEAD_Y + HEAD_R * 0.86) * S;
       add(band);
       for (let i = 0; i < 6; i++) {
         const spike = new THREE.Mesh(
-          new THREE.ConeGeometry(0.035 * S, 0.13 * S, 6),
+          new THREE.ConeGeometry(H * 0.019 * S, H * 0.07 * S, 6),
           new THREE.MeshStandardMaterial({
             color: 0xfbbf24, metalness: 0.9, roughness: 0.25, emissive: col, emissiveIntensity: 0.4,
           })
         );
         const a = (i / 6) * Math.PI * 2;
-        spike.position.set(Math.cos(a) * 0.24 * S, height * 1.06, Math.sin(a) * 0.24 * S);
+        spike.position.set(
+          Math.cos(a) * HEAD_R * 0.72 * S,
+          (HEAD_Y + HEAD_R * 0.98) * S,
+          Math.sin(a) * HEAD_R * 0.72 * S
+        );
         add(spike);
       }
     }
 
     return clean;
+  }
+
+  /**
+   * Attach cosmetics so they INHERIT the model's motion.
+   *
+   * The model root carries a fit scale, so the cosmetic group cancels that out
+   * and is positioned in fitted units. Critically it is parented under the
+   * MODEL, not the holder — parenting under the holder while applyHover()
+   * moves the model is what left the eyes/aura frozen in mid-air as the doll
+   * bobbed and leaned.
+   */
+  function attachCosmetics(modelRoot, fitScale, paint, customization, fitHeight) {
+    if (!modelRoot) return [];
+    const cosRoot = new THREE.Group();
+    cosRoot.scale.setScalar(1 / (fitScale || 1));
+    modelRoot.add(cosRoot);
+    return buildCosmetics(cosRoot, paint, customization, 1, fitHeight);
   }
 
   /* -------------------------------------------------------- Preview ctor */
@@ -452,9 +491,11 @@ const BuddyPreview = (() => {
 
           holder.add(modelRoot);
 
-          // Cosmetics from the instance's unlocked slots.
+          // Cosmetics parent under the MODEL so they bob and lean with it, and
+          // are scaled against its real fitted height so they land on the body
+          // instead of floating in mid-air beside it.
           const custom = nextBuddy.customization || {};
-          cosmeticNodes = buildCosmetics(holder, hue, custom, 1);
+          cosmeticNodes = attachCosmetics(modelRoot, scale, paint, custom, size.y * scale);
 
           if (gltf.animations && gltf.animations.length) {
             mixer = new THREE.AnimationMixer(modelRoot);
@@ -490,7 +531,8 @@ const BuddyPreview = (() => {
       const dt = Math.min(0.05, (now - t0) / 1000);
       t0 = now;
 
-      if (o.animate !== false) yaw += dt * 0.32;
+      // 0.32 rad/s was fast enough that equipped cosmetics were hard to see.
+      if (o.animate !== false) yaw += dt * (typeof o.spinRate === 'number' ? o.spinRate : 0.32);
       holder.rotation.y = yaw;
 
       if (mixer) mixer.update(dt);
@@ -782,6 +824,7 @@ const BuddyPreview = (() => {
     loadRaw,
     tintObject,
     buildCosmetics,
+    attachCosmetics,
     createHoverState,
     applyHover,
   };

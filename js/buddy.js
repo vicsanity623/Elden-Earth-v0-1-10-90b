@@ -676,6 +676,15 @@ const BuddySystem = (() => {
   overflow:hidden; margin-top:5px;
 }
 .bd-cell-hp > i{display:block; height:100%; border-radius:99px;}
+.bd-reward-line{
+  display:flex; align-items:center; gap:8px; padding:5px 0;
+  font-size:12px; color:#e2ebfa;
+}
+.bd-reward-badge{
+  flex:0 0 auto; font-size:8.5px; font-weight:900; letter-spacing:.8px;
+  padding:3px 7px; border-radius:99px; color:#0b1020;
+  background:linear-gradient(120deg,#7dd3fc,#c4b5fd);
+}
 .bd-empty{
   padding:26px 14px; text-align:center; color:#8aa0bd; font-size:12.5px; line-height:1.7;
 }
@@ -962,7 +971,7 @@ const BuddySystem = (() => {
       const box = document.getElementById("bd-detail-preview");
       if (box) {
         if (detailPreview) { try { detailPreview.dispose(); } catch (e) {} }
-        detailPreview = BuddyPreview.create(box, inst, { animate: true, anim: "idle" });
+        detailPreview = BuddyPreview.create(box, inst, { animate: true, spinRate: 0.14, anim: "idle" });
       }
     } catch (e) {}
 
@@ -1035,32 +1044,39 @@ const BuddySystem = (() => {
       const box = document.getElementById("bd-cos-preview");
       if (box) {
         if (customizePreview) { try { customizePreview.dispose(); } catch (e) {} }
-        customizePreview = BuddyPreview.create(box, inst, { animate: true, anim: "dance" });
+        // The levitation pose, turned slowly so every equipped piece is
+        // visible. (It previously asked for "dance", which the doll does not
+        // have — and spun fast enough that the cosmetics were hard to see.)
+        customizePreview = BuddyPreview.create(box, inst, {
+          animate: true,
+          spinRate: 0.14,
+          anim: "idle",
+        });
       }
     } catch (e) {}
 
     const list = document.getElementById("bd-cos-list");
     BuddyData.CUSTOMIZATION_TIERS.forEach(tier => {
       const unlocked = inst.level >= tier.level;
-      const equipped = inst.customization && inst.customization[tier.slot] === tier.id;
+      // `hue` is the buddy's rolled colour — always on, nothing to toggle.
+      const passive = tier.slot === "hue";
+      const equipped = passive || (inst.customization && inst.customization[tier.slot] === tier.id);
       const item = document.createElement("div");
       item.className = "bd-cos-item" + (unlocked ? "" : " locked");
       item.innerHTML = `
         <div class="ci-icon">${unlocked ? "✨" : "🔒"}</div>
         <div class="ci-body">
           <div class="ci-name">${tier.name} <span style="color:#7f97ba;font-weight:600">· Lv.${tier.level}</span></div>
-          <div class="ci-desc">${tier.desc}</div>
+          <div class="ci-desc">${passive ? tier.desc + " Always on." : tier.desc}</div>
         </div>
-        ${unlocked ? `<button class="ci-btn ${equipped ? "on" : ""}">${equipped ? "Equipped" : "Equip"}</button>` : ""}
+        ${passive
+          ? `<span class="ci-btn on" style="cursor:default">Always on</span>`
+          : (unlocked ? `<button class="ci-btn ${equipped ? "on" : ""}">${equipped ? "Equipped" : "Equip"}</button>` : "")}
       `;
-      if (unlocked) {
+      if (!passive && unlocked) {
         item.querySelector(".ci-btn").addEventListener("click", () => {
           if (!inst.customization) inst.customization = {};
-          if (equipped) {
-            inst.customization[tier.slot] = null;
-          } else {
-            inst.customization[tier.slot] = tier.id;
-          }
+          inst.customization[tier.slot] = equipped ? null : tier.id;
           persist();
           syncCompanion();
           openCustomizeModal(uid);
@@ -1353,7 +1369,7 @@ const BuddySystem = (() => {
         <div class="bd-stat"><div class="k">Battles</div><div class="v">${b.totalBattles}</div></div>
         <div class="bd-stat"><div class="k">Wins</div><div class="v">${b.totalWins}</div></div>
         <div class="bd-stat"><div class="k">Tamed</div><div class="v">${b.totalTamed}</div></div>
-        <div class="bd-stat"><div class="k">Feasted</div><div class="v">${b.totalFeasts}</div></div>
+        <div class="bd-stat"><div class="k">Feasted</div><div class="v">${b.totalFeasted}</div></div>
       </div>
 
       <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:14px 0 6px">
@@ -1365,6 +1381,31 @@ const BuddySystem = (() => {
       <div style="font-size:11px;color:#9db8dd;margin-top:6px">
         ${b.spawnsToday} / ${MAX_DAILY_SPAWNS} wild spawns today &middot;
         ${Math.max(0, Math.round(METERS_PER_SPAWN - b.distCredit))} m until the next spawn
+      </div>
+
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:16px 0 6px">
+        Level Rewards
+      </div>
+      <div class="bd-hp-wrap">
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY LEVEL</span> 🍓 ${5 + p.level}+ berries</div>
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 2</span> 🪙 10 EB</div>
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 5</span> 💎 25 diamonds</div>
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 10</span> ⭐ 5 RP</div>
+      </div>
+
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:14px 0 6px">
+        Coming Up
+      </div>
+      <div class="bd-cos-list">
+        ${(typeof BuddyData !== "undefined" ? BuddyData.upcomingTrainerRewards(p.level, 3) : []).map(u => `
+          <div class="bd-cos-item">
+            <div class="ci-icon">🎁</div>
+            <div class="ci-body">
+              <div class="ci-name">Level ${u.level}</div>
+              <div class="ci-desc">+${u.label}</div>
+            </div>
+          </div>
+        `).join("") || '<div class="bd-empty">Reach the next milestone to earn bonuses.</div>'}
       </div>
 
       <div class="bd-row" style="margin-top:16px">

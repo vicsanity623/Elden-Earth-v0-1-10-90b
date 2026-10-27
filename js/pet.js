@@ -426,6 +426,19 @@ const CompanionPet = (() => {
           try { BuddyPreview.tintObject(petModel, look.paint, 0.85); } catch (e) {}
         }
 
+        // Cosmetics on the map pet too — the player should see the auras,
+        // wings and crowns they earned while walking around. Parented under
+        // petModel so they ride the levitation bob and the forward lean.
+        if (typeof BuddyPreview !== "undefined" && BuddyPreview.attachCosmetics && look.customization) {
+          try {
+            const bb = new THREE.Box3().setFromObject(petModel);
+            const sz = new THREE.Vector3();
+            bb.getSize(sz);
+            const fitH = sz.y > 0 ? sz.y : 1.85;
+            petExtras = BuddyPreview.attachCosmetics(petModel, 1, look.paint, look.customization, fitH) || [];
+          } catch (e) {}
+        }
+
         scene.add(petModel);
         console.log("[CompanionPet] model loaded:", look.path, look.paint ? "(buddy tint)" : "(default)");
       },

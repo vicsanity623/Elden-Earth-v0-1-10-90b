@@ -17,9 +17,9 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v82.00: Fix companion render crash (lng/lon mismatch -> NaN LngLat) and
-// cache-bust .glb URLs so a rebuilt model is never served from the SW cache.
-const CACHE_NAME = 'elden-EARTH-v82.00';
+// v83.00: Trainer level-up rewards (berries/EB/diamonds/RP); cosmetics now
+// ride the model and sit on the real head; trainer modal reward preview.
+const CACHE_NAME = 'elden-EARTH-v83.00';
 
 const ASSETS_TO_CACHE = [
     './',

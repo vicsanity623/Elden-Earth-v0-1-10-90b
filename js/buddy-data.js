@@ -316,6 +316,48 @@ const BuddyData = (() => {
     return hit || available[0];
   }
 
+  /* --------------------------------------------------- Trainer rewards */
+  // What every trainer level-up is worth. MIRRORED in functions/buddy.js
+  // (buddyClaimLevelRewards) — the server is what actually grants EB /
+  // diamonds / RP because those are server-owned currencies, so the two
+  // copies must always agree.
+  //
+  //   every level  ->  berries (scales with level)
+  //   every 2 lvl  ->  10 EB
+  //   every 5 lvl  ->  25 diamonds
+  //   every 10 lvl ->  5 RP
+  function trainerLevelRewards(fromLevel, toLevel) {
+    let berries = 0, eb = 0, diamonds = 0, rp = 0;
+    const from = Math.max(0, fromLevel | 0);
+    const to = Math.max(from, toLevel | 0);
+    for (let l = from + 1; l <= to; l++) {
+      berries += 5 + l;
+      if (l % 2 === 0) eb += 10;
+      if (l % 5 === 0) diamonds += 25;
+      if (l % 10 === 0) rp += 5;
+    }
+    return { berries, eb, diamonds, rp };
+  }
+
+  // What a single level-up pays — used for the "next reward" preview.
+  function trainerLevelRewardAt(level) {
+    return trainerLevelRewards(level - 1, level);
+  }
+
+  // The milestones the player can look forward to past `level`.
+  function upcomingTrainerRewards(level, count) {
+    const out = [];
+    for (let l = level + 1; out.length < (count || 4) && l <= PLAYER_MAX_LEVEL; l++) {
+      const r = trainerLevelRewardAt(l);
+      const bits = [];
+      if (r.eb) bits.push(r.eb + " EB");
+      if (r.diamonds) bits.push(r.diamonds + " 💎");
+      if (r.rp) bits.push(r.rp + " RP");
+      if (bits.length) out.push({ level: l, rewards: r, label: bits.join(" + ") });
+    }
+    return out;
+  }
+
   /* ------------------------------------------------------------ Lookups */
   function getSpecies(id) { return SPECIES.find(s => s.id === id) || null; }
   function getMove(id) { return MOVES[id] || null; }
@@ -395,6 +437,9 @@ const BuddyData = (() => {
     PLAYER_LEVEL_TITLES,
     buddyXpToNext,
     playerXpToNext,
+    trainerLevelRewards,
+    trainerLevelRewardAt,
+    upcomingTrainerRewards,
     ANIM_ALIAS,
     resolveAnim,
     getSpecies,
