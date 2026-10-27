@@ -30,6 +30,28 @@ const BuddySystem = (() => {
   const REVISIT_GRACE_MS = 45 * 1000;  // ignore points this recent when checking
   const REVISIT_HISTORY = 60;
   const CREDIT_WINDOW_MS = 60 * 1000;
+
+  // ------------------------------------------------- Travel record reset --
+  // "New ground only" is what stops a ceiling fan or a loop round the block,
+  // but on its own it soft-locks anyone who walks the SAME route every day —
+  // the trip home never counts, and the same safe path never counts again.
+  //
+  // Two resets fix that without opening the farm up:
+  //
+  //   TRIP_IDLE_MS     After this long without any credited movement the
+  //                    player has clearly stopped and started a new outing,
+  //                    so the "already walked" record is cleared. Walk to the
+  //                    store, browse for 10 minutes, walk home -> BOTH legs
+  //                    count. A fan or a walking loop never idles like this,
+  //                    so neither can chain laps.
+  //
+  //   TRAVEL_RESET_MS  Hard backstop: the record is wiped on a timer no
+  //                    matter what, so a determined loop-walker gets at most
+  //                    one full pass per window instead of infinite passes.
+  //
+  // Both are bounded anyway by MAX_DAILY_SPAWNS.
+  const TRIP_IDLE_MS = 8 * 60 * 1000;       // new outing after 8 min of stillness
+  const TRAVEL_RESET_MS = 2 * 60 * 60 * 1000; // hard record reset every 2 hours
   const CREDIT_WINDOW_CAP_M = 250;     // hard cap on credited meters / minute
   const MAX_ACCURACY_M = 60;
 
@@ -89,6 +111,9 @@ const BuddySystem = (() => {
     if (!Array.isArray(b.bag)) b.bag = [];
     if (!Array.isArray(b.spawns)) b.spawns = [];
     if (!Array.isArray(b.recentPoints)) b.recentPoints = [];
+    if (typeof b.lastCreditAt !== "number") b.lastCreditAt = 0;
+    if (typeof b.lastMovementAt !== "number") b.lastMovementAt = 0;
+    if (typeof b.recordResetAt !== "number") b.recordResetAt = 0;
     if (typeof b.distCredit !== "number") b.distCredit = 0;
     if (typeof b.spawnsToday !== "number") b.spawnsToday = 0;
     if (typeof b.totalSpawns !== "number") b.totalSpawns = 0;
@@ -104,6 +129,9 @@ const BuddySystem = (() => {
       b.spawnsToday = 0;
       b.creditWindowStart = 0;
       b.creditWindowMeters = 0;
+      // New day = fresh travel record.
+      b.recentPoints = [];
+      b.recordResetAt = 0;
     }
 
     // Drop expired spawns on load.
@@ -177,6 +205,42 @@ const BuddySystem = (() => {
       return out;
     }
 
+    // ---- GAP RESYNC ------------------------------------------------------
+    // A long pause (app backgrounded, phone in a pocket, standing at a shop)
+    // leaves `lastPoint` stale. The next fix then has a huge dt, so its
+    // implied speed reads as ~0.03 m/s and EVERY fix is rejected as too_slow —
+    // which is exactly how a player walked to the store and back and earned
+    // nothing. This must run BEFORE the speed gates or it never runs at all.
+    const GAP_RESYNC_MS = 2 * 60 * 1000;
+    if ((now - b.lastPoint.t) > GAP_RESYNC_MS) {
+      b.lastPoint = { lat, lon, t: now };
+    }
+
+    // ---- TRAVEL RECORD RESETS -------------------------------------------
+    // Expire the "already walked" record so a player who legitimately walks
+    // the same route is not permanently locked out of earning spawns. Also
+    // must run before the motion gates.
+    //
+    // 1. NEW OUTING: the player must have genuinely STOPPED — not merely
+    //    stopped earning. Both "no credited distance" and "no real movement"
+    //    have to be stale, otherwise someone walking a loop continuously would
+    //    earn a reset every TRIP_IDLE_MS without ever pausing. Walking to the
+    //    store, browsing for 8 minutes, and walking home counts BOTH legs;
+    //    pacing the same block without stopping does not.
+    // MAX, not MIN: the reset needs BOTH to be stale. With MIN a player who
+    // keeps moving but stops earning would reset mid-walk and get free passes.
+    const lastActiveAt = Math.max(b.lastCreditAt || 0, b.lastMovementAt || 0);
+    if (lastActiveAt && (now - lastActiveAt) > TRIP_IDLE_MS) {
+      if (b.recentPoints.length) b.recentPoints = [];
+    }
+    // 2. HARD WINDOW: wipe on a timer regardless. A loop-walker who never
+    //    idles still only gets one pass per TRAVEL_RESET_MS.
+    if (!b.recordResetAt) b.recordResetAt = now;
+    if ((now - b.recordResetAt) > TRAVEL_RESET_MS) {
+      b.recentPoints = [];
+      b.recordResetAt = now;
+    }
+
     const last = b.lastPoint;
     const dist = haversine(last.lat, last.lon, lat, lon);
     const dt = Math.max(0.5, (now - last.t) / 1000);
@@ -192,6 +256,10 @@ const BuddySystem = (() => {
       persist();
       return out;
     }
+
+    // This fix shows genuine travel (the step survived jitter + teleport
+    // gates), so remember it for the "did the player actually stop?" test.
+    b.lastMovementAt = now;
 
     const speed = dist / dt;
     if (speed < MIN_SPEED_MPS) {
@@ -242,6 +310,7 @@ const BuddySystem = (() => {
     const credited = Math.min(dist, remaining);
     b.creditWindowMeters += credited;
     b.distCredit += credited;
+    b.lastCreditAt = now;
     out.credited = credited;
 
     // Record this as settled ground.
@@ -1405,6 +1474,11 @@ const BuddySystem = (() => {
       <div style="font-size:11px;color:#9db8dd;margin-top:6px">
         ${b.spawnsToday} / ${MAX_DAILY_SPAWNS} wild spawns today &middot;
         ${Math.max(0, Math.round(METERS_PER_SPAWN - b.distCredit))} m until the next spawn
+      </div>
+      <div class="bd-hp-note">
+        Walking counts anywhere &mdash; the same route works again after a short
+        stop (8 min) or automatically every 2 hours. Keep the app open and the
+        screen on while you walk.
       </div>
 
       <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:16px 0 6px">

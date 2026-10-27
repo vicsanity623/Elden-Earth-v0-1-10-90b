@@ -1,7 +1,7 @@
 // Elden Earth — Service Worker
 // Cache-first for immutable binaries (.glb/.png/...), network-first for
 // everything else. Bump CACHE_NAME whenever a shipped asset changes.
-const CACHE_NAME = 'elden-EARTH-v87.00';
+const CACHE_NAME = 'elden-EARTH-v88.00';
 const ASSETS_TO_CACHE = [
     './',
     './game.html',
@@ -10,6 +10,7 @@ const ASSETS_TO_CACHE = [
     './models/Fox.glb',
     './models/Soldier.glb',
     './models/Xbot.glb',
+    './models/Voodoo-Dool-Animated.glb',
     './css/style.css',
     './js/main.js',
     './js/foliage.js',
