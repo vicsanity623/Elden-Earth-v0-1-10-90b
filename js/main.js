@@ -1466,7 +1466,10 @@
       if (!map) return;
       const is3D = styleKey === "3d";
       const url = is3D ? (MAP_STYLES["elden-earth"]) : (MAP_STYLES[styleKey] || MAP_STYLES["elden-earth"]);
-      map.setStyle(url);
+      // Register BEFORE setStyle(). The handler was previously attached after
+      // the call, so if the style resolved from cache the load event could fire
+      // first and setupGameLayers() would never run — which is exactly what
+      // left street names visible and the player model buried under plots.
       map.once("style.load", () => {
         // Re-add all game layers that setStyle destroyed
         Grid.render();
@@ -1479,6 +1482,7 @@
         applyMapLod();
         refreshMapModulesAfterZoom();
       });
+      map.setStyle(url);
       localStorage.setItem("eldenEarth.mapStyle", styleKey);
       document.querySelectorAll(".map-style-btn").forEach(btn => {
         btn.classList.toggle("is-active", btn.dataset.style === styleKey);
@@ -1597,31 +1601,10 @@
     function setupGameLayers() {
       if (!map || !map.getStyle()) return;
 
-      // 0. Privacy: hide street / road / address labels on every style
-      try {
-        (map.getStyle().layers || []).forEach((l) => {
-          if (l.type !== "symbol") return;
-          const id = String(l.id || "").toLowerCase();
-          const srcLayer = String(l["source-layer"] || "").toLowerCase();
-          const isStreetLabel =
-            id.includes("road") ||
-            id.includes("street") ||
-            id.includes("highway") ||
-            id.includes("motorway") ||
-            id.includes("address") ||
-            id.includes("housenumber") ||
-            id.includes("path") ||
-            id.includes("track") ||
-            srcLayer.includes("transportation") ||
-            srcLayer.includes("road") ||
-            srcLayer.includes("street");
-          if (isStreetLabel) {
-            try { map.setLayoutProperty(l.id, "visibility", "none"); } catch (_) {}
-          }
-        });
-      } catch (err) {
-        console.warn("[MapEngine] Street label hide notice:", err);
-      }
+      // 0. Privacy: hide street / road / address labels on every style.
+      // Re-runnable — the style can finish populating its symbol layers after
+      // this first pass, which is how street names were leaking back in.
+      hideStreetLabels();
 
       // 1. Dynamic Street & Road Illuminator (Brightens pitch-black vector tiles)
       try {
@@ -1794,9 +1777,64 @@
         onDenied: () => {},
       });
       Diamonds.setPlayerPosition(currentPos.lat, currentPos.lon);
-      // Hoist 3D Character to top of all map layers so it always renders above ground plots!
-      if (map.getLayer("3d-player-character")) {
-        map.moveLayer("3d-player-character");
+      // Hoist the 3D layers above the plot tiles and re-sweep street labels.
+      // Both depend on layers that may not exist yet at this exact instant, so
+      // this runs now AND again shortly after (see finalizeMapLayers).
+      finalizeMapLayers();
+
+      // Late passes: the custom layers and the style's symbol layers can land
+      // after setupGameLayers() returns. Without these the player model could
+      // render underneath the plot tiles and street names could reappear.
+      clearTimeout(finalizeMapLayers._t1);
+      clearTimeout(finalizeMapLayers._t2);
+      finalizeMapLayers._t1 = setTimeout(finalizeMapLayers, 350);
+      finalizeMapLayers._t2 = setTimeout(finalizeMapLayers, 1500);
+    }
+
+    // Hide street labels (idempotent).
+    function hideStreetLabels() {
+      if (!map || !map.getStyle) return;
+      try {
+        (map.getStyle().layers || []).forEach((l) => {
+          if (l.type !== "symbol") return;
+          const id = String(l.id || "").toLowerCase();
+          const srcLayer = String(l["source-layer"] || "").toLowerCase();
+          const isStreetLabel =
+            id.includes("road") ||
+            id.includes("street") ||
+            id.includes("highway") ||
+            id.includes("motorway") ||
+            id.includes("address") ||
+            id.includes("housenumber") ||
+            id.includes("path") ||
+            id.includes("track") ||
+            id.includes("transportation") ||
+            srcLayer.includes("transportation") ||
+            srcLayer.includes("road") ||
+            srcLayer.includes("street") ||
+            srcLayer.includes("building");
+          if (isStreetLabel) {
+            try { map.setLayoutProperty(l.id, "visibility", "none"); } catch (_) {}
+          }
+        });
+      } catch (err) {
+        console.warn("[MapEngine] Street label hide notice:", err);
+      }
+    }
+
+    // Put every 3D game layer above the plot tiles, and re-sweep labels.
+    // Idempotent — safe to call as often as we like.
+    function finalizeMapLayers() {
+      if (!map || !map.getLayer) return;
+      try {
+        hideStreetLabels();
+        ["3d-player-character", "3d-companion-pet", "3d-active-buddy"].forEach((id) => {
+          try {
+            if (map.getLayer(id)) map.moveLayer(id);
+          } catch (e) {}
+        });
+      } catch (err) {
+        console.warn("[MapEngine] finalizeMapLayers notice:", err);
       }
     }
 

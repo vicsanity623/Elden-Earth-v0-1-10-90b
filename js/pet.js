@@ -258,6 +258,12 @@ const CompanionPet = (() => {
     const state = Store.get();
     if (!state.pet || state.pet.mood <= 0) return;
 
+    if (!hasEmoteClip()) {
+      // No emote clips on this model (voodoo doll) — a gentle look-at instead
+      // of faking it with the run animation.
+      playAnimation("idle");
+      return;
+    }
     const emotes = ["wave", "dance", "jump"];
     const randomEmote = emotes[Math.floor(Math.random() * emotes.length)];
     console.log("[CompanionPet] Tap emote:", randomEmote);
@@ -435,6 +441,15 @@ const CompanionPet = (() => {
     });
   }
 
+  // True only when this model has a DEDICATED emote clip. On the voodoo doll
+  // "wave"/"dance"/"jump" all fall back to its short "running" clip, which
+  // showed up as random bursts of running every few seconds. In that case we
+  // simply stay idle rather than fake an emote.
+  function hasEmoteClip() {
+    const available = Object.keys(animationsMap);
+    return available.some((n) => /wave|dance|jump|thumbsup|cheer|clap|yes|no/.test(n));
+  }
+
   function playAnimation(animName) {
     if (!petModel || !mixer) return;
 
@@ -500,6 +515,7 @@ const CompanionPet = (() => {
   }
 
   let isAngryCatchingUp = false;
+  let lastPetMovedAt = 0;
 
   function updateFollowLogic() {
     const state = Store.get();
@@ -509,7 +525,11 @@ const CompanionPet = (() => {
 
     const targetLng = playerCoords.lng + PET_FOLLOW_OFFSET_LNG;
     const targetLat = playerCoords.lat + PET_FOLLOW_OFFSET_LAT;
-    const dist = Geo.haversine(playerCoords.lat, playerCoords.lng, petCoords.lat, petCoords.lng);
+    // Distance to the pet's TARGET, not to the player. The follow offset alone
+    // is ~14 m, so measuring player->pet made `dist` permanently above the
+    // follow threshold — the pet thought it was always chasing and played its
+    // walk/run clip forever while standing still.
+    const dist = Geo.haversine(targetLat, targetLng, petCoords.lat, petCoords.lng);
 
     // ================= ANGRY / EXHAUSTED PET BEHAVIOR =================
     if (isAngry) {
@@ -554,20 +574,31 @@ const CompanionPet = (() => {
 
     // ================= NORMAL HAPPY / CONTENT PET BEHAVIOR =================
     isAngryCatchingUp = false;
-    if (dist > 1.2) {
+    const step = 0.000012; // Normal follow speed
+    const totalDist = Math.hypot(targetLng - petCoords.lng, targetLat - petCoords.lat);
+
+    // Only play the walk/run clip while there is still ground to cover. The
+    // previous version keyed the animation off `dist` alone, so the pet ran on
+    // the spot whenever it had already arrived at its slot.
+    if (totalDist > step * 1.5) {
       isFollowing = true;
       const targetAngle = computeTargetHeading(petCoords.lat, petCoords.lng, targetLat, targetLng);
       smoothHeadingUpdate(targetAngle);
 
-      const step = 0.000012; // Normal follow speed
-      const totalDist = Math.hypot(targetLng - petCoords.lng, targetLat - petCoords.lat);
-      if (totalDist > 0) {
-        petCoords.lng += ((targetLng - petCoords.lng) / totalDist) * step;
-        petCoords.lat += ((targetLat - petCoords.lat) / totalDist) * step;
-      }
+      petCoords.lng += ((targetLng - petCoords.lng) / totalDist) * step;
+      petCoords.lat += ((targetLat - petCoords.lat) / totalDist) * step;
 
+      lastPetMovedAt = Date.now();
       playAnimation("walk");
     } else {
+      isFollowing = false;
+      playAnimation("idle");
+    }
+
+    // Watchdog: if we have been asking for "walk" but the pet has not actually
+    // moved for a couple of seconds, snap back to idle instead of looping the
+    // short run clip forever.
+    if (isFollowing && Date.now() - lastPetMovedAt > 2500) {
       isFollowing = false;
       playAnimation("idle");
     }
@@ -632,6 +663,7 @@ const CompanionPet = (() => {
         return;
       }
 
+      if (!hasEmoteClip()) return; // voodoo doll has no emote clips — stay idle
       const emotes = ["wave", "dance", "thumbsup", "jump"];
       const randomEmote = emotes[Math.floor(Math.random() * emotes.length)];
       console.log("[CompanionPet] Playing idle emote:", randomEmote);
@@ -1373,5 +1405,18 @@ const CompanionPet = (() => {
     renamePet,
     refreshPetLook,
     getPetLook,
+    // Read-only introspection for debugging "why is my pet running in place".
+    debugAnimState: () => {
+      const targetLng = playerCoords.lng + PET_FOLLOW_OFFSET_LNG;
+      const targetLat = playerCoords.lat + PET_FOLLOW_OFFSET_LAT;
+      return {
+        anim: currentAnimState,
+        isFollowing,
+        isFetching,
+        distToTarget: Geo.haversine(targetLat, targetLng, petCoords.lat, petCoords.lng),
+        distToPlayer: Geo.haversine(playerCoords.lat, playerCoords.lng, petCoords.lat, petCoords.lng),
+        clips: Object.keys(animationsMap),
+      };
+    },
   };
 })();
