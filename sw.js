@@ -19,7 +19,7 @@
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
 // v85.00: Buddy companion mounts after the cloud restore lands (was invisible
 // forever) and rides the pet's fetch path so the visible buddy collects gifts.
-const CACHE_NAME = 'elden-EARTH-v85.00';
+const CACHE_NAME = 'elden-EARTH-v86.00';
 
 const ASSETS_TO_CACHE = [
     './',

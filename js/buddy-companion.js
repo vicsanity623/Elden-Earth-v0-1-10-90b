@@ -32,7 +32,7 @@ const BuddyCompanion = (() => {
   //   4.80  ->  matches the player avatar exactly
   //
   // Change it, hard-reload the page, look at the map. Repeat.
-  const BUDDY_WORLD_SCALE = 2.6;
+  const BUDDY_WORLD_SCALE = 2.9;
 
   // Height the model is normalised to before the world scale is applied.
   // Usually leave this alone — BUDDY_WORLD_SCALE is the knob you want.
