@@ -98,16 +98,22 @@ const BuddyCompanion = (() => {
 
   function playAnim(name) {
     if (!mixer || !clips.length) return;
-    if (currentAnim === name && currentAction) return;
-    currentAnim = name;
 
     // Semantic name -> whatever this model actually has (the voodoo doll only
-    // offers idle/running; the robot has 14 named clips).
+    // offers idle/running/sad; the robot has 14 named clips).
     const best = (typeof BuddyData !== "undefined" && BuddyData.resolveAnim)
       ? BuddyData.resolveAnim(name, clips.map(c => c.name))
       : null;
     const clip = (best && clips.find(c => c.name === best)) || clips[0];
     if (!clip) return;
+
+    // Guard on the RESOLVED clip, not the requested name. "walk", "run" and
+    // "jump" all map to the voodoo doll's single "running" clip — comparing
+    // against the request made each call restart that short animation, which
+    // is what produced the twitching idle.
+    if (currentAnim === clip.name && currentAction) return;
+    currentAnim = clip.name;
+
     try {
       const action = mixer.clipAction(clip);
       if (currentAction && currentAction !== action) {

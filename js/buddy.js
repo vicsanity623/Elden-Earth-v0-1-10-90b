@@ -33,6 +33,14 @@ const BuddySystem = (() => {
   const CREDIT_WINDOW_CAP_M = 250;     // hard cap on credited meters / minute
   const MAX_ACCURACY_M = 60;
 
+  // ---------------------------------------------------------- Healing ----
+  // Without this a buddy that loses a fight is saved at ~1 HP and every later
+  // battle starts nearly dead. Three recovery paths keep it playable.
+  const HEAL_BERRY_PCT = 0.30;         // 1 berry restores 30% of max HP
+  const REGEN_PCT_PER_MIN = 0.05;      // passive: 5% of max HP per minute
+  const POST_BATTLE_FLOOR_PCT = 0.30;  // never leave a fight below 30% HP
+  const REGEN_TICK_MS = 15 * 1000;
+
   const STYLE_ID = "buddy-system-style";
   const HUD_ID = "buddy-hud-btn";
   const INMODAL_ID = "buddy-inmodal";
@@ -73,6 +81,7 @@ const BuddySystem = (() => {
         totalTamed: 0,
         totalFeasted: 0,
         starterChosen: false,
+        lastRegenAt: 0,
       };
     }
 
@@ -647,6 +656,26 @@ const BuddySystem = (() => {
   80%{opacity:1;}
   100%{opacity:0; transform:translate(-50%,-8px);}
 }
+.bd-hp-wrap{
+  padding:11px 12px; border-radius:13px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(150,180,240,.16);
+}
+.bd-hp-row{display:flex; align-items:center; gap:9px;}
+.bd-hp-bar{flex:1 1 auto; height:11px;}
+.bd-hp-bar > i{transition:width .4s ease;}
+.bd-hp-text{
+  flex:0 0 auto; font-size:11.5px; font-weight:800; color:#eaf1ff;
+  font-variant-numeric:tabular-nums;
+}
+.bd-hp-note{font-size:10px; color:#8fa6c4; margin-top:7px; line-height:1.5;}
+.bd-hp-note.bad{color:#fca5a5; font-weight:700;}
+.bd-hp-note.good{color:#86efac;}
+/* per-cell HP strip in the Buddy Bag grid */
+.bd-cell-hp{
+  height:4px; border-radius:99px; background:rgba(255,255,255,.14);
+  overflow:hidden; margin-top:5px;
+}
+.bd-cell-hp > i{display:block; height:100%; border-radius:99px;}
 .bd-empty{
   padding:26px 14px; text-align:center; color:#8aa0bd; font-size:12.5px; line-height:1.7;
 }
@@ -805,6 +834,7 @@ const BuddySystem = (() => {
         </div>
         <div class="bd-nm">${inst.nickname}</div>
         <div class="bd-lv">Lv.${inst.level} · ${inst.colorway}</div>
+        <div class="bd-cell-hp"><i style="width:${buddyHp(inst).pct}%; background:${hpColor(buddyHp(inst).pct)}"></i></div>
       `;
       cell.addEventListener("click", () => openDetail(inst.uid));
       list.appendChild(cell);
@@ -846,6 +876,7 @@ const BuddySystem = (() => {
     const pct = BuddyEngine.ivPercent(inst.ivs);
     const grade = BuddyEngine.ivGrade(pct);
     const xp = BuddyEngine.xpProgress(inst);
+    const hp = buddyHp(inst);
 
     buildModal(DETAIL_ID, `
       <button class="bd-close">✕</button>
@@ -863,10 +894,29 @@ const BuddySystem = (() => {
         <span class="bd-tag">Grade ${grade.letter} · ${pct}% IV</span>
       </div>
 
+      <div style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#7f97ba; margin:12px 0 5px">
+        Health
+      </div>
+      <div class="bd-hp-wrap">
+        <div class="bd-hp-row">
+          <div class="bd-progress bd-hp-bar"><i class="bd-hp-fill" style="width:${hp.pct}%; background:${hpColor(hp.pct)}"></i></div>
+          <div class="bd-hp-text">${hp.hp} / ${hp.max}</div>
+        </div>
+        ${hp.fainted
+          ? `<div class="bd-hp-note bad">Fainted — heal to battle again.</div>`
+          : (hp.pct < 100 ? "" : `<div class="bd-hp-note good">Fully healed.</div>`)}
+        <div class="bd-row" style="margin-top:8px">
+          <button class="bd-btn gold" id="bd-detail-heal" ${hp.pct >= 100 ? "disabled" : ""}>
+            🍓 Heal with Berries
+          </button>
+        </div>
+        <div class="bd-hp-note">Berries heal 30% each · HP also recovers over time</div>
+      </div>
+
       <div class="bd-grid">
         <div class="bd-stat"><div class="k">Level</div><div class="v">${inst.level}</div></div>
         <div class="bd-stat"><div class="k">Battles Won</div><div class="v">${inst.battlesWon || 0}</div></div>
-        <div class="bd-stat"><div class="k">HP</div><div class="v">${inst.stats.hp}</div></div>
+        <div class="bd-stat"><div class="k">Max HP</div><div class="v">${inst.stats.hp}</div></div>
         <div class="bd-stat"><div class="k">Attack</div><div class="v">${inst.stats.atk}</div></div>
         <div class="bd-stat"><div class="k">Defense</div><div class="v">${inst.stats.def}</div></div>
         <div class="bd-stat"><div class="k">Speed</div><div class="v">${inst.stats.spd}</div></div>
@@ -938,6 +988,15 @@ const BuddySystem = (() => {
     document.getElementById("bd-detail-cos").addEventListener("click", () => {
       closeModal(DETAIL_ID);
       openCustomizeModal(inst.uid);
+    });
+
+    const healBtn = document.getElementById("bd-detail-heal");
+    if (healBtn) healBtn.addEventListener("click", () => {
+      const r = healBuddy(inst.uid, 3);
+      if (r.ok) toast(`🍓 ${inst.nickname} recovered ${r.healed} HP (spent ${r.spent} berries)`);
+      else if (r.reason === "no_berries") toast("Not enough berries — spin Elden Stops for more");
+      else if (r.reason === "already_full") toast(`${inst.nickname} is already at full health`);
+      openDetail(uid);
     });
 
     openModal(DETAIL_ID);
@@ -1076,6 +1135,7 @@ const BuddySystem = (() => {
 
     const active = activeBuddy();
     const allyBox = document.getElementById("bd-enc-ally");
+    const allyHp = buddyHp(active);
     if (active) {
       const asp = BuddyData.getSpecies(active.speciesId) || {};
       allyBox.innerHTML = `
@@ -1083,9 +1143,15 @@ const BuddySystem = (() => {
           <div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${ (BuddyData.getType((asp.types && asp.types[0]) || "metal") || {color:"#94a3b8"}).color } 48%, rgba(10,14,26,.92)); filter:hue-rotate(${Math.round((((active.hue % 1) + 1) % 1) * 360)}deg)"></div>
           <div style="flex:1 1 auto; min-width:0">
             <div style="font-size:13px;font-weight:800;color:#fff">${active.nickname}</div>
-            <div style="font-size:10.5px;color:#a9bede">Lv.${active.level} · ${asp.name || active.speciesId} · HP ${active.currentHp == null ? active.stats.hp : active.currentHp}/${active.stats.hp}</div>
+            <div style="font-size:10.5px;color:#a9bede">Lv.${active.level} · ${asp.name || active.speciesId} · HP ${allyHp.hp}/${allyHp.max}</div>
+            <div class="bd-progress" style="margin-top:6px"><i style="width:${allyHp.pct}%; background:${hpColor(allyHp.pct)}"></i></div>
           </div>
           <div style="font-size:11px;color:#c4b5fd;font-weight:800">YOUR BUDDY</div>
+        </div>
+        ${allyHp.fainted ? `<div class="bd-hp-note bad" style="margin-top:8px">⚠ ${active.nickname} has fainted and cannot battle. Heal first.</div>`
+          : (allyHp.pct < 40 ? `<div class="bd-hp-note" style="margin-top:8px">⚠ ${active.nickname} is hurt (${allyHp.pct}% HP). Consider healing before you fight.</div>` : "")}
+        <div class="bd-row" style="margin-top:8px">
+          <button class="bd-btn gold" id="bd-enc-heal" ${allyHp.pct >= 100 ? "disabled" : ""}>🍓 Heal ${active.nickname}</button>
         </div>
       `;
     } else {
@@ -1096,9 +1162,27 @@ const BuddySystem = (() => {
       `;
     }
 
-    document.getElementById("bd-enc-battle").addEventListener("click", () => {
+    const healBtn = document.getElementById("bd-enc-heal");
+    if (healBtn) healBtn.addEventListener("click", () => {
+      const r = healBuddy(active ? active.uid : null, 3);
+      if (r.ok) toast(`🍓 Recovered ${r.healed} HP (spent ${r.spent} berries)`);
+      else if (r.reason === "no_berries") toast("Not enough berries — spin Elden Stops for more");
+      else if (r.reason === "already_full") toast("Already at full health");
+      openEncounter(spawnId);
+    });
+
+    const battleBtn = document.getElementById("bd-enc-battle");
+    if (allyHp.fainted) {
+      battleBtn.disabled = true;
+      battleBtn.textContent = "Buddy has fainted";
+    }
+    battleBtn.addEventListener("click", () => {
       if (!active) {
         toast("You need a buddy before you can battle");
+        return;
+      }
+      if (buddyHp(active).fainted) {
+        toast(`${active.nickname} has fainted — heal before battling`);
         return;
       }
       startBattle(spawn, active);
@@ -1200,13 +1284,17 @@ const BuddySystem = (() => {
       }
     }
 
-    // Restore the ally to at least 1 HP so a won battle never leaves a buddy
-    // stuck at zero in the bag.
-    if (bagAlly && bagAlly.currentHp <= 0 && summary.outcome !== "lost") {
-      bagAlly.currentHp = Math.max(1, Math.floor(bagAlly.stats.hp * 0.25));
-    }
-    if (bagAlly && bagAlly.currentHp <= 0) {
-      bagAlly.currentHp = 1;
+    // Recovery floor. A buddy must never be saved at 1 HP — the next fight
+    // would be hopeless and the only way out was waiting. Every outcome now
+    // leaves at least POST_BATTLE_FLOOR_PCT of max HP, and a win heals more.
+    if (bagAlly) {
+      const maxHp = bagAlly.stats.hp;
+      const floor = Math.max(1, Math.floor(maxHp * POST_BATTLE_FLOOR_PCT));
+      const winFloor = Math.max(1, Math.floor(maxHp * 0.6));
+      const target = (summary.outcome === "tame" || summary.outcome === "feast" || summary.outcome === "released")
+        ? winFloor
+        : floor;
+      if (bagAlly.currentHp < target) bagAlly.currentHp = target;
     }
 
     persist();
@@ -1291,6 +1379,75 @@ const BuddySystem = (() => {
     });
 
     openModal(TRAINER_ID);
+  }
+
+  /* ============================================================= HEALING */
+  function hpColor(pct) {
+    if (pct <= 25) return "linear-gradient(90deg,#dc2626,#f87171)";
+    if (pct <= 55) return "linear-gradient(90deg,#eab308,#facc15)";
+    return "linear-gradient(90deg,#22c55e,#4ade80)";
+  }
+
+  function buddyHp(inst) {
+    if (!inst) return { hp: 0, max: 1, pct: 0, fainted: true };
+    const max = Math.max(1, inst.stats ? inst.stats.hp : 1);
+    const hp = Math.max(0, Math.min(max, (typeof inst.currentHp === "number") ? inst.currentHp : max));
+    return { hp, max, pct: Math.round((hp / max) * 100), fainted: hp <= 0 };
+  }
+
+  /**
+   * Spend berries to restore a buddy's HP.
+   * @param {string} uid         buddy instance id (defaults to the active one)
+   * @param {number} berryCount  berries to spend
+   * @returns {{ok:boolean, healed:number, spent:number, reason?:string}}
+   */
+  function healBuddy(uid, berryCount) {
+    const state = (typeof Store !== "undefined" && Store.get) ? Store.get() : null;
+    if (!state) return { ok: false, healed: 0, spent: 0, reason: "no_state" };
+
+    const b = buddyState();
+    const inst = b.bag.find(x => x.uid === (uid || b.activeUid)) || b.bag.find(x => x.uid === b.activeUid) || b.bag[0];
+    if (!inst) return { ok: false, healed: 0, spent: 0, reason: "no_buddy" };
+
+    const info = buddyHp(inst);
+    if (info.hp >= info.max) return { ok: false, healed: 0, spent: 0, reason: "already_full" };
+
+    const want = Math.max(1, Math.floor(berryCount || 1));
+    const affordable = Math.floor((state.berries || 0) / 1);
+    const spend = Math.min(want, affordable, Math.ceil((info.max - info.hp) / (info.max * HEAL_BERRY_PCT)));
+    if (spend <= 0) return { ok: false, healed: 0, spent: 0, reason: "no_berries" };
+
+    const healAmount = Math.min(info.max - info.hp, Math.round(info.max * HEAL_BERRY_PCT * spend));
+    state.berries = Math.max(0, (state.berries || 0) - spend);
+    inst.currentHp = info.hp + healAmount;
+
+    persist();
+    renderHudBadge();
+    syncCompanion();
+    if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.petFeed, "buddy_heal");
+    return { ok: true, healed: healAmount, spent: spend };
+  }
+
+  // Passive recovery so a wiped buddy is never permanently out of action.
+  function tickRegen() {
+    const b = buddyState();
+    const now = Date.now();
+    const elapsedMin = (now - (b.lastRegenAt || now)) / 60000;
+    if (elapsedMin < 1) return;
+    b.lastRegenAt = now;
+
+    let changed = false;
+    b.bag.forEach(inst => {
+      const info = buddyHp(inst);
+      if (info.hp >= info.max) return;
+      const gain = Math.max(1, Math.round(info.max * REGEN_PCT_PER_MIN * elapsedMin));
+      const next = Math.min(info.max, info.hp + gain);
+      if (next !== info.hp) {
+        inst.currentHp = next;
+        changed = true;
+      }
+    });
+    if (changed) persist();
   }
 
   /* =========================================================== HELPERS */
@@ -1417,6 +1574,10 @@ const BuddySystem = (() => {
     setInterval(() => {
       const b = buddyState();
       const now = Date.now();
+
+      // Passive HP recovery (see tickRegen) — keeps a defeated buddy usable.
+      try { tickRegen(); } catch (e) {}
+
       const before = b.spawns.length;
       b.spawns = b.spawns.filter(s => {
         if (s.expiresAt <= now) {
@@ -1471,6 +1632,9 @@ const BuddySystem = (() => {
     openCustomizeModal,
     openEncounter,
     activeBuddy,
+    healBuddy,
+    buddyHp,
+    tickRegen,
     trackPosition,
     renderHudBadge,
     METERS_PER_SPAWN,

@@ -456,8 +456,11 @@ const CompanionPet = (() => {
     const nextAction = animationsMap[key];
     if (currentAction === nextAction) return;
 
-    // 🧘 Sitting must play ONCE and HOLD its final pose!
-    if (lower.includes("sit")) {
+    // 🧘 Sitting must play ONCE and HOLD its final pose — but only when the
+    // model really has a sitting clip. On the voodoo doll "sitting" falls back
+    // to "idle", and holding that frame would freeze the model mid-pose.
+    const isSitClip = resolved.includes("sit");
+    if (isSitClip) {
       nextAction.reset();
       nextAction.setLoop(THREE.LoopOnce, 1);
       nextAction.clampWhenFinished = true; // Stays seated peacefully!
@@ -474,7 +477,11 @@ const CompanionPet = (() => {
     }
 
     currentAction = nextAction;
-    currentAnimState = lower;
+    // Store the RESOLVED clip name, not the requested one. "walk", "run",
+    // "jump" and "dance" all map to the voodoo doll's single "running" clip —
+    // tracking the request instead of the clip made each call restart that
+    // 0.4s animation, which is what caused the twitching idle.
+    currentAnimState = resolved;
   }
 
   function smoothHeadingUpdate(targetAngle) {

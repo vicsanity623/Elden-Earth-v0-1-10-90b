@@ -328,6 +328,7 @@ const BuddyPreview = (() => {
     let mixer = null;
     let clips = [];
     let currentAction = null;
+    let currentClipName = null;
     let cosmeticNodes = [];
     let hue = 0.5;
     let raf = 0;
@@ -357,6 +358,7 @@ const BuddyPreview = (() => {
       mixer = null;
       clips = [];
       currentAction = null;
+      currentClipName = null;
     }
 
     function playAnim(name) {
@@ -368,6 +370,13 @@ const BuddyPreview = (() => {
         : null;
       const clip = (best && clips.find(c => c.name === best)) || clips[0];
       if (!clip) return;
+
+      // Never restart a clip that is already playing. Several semantic names
+      // ("walk"/"run"/"jump") collapse onto the voodoo doll's single "running"
+      // clip, and action.reset() on each call would twitch the model.
+      if (currentClipName === clip.name && currentAction) return;
+      currentClipName = clip.name;
+
       try {
         const action = mixer.clipAction(clip);
         if (currentAction && currentAction !== action) {
