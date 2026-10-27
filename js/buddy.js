@@ -1609,6 +1609,12 @@ const BuddySystem = (() => {
       } catch (e) {
         console.warn("[Buddy] companion mount failed:", e.message);
       }
+      // The collection is restored from the cloud shortly after boot. Retry the
+      // mount a few times so the buddy appears as soon as the data lands
+      // instead of waiting for the next 15s maintenance tick.
+      [1200, 3500, 8000].forEach((ms) => {
+        setTimeout(() => { try { syncCompanion(); } catch (e) {} }, ms);
+      });
     }
 
     // Periodic maintenance: expire old spawns, cull by distance.
@@ -1618,6 +1624,12 @@ const BuddySystem = (() => {
 
       // Passive HP recovery (see tickRegen) — keeps a defeated buddy usable.
       try { tickRegen(); } catch (e) {}
+
+      // Re-sync the map companion. The buddy collection arrives from the cloud
+      // AFTER this module boots, so the one-shot refresh() at init finds an
+      // empty bag, attaches no layer, and the buddy stays invisible. This
+      // call is idempotent (same buddy -> no-op) so it is cheap to repeat.
+      try { syncCompanion(); } catch (e) {}
 
       const before = b.spawns.length;
       b.spawns = b.spawns.filter(s => {

@@ -295,8 +295,21 @@ const BuddyCompanion = (() => {
 
   /* ------------------------------------------------------- follow loop */
   function offsetFromPlayer() {
-    // Stand off to the side so the buddy never hides under the avatar or the
-    // companion pet. Offset is in degrees, derived from ~metres.
+    // When the companion pet is out it already runs the follow / roam /
+    // diamond-fetch movement. Ride along with it so the VISIBLE creature (the
+    // buddy) walks to the diamonds — otherwise the pet does the work unseen
+    // while the buddy stands still next to the player.
+    try {
+      if (typeof CompanionPet !== "undefined" && typeof CompanionPet.getPosition === "function") {
+        const p = CompanionPet.getPosition();
+        if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) {
+          return { lat: p.lat, lng: p.lng };
+        }
+      }
+    } catch (e) {}
+
+    // No pet: stand off to the side of the player so the buddy never hides
+    // under the avatar. Offset is in degrees, derived from ~metres.
     const dLat = FOLLOW_OFFSET_M / 111320;
     const dLon = FOLLOW_OFFSET_M / (111320 * Math.cos(playerCoords.lat * Math.PI / 180));
     // NOTE: returns `lng`, matching playerCoords/buddyCoords. This used to

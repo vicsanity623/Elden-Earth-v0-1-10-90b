@@ -17,9 +17,9 @@
 // v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
 // v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
 // battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v84.00: Buddy + trainer XP persist across devices; one creature on the map
-// (the pet defers to the buddy companion instead of drawing alongside it).
-const CACHE_NAME = 'elden-EARTH-v84.00';
+// v85.00: Buddy companion mounts after the cloud restore lands (was invisible
+// forever) and rides the pet's fetch path so the visible buddy collects gifts.
+const CACHE_NAME = 'elden-EARTH-v85.00';
 
 const ASSETS_TO_CACHE = [
     './',

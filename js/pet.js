@@ -1449,6 +1449,18 @@ const CompanionPet = (() => {
     renamePet,
     refreshPetLook,
     getPetLook,
+    // Where the pet currently is on the map. The buddy companion rides along
+    // with this so the VISIBLE creature walks to the diamonds during a fetch
+    // instead of standing beside the player while an invisible pet does it.
+    getPosition: () => {
+      try {
+        const st = Store.get();
+        if (!st || !st.pet || !st.pet.unlocked) return null;
+        return { lng: petCoords.lng, lat: petCoords.lat };
+      } catch (e) {
+        return null;
+      }
+    },
     // Read-only introspection for debugging "why is my pet running in place".
     debugAnimState: () => {
       const targetLng = playerCoords.lng + PET_FOLLOW_OFFSET_LNG;
