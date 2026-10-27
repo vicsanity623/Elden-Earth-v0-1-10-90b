@@ -381,9 +381,7 @@ const CompanionPet = (() => {
       ? BuddyPreview.modelUrl(look.path)
       : look.path;
 
-    loader.load(
-      loadPath,
-      (gltf) => {
+    const onPetModel = (gltf) => {
         // Map layer may not be mounted (or already torn down) — never let an
         // async model load throw into the window.
         if (!scene) return;
@@ -453,10 +451,20 @@ const CompanionPet = (() => {
 
         scene.add(petModel);
         console.log("[CompanionPet] model loaded:", look.path, look.paint ? "(buddy tint)" : "(default)");
-      },
-      undefined,
-      (err) => console.warn("[CompanionPet] Load error:", err)
-    );
+      };
+
+    loader.load(loadPath, onPetModel, undefined, (err) => {
+      // Cache-busted URL can 404 on WebViews that do not strip the query.
+      // Retry the bare path — otherwise the companion is simply invisible.
+      const bare = String(loadPath).split("?")[0];
+      if (bare !== loadPath) {
+        console.warn("[CompanionPet] versioned load failed, retrying bare path:", err && err.message);
+        loader.load(bare, onPetModel, undefined,
+          (err2) => console.warn("[CompanionPet] Load error:", err2 && err2.message));
+      } else {
+        console.warn("[CompanionPet] Load error:", err && err.message);
+      }
+    });
   }
 
   function disposePetModel(model) {

@@ -749,9 +749,29 @@ const BuddySystem = (() => {
   }
 
   /* ------------------------------------------------------ starter pick */
+  let starterWaitMs = 0;
   function maybeForceStarter() {
     const b = buddyState();
     if (b.starterChosen && b.bag.length > 0) return true;
+
+    // Never offer a starter while the cloud save is still in flight. A fresh
+    // tab would otherwise hand out a SECOND starter before the first one
+    // arrives, and the player ends up with two buddies.
+    // Bail out after STARTER_GRACE_MS so offline/local play is never blocked.
+    const STARTER_GRACE_MS = 12000;
+    let synced = true;
+    try {
+      if (typeof Store !== "undefined" && typeof Store.isCloudSyncComplete === "function") {
+        synced = Store.isCloudSyncComplete();
+      }
+    } catch (e) {}
+    if (!synced) {
+      starterWaitMs += 400;
+      if (starterWaitMs < STARTER_GRACE_MS) {
+        toast("Loading your buddies…");
+        return false;
+      }
+    }
     openStarterPicker();
     return false;
   }
@@ -815,7 +835,7 @@ const BuddySystem = (() => {
       <h2>🎒 Buddy Bag</h2>
       <p class="bd-sub">
         ${b.bag.length} / 30 buddies collected &middot; ${b.totalTamed} tamed &middot;
-        ${b.totalFeasts} feasted &middot; ${b.totalSpawns} wild spawns seen
+        ${b.totalFeasted} feasted &middot; ${b.totalSpawns} wild spawns seen
       </p>
       <div class="bd-bag-list" id="bd-bag-list"></div>
       <div class="bd-row">

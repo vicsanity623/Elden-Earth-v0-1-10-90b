@@ -47,13 +47,27 @@ const BuddyPreview = (() => {
     const path = modelUrl(MODEL_PATHS[modelKey] || MODEL_PATHS.robot);
     if (rawCache[path]) { cb(null, rawCache[path]); return; }
 
-    fetch(path)
-      .then(r => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.arrayBuffer();
-      })
+    const tryFetch = (url) => fetch(url).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.arrayBuffer();
+    });
+
+    tryFetch(path)
       .then(buf => { rawCache[path] = buf; cb(null, buf); })
-      .catch(err => cb(err || new Error("model load failed")));
+      .catch(err => {
+        // The cache-bust query can 404 on WebViews whose asset loader does not
+        // strip the query string (appassets.androidplatform.net). Retry the
+        // bare path before giving up — this is the difference between a buddy
+        // that draws and an empty preview box.
+        const bare = String(path).split("?")[0];
+        if (bare !== path) {
+          tryFetch(bare)
+            .then(buf => { rawCache[path] = buf; cb(null, buf); })
+            .catch(() => cb(err || new Error("model load failed")));
+          return;
+        }
+        cb(err || new Error("model load failed"));
+      });
   }
 
   /* ------------------------------------------------------- Hue tinting */
@@ -349,6 +363,23 @@ const BuddyPreview = (() => {
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
 
+    // Show WHY a model failed to load instead of leaving an empty box. Without
+    // this a broken model is indistinguishable from a slow one.
+    const showLoadError = (msg) => {
+      try {
+        const el = document.createElement("div");
+        el.style.cssText =
+          "position:absolute;left:0;right:0;bottom:6px;text-align:center;" +
+          "font:600 10px/1.4 system-ui,sans-serif;color:#fca5a5;pointer-events:none;" +
+          "padding:0 8px;";
+        el.textContent = msg;
+        if (container.style.position === "" || container.style.position === "static") {
+          container.style.position = "relative";
+        }
+        container.appendChild(el);
+      } catch (e) {}
+    };
+
     // Lighting: soft key + cool fill + warm rim so both models read well.
     scene.add(new THREE.HemisphereLight(0xbcd7ff, 0x223044, 0.95));
     const key = new THREE.DirectionalLight(0xffffff, 1.05);
@@ -456,11 +487,15 @@ const BuddyPreview = (() => {
       fetchRaw(modelKey, (err, buf) => {
         if (api.disposed) return;
         if (err) {
-          console.warn("[BuddyPreview] model load failed:", err.message);
+          console.warn("[BuddyPreview] model load failed:", modelKey, err.message);
+          showLoadError("model failed: " + err.message);
           return;
         }
         const loader = getLoader();
-        if (!loader) return;
+        if (!loader) {
+          showLoadError("GLTFLoader missing");
+          return;
+        }
 
         loader.parse(buf, "", (gltf) => {
           if (api.disposed) {
@@ -507,7 +542,8 @@ const BuddyPreview = (() => {
             try { bo.onReady(api); } catch (e) {}
           }
         }, undefined, (err2) => {
-          console.warn("[BuddyPreview] parse failed:", err2);
+          console.warn("[BuddyPreview] parse failed:", err2 && err2.message);
+          showLoadError("parse failed: " + (err2 && err2.message ? err2.message : "unknown"));
         });
       });
     }
