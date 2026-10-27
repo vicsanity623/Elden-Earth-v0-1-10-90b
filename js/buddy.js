@@ -1340,6 +1340,10 @@ const BuddySystem = (() => {
   /* ---------------------------------------------------------- Trainer UI */
   function openTrainerModal() {
     injectStyle();
+    const ebCoinImg = new Image();
+    ebCoinImg.src = "assets/eb-coin.png";
+    const diamondImg = new Image();
+    diamondImg.src = "assets/diamond-spawn.png";
     const b = buddyState();
     const p = (typeof PlayerXP !== "undefined") ? PlayerXP.progress() : { level: 1, xp: 0, need: 1, pct: 0, title: "Wanderer", totalXp: 0 };
 
@@ -1388,8 +1392,8 @@ const BuddySystem = (() => {
       </div>
       <div class="bd-hp-wrap">
         <div class="bd-reward-line"><span class="bd-reward-badge">EVERY LEVEL</span> 🍓 ${5 + p.level}+ berries</div>
-        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 2</span> 🪙 10 EB</div>
-        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 5</span> 💎 25 diamonds</div>
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 2</span> <img src="assets/eb-coin.png" style="width:16px;height:16px;vertical-align:middle;margin-right:4px"> 10 EB</div>
+        <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 5</span> <img src="assets/diamond-spawn.png" style="width:16px;height:16px;vertical-align:middle;margin-right:4px"> 25 diamonds</div>
         <div class="bd-reward-line"><span class="bd-reward-badge">EVERY 10</span> ⭐ 5 RP</div>
       </div>
 

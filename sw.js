@@ -1,25 +1,4 @@
-// v66.08: lucky-badge counting (lucky is a flag, not a rarity) + RP caps
-// raised so quest claims pay the RP the board displays.
-// v70.00: portal launch — the game moved to /game.html and the site lives at
-// the root. Network-first page strategy already covers the site pages.
-// v70.01: Global Challenge rewards popup (rank/contribution/plots/EB + claim),
-// per-round payout staging, and the count() fallback that made every EB prize 0.
-// v70.02: daily quest claims use a server-owned ledger (fixes "claimed but
-// never paid" — the optimistic sync poisoned the client-writable flag).
-// v71.03: mine clock bootstrap (frozen 00:10:00 mine) + empty achievements
-// adoption (stale badges after a server-side reset).
-// v71.04: tactical buy-land UX — camera auto-focus above the modal, tile
-// D-Pad, and smart hop navigation over owned tiles.
-// v71.05: remove-friend confirmation dialog (accidental taps wiped friends).
-// v71.06: capsule mirror (plant button learns cloud state) + truthful
-// stronghold status text.
-// v71.07: Turnstile human gate active on sign-in (bot sign-up defense).
-// v71.08: Firebase App Check (reCAPTCHA Enterprise) attestation — monitor mode.
-// v72.00: Buddy System — Gen-0 buddy collection, wild spawns, turn-based
-// battles, taming/feasting and trainer XP (js/buddy*.js, js/player-xp.js).
-// v86.00: Cache-bust MODEL_V so a swapped voodoo GLB is actually fetched
-// (the SW caches .glb cache-first); strip dangling external textures.
-const CACHE_NAME = 'elden-EARTH-v86.00';
+const CACHE_NAME = 'elden-EARTH-v87.00';
 
 const ASSETS_TO_CACHE = [
     './',
