@@ -329,6 +329,8 @@ const BuddyPreview = (() => {
     let clips = [];
     let currentAction = null;
     let currentClipName = null;
+    let hoverState = null;
+    let sinkOverride = 0;
     let cosmeticNodes = [];
     let hue = 0.5;
     let raf = 0;
@@ -359,6 +361,8 @@ const BuddyPreview = (() => {
       clips = [];
       currentAction = null;
       currentClipName = null;
+      hoverState = null;
+      sinkOverride = 0;
     }
 
     function playAnim(name) {
@@ -481,9 +485,15 @@ const BuddyPreview = (() => {
 
       if (mixer) mixer.update(dt);
 
-      if (modelRoot && modelRoot.userData.procedural) {
-        modelRoot.position.y = Math.sin(now * 0.0016) * 0.055;
-        modelRoot.rotation.z = Math.sin(now * 0.0011) * 0.045;
+      // Levitation hover. Also covers "procedural" models with no clips at
+      // all. NOTE: this must ADD to the fitted base transform — the old code
+      // overwrote position.y outright, which sank the model into the ground.
+      if (modelRoot) {
+        if (!hoverState) hoverState = createHoverState();
+        applyHover(hoverState, modelRoot, dt, {
+          lean: (typeof o.hoverLean === "function" ? o.hoverLean() : o.hoverLean) || 0,
+          sink: sinkOverride,
+        });
       }
 
       cosmeticNodes.forEach(n => {
@@ -513,6 +523,10 @@ const BuddyPreview = (() => {
     api.setBuddy = setBuddy;
     api.playAnim = playAnim;
     api.resize = resize;
+    // 0 = floating at rest, 1 = slumped over (used when a buddy faints).
+    api.setSink = (v) => { sinkOverride = Math.max(0, Math.min(1, v || 0)); };
+    // 0 = upright float, 1 = leaning forward into travel.
+    api.setLean = (v) => { o.hoverLean = Math.max(0, Math.min(1, v || 0)); };
     // Render a frame and grab the canvas immediately, while the drawing buffer
     // is still valid (avoids needing preserveDrawingBuffer on every preview).
     api.capture = () => {
@@ -562,6 +576,67 @@ const BuddyPreview = (() => {
    * agree on geometry and materials.
    */
   function loadRaw(modelKey, cb) { fetchRaw(modelKey, cb); }
+
+  /* ------------------------------------------------- Levitation pose ---- */
+  /**
+   * Ghostly levitation, applied every frame on top of the (static) pose model.
+   *
+   * The voodoo doll ships as a single frozen frame rather than an animation
+   * clip, so the motion is done here: a slow two-frequency bob that never
+   * looks mechanical, plus a forward lean of the head/torso while travelling.
+   *
+   *   const st = BuddyPreview.createHoverState();
+   *   ...each frame: BuddyPreview.applyHover(st, modelRoot, dt, { lean: 0..1 });
+   *
+   * `lean` 0 = hovering at rest, 1 = gliding forward (head leads).
+   * `sink` 0..1 = defeat slump, so a fainted buddy droops instead of floating.
+   */
+  function createHoverState() {
+    return {
+      t: Math.random() * 100,   // random phase so two buddies never sync up
+      lean: 0,
+      sink: 0,
+      baseY: null,
+      baseRX: null,
+      baseRZ: null,
+    };
+  }
+
+  function applyHover(state, root, dt, opts) {
+    if (!state || !root) return;
+    if (state.baseY === null) {
+      state.baseY = root.position.y;
+      state.baseRX = root.rotation.x;
+      state.baseRZ = root.rotation.z;
+    }
+    const step = Math.min(0.05, Math.max(0, dt || 0));
+    state.t += step;
+
+    const wantLean = Math.max(0, Math.min(1, (opts && opts.lean) || 0));
+    const wantSink = Math.max(0, Math.min(1, (opts && opts.sink) || 0));
+    // Smooth the transitions so it never snaps between "hover" and "lean".
+    state.lean += (wantLean - state.lean) * Math.min(1, step * 3.2);
+    state.sink += (wantSink - state.sink) * Math.min(1, step * 2.2);
+
+    const t = state.t;
+    const lean = state.lean;
+    const sink = state.sink;
+
+    // Slow levitation: two out-of-phase sines give a floating drift rather
+    // than a mechanical sine pump. Height relaxes as the buddy slumps.
+    const bob =
+      Math.sin(t * 1.02) * 0.048 +
+      Math.sin(t * 0.63 + 1.2) * 0.024 +
+      Math.sin(t * 0.27 + 2.9) * 0.012;
+    root.position.y = state.baseY + bob * (1 - sink * 0.65) - sink * 0.42;
+
+    // Gentle yaw/roll drift while idle; a touch more life while gliding.
+    const drift = 0.030 + lean * 0.022;
+    root.rotation.z = state.baseRZ + Math.sin(t * 0.71) * drift + sink * 0.42;
+    // Forward lean: head/torso lead the movement. This is the "tilt forward
+    // slightly so its head is leaning forward" the design calls for.
+    root.rotation.x = state.baseRX - lean * 0.34 + sink * 0.30;
+  }
 
   /* ------------------------------------------------------- thumbnails */
   // Static PNG of a buddy, rendered once and cached. Used by the Buddy Bag
@@ -695,5 +770,7 @@ const BuddyPreview = (() => {
     loadRaw,
     tintObject,
     buildCosmetics,
+    createHoverState,
+    applyHover,
   };
 })();

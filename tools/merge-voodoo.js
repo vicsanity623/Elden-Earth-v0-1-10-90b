@@ -70,13 +70,15 @@ const align4 = (n) => (n + 3) & ~3;
 
 // Each extra file contributes exactly ONE clip (Mixamo exports everything as
 // "mixamo.com"), so the clip name has to come from here.
-const EXTRA_CLIPS = [
-  { file: "Voodoo-Dool-Running.glb", name: "running" },
-  { file: "Voodoo-Dool-Sad-Mad.glb", name: "sad" },
-];
+// Voodoo-Pose.glb is a single frozen Mixamo frame in a levitating stance — the
+// "hover" clip is that one pose. ALL real motion is procedural (see
+// BuddyPreview.createHoverState): a slow levitation bob, and a forward lean
+// while travelling. The old idle/running/sad clips were Mixamo walk/run cycles
+// that read as glitchy twitching, so they are deliberately NOT merged in.
+const EXTRA_CLIPS = [];
 
 function main() {
-  const baseFile = path.join(SRC, "Voodoo-Dool-Idle.glb");
+  const baseFile = path.join(SRC, "Voodoo-Pose.glb");
   const extras = EXTRA_CLIPS
     .map((e) => ({ ...e, full: path.join(SRC, e.file) }))
     .filter((e) => fs.existsSync(e.full));
@@ -85,9 +87,10 @@ function main() {
     console.error("Missing base GLB: " + baseFile);
     process.exit(1);
   }
+  // Zero extras is a valid configuration: a pure repack of the base pose
+  // (texture fix + renamed clip), which is what Voodoo-Pose.glb needs.
   if (!extras.length) {
-    console.error("No extra animation GLBs found in models/_src/");
-    process.exit(1);
+    console.log("No extra clips to merge — repacking the base pose only.");
   }
 
   const A = readGlb(baseFile); // base: mesh + skin + idle clip
@@ -205,7 +208,8 @@ function main() {
 
   /* ---- 4. name the clips so runtime can tell them apart ---- */
   if (!json.animations || !json.animations.length) json.animations = [];
-  json.animations[0].name = "idle";
+  // The base pose clip becomes "hover" — the resting levitation stance.
+  json.animations[0].name = "hover";
   mergedClips.forEach((c) => json.animations.push(c));
 
   /* ---- 5. finalise ---- */

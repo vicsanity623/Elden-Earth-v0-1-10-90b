@@ -624,7 +624,12 @@ const BuddyBattle = (() => {
   async function onFaint(winner, loser) {
     if (loser === ctx.wild) {
       log(`${ctx.wild.name} fainted!`, "strong");
-      if (previewWild) previewWild.playAnim("death");
+      // Droop instead of floating — the voodoo doll is a static levitating
+      // pose, so defeat is shown as a procedural slump rather than a clip.
+      if (previewWild) {
+        try { previewWild.playAnim("death"); } catch (e) {}
+        try { if (previewWild.setSink) previewWild.setSink(1); } catch (e) {}
+      }
       await sleep(620);
       ctx.over = true;
       showOutcomeChoice();

@@ -176,6 +176,18 @@ const CompanionPet = (() => {
         if (mapInstance) mapInstance.triggerRepaint();
       }
 
+      // Ghostly levitation + forward lean while travelling (following the
+      // player or heading out to fetch). The voodoo doll is a single frozen
+      // pose, so ALL of its motion is procedural — this is what stops it
+      // looking frozen or twitching through a walk cycle.
+      if (petModel && typeof BuddyPreview !== "undefined") {
+        if (!petHoverState) petHoverState = BuddyPreview.createHoverState();
+        BuddyPreview.applyHover(petHoverState, petModel, delta, {
+          lean: (isFollowing || isFetching) ? 1 : 0,
+        });
+        if (!mixer && mapInstance) mapInstance.triggerRepaint();
+      }
+
       // 2. Update idle movement smoothly
       updateIdleRoaming();
     }
@@ -608,6 +620,8 @@ const CompanionPet = (() => {
   let idleRoamTarget = null;
   // Cosmetic pieces attached to the map companion (cleared on re-skin).
   let petExtras = [];
+  // Levitation pose state for the map pet (see BuddyPreview.applyHover).
+  let petHoverState = null;
   // Shared 3D preview used by the pet modal (shows the active buddy).
   let petModalPreview = null;
   let petModalScene = null;

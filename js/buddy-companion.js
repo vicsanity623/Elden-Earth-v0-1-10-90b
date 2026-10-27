@@ -22,6 +22,7 @@ const BuddyCompanion = (() => {
   let clips = [];
   let currentAction = null;
   let cosmeticNodes = [];
+  let hoverState = null;
   let animFrameId = null;
   let lastFrame = 0;
   let currentAnim = "idle";
@@ -93,6 +94,8 @@ const BuddyCompanion = (() => {
     mixer = null;
     clips = [];
     currentAction = null;
+    currentAnim = "idle";
+    hoverState = null;
     mountedKey = null;
   }
 
@@ -325,9 +328,11 @@ const BuddyCompanion = (() => {
 
     if (mixer) mixer.update(dt);
 
-    if (modelRoot && modelRoot.userData.procedural) {
-      modelRoot.position.y = (modelRoot.userData.baseY || 0) + Math.sin(now * 0.0016) * 0.05;
-      modelRoot.rotation.z = Math.sin(now * 0.0011) * 0.04;
+    // Ghostly levitation. `lean` ramps up while the buddy is travelling so the
+    // head/torso lead the movement, then eases back to an upright float.
+    if (modelRoot) {
+      if (!hoverState) hoverState = BuddyPreview.createHoverState();
+      BuddyPreview.applyHover(hoverState, modelRoot, dt, { lean: moving ? 1 : 0 });
     }
 
     cosmeticNodes.forEach(n => {
