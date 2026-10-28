@@ -10786,11 +10786,19 @@ body.birds-eye-mode .top-hud-row {
 .ee-ad-slot.ee-has-ad {
   visibility: visible;
   min-height: 90px;
+  /* Cap the rendered height so one tall creative can never dominate a modal.
+     A runaway rich-media unit is also the one most likely to trip the
+     browser's Heavy Ad Intervention. */
+  max-height: 280px;
   margin: 12px 0;
   padding: 6px;
   border-radius: 12px;
   background: rgba(255,255,255,.035);
   border: 1px solid rgba(150,180,240,.12);
+}
+.ee-ad-slot.ee-has-ad .adsbygoogle {
+  max-height: 268px;
+  overflow: hidden;
 }
 .ee-ad-slot.ee-has-ad::after {
   content: "advertisement";
