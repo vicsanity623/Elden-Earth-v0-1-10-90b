@@ -85,15 +85,16 @@ const EEAdSlots = (() => {
     ins.setAttribute("data-ad-client", AD_CLIENT);
     ins.setAttribute("data-ad-slot", AD_SLOT);
 
-    // Format matters: "auto" + full-width-responsive lets AdSense pick a big
-    // tall creative, and those rich-media/video units are what trip the
-    // browser's Heavy Ad Intervention ("Ad hidden for using significant
-    // resources"). A standard rectangle pulls far lighter display creatives.
-    // Override per placement with <div class="ee-ad-slot" data-ee-format="...">.
-    // Whitelist the formats AdSense accepts; anything odd falls back to the
-    // standard medium rectangle, which reliably gets light display creatives.
-    const raw = String(box.getAttribute("data-ee-format") || "rectangle");
-    const fmt = ["auto", "horizontal", "vertical", "rectangle"].includes(raw) ? raw : "rectangle";
+    // REVENUE FIRST: "auto" + full-width-responsive lets AdSense pick the
+    // highest-paying unit that fits — including the big responsive / rich
+    // formats. Those are the creatives most likely to trip the browser's
+    // Heavy Ad Intervention ("Ad hidden for using significant resources"),
+    // but they pay far more than a fixed rectangle, so we take that trade.
+    //
+    // Per-placement downgrade if a slot ever becomes annoying:
+    //   <div class="ee-ad-slot" data-ee-format="rectangle"></div>
+    const raw = String(box.getAttribute("data-ee-format") || "auto");
+    const fmt = ["auto", "horizontal", "vertical", "rectangle"].includes(raw) ? raw : "auto";
     ins.setAttribute("data-ad-format", fmt);
     if (fmt === "auto") {
       ins.setAttribute("data-full-width-responsive", "y");
