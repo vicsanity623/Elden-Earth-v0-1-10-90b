@@ -182,8 +182,19 @@ const PlotChallenge = (() => {
   }
 
   /* -------------------------------------------------------------- fetch */
+  function authReady() {
+    try {
+      return !!(typeof firebase !== "undefined" && firebase.auth && firebase.auth().currentUser);
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function fetchEvent() {
     try {
+      // Never fire a callable before sign-in — it just 401s and spams the
+      // console on every page load.
+      if (!authReady()) return null;
       if (typeof firebase === "undefined" || !firebase.functions) return null;
       const fn = firebase.functions().httpsCallable("getPlotChallenge");
       const res = await fn({});

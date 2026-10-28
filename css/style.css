@@ -10767,19 +10767,42 @@ body.birds-eye-mode .top-hud-row {
 /* ===================== ADSENSE SLOTS =====================
    Generic placement filled by js/ad-slots.js. Kept visually quiet so it reads
    as an ad and never competes with game controls. */
+/* Empty slot: NO visible chrome, but it MUST keep its layout box so AdSense
+   can measure it. display:none makes availableWidth=0 and the push is
+   rejected (and the slot is burned). */
 .ee-ad-slot {
+  position: relative;
   display: block;
   width: 100%;
+  min-height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  text-align: center;
+  /* invisible but measurable */
+  visibility: hidden;
+}
+/* Once AdSense has been handed the slot, reveal it. */
+.ee-ad-slot.ee-has-ad {
+  visibility: visible;
   min-height: 90px;
   margin: 12px 0;
   padding: 6px;
   border-radius: 12px;
   background: rgba(255,255,255,.035);
   border: 1px solid rgba(150,180,240,.12);
-  overflow: hidden;
-  text-align: center;
 }
-.ee-ad-slot[style*="display: none"] { display: none !important; }
-.ee-ad-slot .adsbygoogle { display: inline-block !important; width: 100% !important; }
+.ee-ad-slot.ee-has-ad::after {
+  content: "advertisement";
+  position: absolute; left: 0; right: 0; bottom: 2px;
+  font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase;
+  color: rgba(255,255,255,.22); pointer-events: none;
+}
+.ee-ad-slot .adsbygoogle {
+  display: inline-block !important;
+  width: 100% !important;
+  position: relative;
+  z-index: 1;
+}
 /* Never let an ad cover or sit under a primary action. */
 .modal-actions .ee-ad-slot { margin-bottom: 0; }
