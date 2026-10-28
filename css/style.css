@@ -10762,3 +10762,24 @@ body.birds-eye-mode .top-hud-row {
   gap: 6px;
   flex: 0 0 auto;
 }
+
+
+/* ===================== ADSENSE SLOTS =====================
+   Generic placement filled by js/ad-slots.js. Kept visually quiet so it reads
+   as an ad and never competes with game controls. */
+.ee-ad-slot {
+  display: block;
+  width: 100%;
+  min-height: 90px;
+  margin: 12px 0;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(150,180,240,.12);
+  overflow: hidden;
+  text-align: center;
+}
+.ee-ad-slot[style*="display: none"] { display: none !important; }
+.ee-ad-slot .adsbygoogle { display: inline-block !important; width: 100% !important; }
+/* Never let an ad cover or sit under a primary action. */
+.modal-actions .ee-ad-slot { margin-bottom: 0; }

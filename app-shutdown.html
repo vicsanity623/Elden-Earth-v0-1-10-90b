@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Elden Earth — App Temporarily Paused</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg2: #141c30;
+    --card: rgba(28, 38, 62, .92);
+    --line: rgba(150, 180, 240, .22);
+    --text: #eaf1ff;
+    --muted: #9db2d0;
+    --hot: #ff3b5c;
+    --gold: #fbbf24;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: radial-gradient(120% 80% at 50% 0%, #1c2744 0%, var(--bg) 62%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100%;
+  }
+  .wrap {
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 28px 20px calc(28px + env(safe-area-inset-bottom, 0px));
+    text-align: center;
+  }
+  .orb {
+    width: 92px; height: 92px; border-radius: 26px;
+    background: linear-gradient(150deg, #6d28d9, #0ea5e9);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px; margin-bottom: 22px;
+    box-shadow: 0 18px 50px rgba(109, 40, 217, .42);
+  }
+  h1 {
+    font-size: 25px; line-height: 1.22; margin: 0 0 12px;
+    letter-spacing: .2px; font-weight: 900;
+  }
+  .sub {
+    font-size: 15px; line-height: 1.62; color: var(--muted);
+    margin: 0 auto 22px; max-width: 420px;
+  }
+  .card {
+    width: 100%; max-width: 420px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; padding: 18px 16px; margin-bottom: 16px;
+    text-align: left;
+  }
+  .card h2 {
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--gold); margin: 0 0 10px; font-weight: 800;
+  }
+  .steps { margin: 0; padding: 0; list-style: none; }
+  .steps li {
+    display: flex; gap: 11px; align-items: flex-start;
+    font-size: 13.5px; line-height: 1.55; color: var(--text); margin-bottom: 11px;
+  }
+  .steps li:last-child { margin-bottom: 0; }
+  .n {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 8px;
+    background: linear-gradient(140deg, #2b6cf0, #7c3aed); color: #fff;
+    font-size: 11px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .urlbox {
+    display: block; width: 100%; text-align: center;
+    background: rgba(255,255,255,.07); border: 1px dashed rgba(150,180,240,.4);
+    border-radius: 12px; padding: 13px 12px; margin: 4px 0 14px;
+    font-size: 13px; font-weight: 800; color: #fff; word-break: break-all;
+    cursor: pointer; user-select: all;
+  }
+  .urlbox small { display: block; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+  .btn {
+    display: block; width: 100%; text-align: center; text-decoration: none;
+    padding: 15px 18px; border-radius: 14px; font-size: 15px; font-weight: 800;
+    border: none; cursor: pointer; font-family: inherit;
+    transition: transform .12s ease;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn.primary {
+    background: linear-gradient(135deg, #2b6cf0, #7c3aed); color: #fff;
+    box-shadow: 0 14px 34px rgba(76, 88, 224, .38);
+  }
+  .btn.ghost {
+    background: rgba(255,255,255,.07); color: var(--text);
+    border: 1px solid var(--line); margin-top: 10px;
+  }
+  .foot { font-size: 11px; color: #6d809e; margin-top: 18px; line-height: 1.6; max-width: 420px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(251, 191, 36, .14); color: var(--gold);
+    border: 1px solid rgba(251, 191, 36, .32);
+    font-size: 10.5px; font-weight: 800; letter-spacing: .7px;
+    padding: 5px 11px; border-radius: 99px; margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="orb">🌍</div>
+
+    <div class="pill">⏸ Closed testing paused</div>
+
+    <h1>The Elden Earth app is<br>temporarily shut down</h1>
+    <p class="sub">
+      Thanks for testing with us. We're pausing the Android app while we grow
+      the community &mdash; the realm lives on, and your account is safe.
+    </p>
+
+    <div class="card">
+      <h2>▶ Keep playing in your browser</h2>
+      <div class="urlbox" onclick="copyUrl()">
+        <span id="url-text">https://vicsanity623.github.io/Elden-Earth-v0-1-10-90b/game.html</span>
+        <small id="copy-hint">Tap to copy</small>
+      </div>
+      <button class="btn primary" onclick="openGame()">Open Elden Earth</button>
+      <button class="btn ghost" onclick="copyUrl()">Copy Link</button>
+    </div>
+
+    <div class="card">
+      <h2>📱 Add it to your home screen</h2>
+      <ul class="steps">
+        <li><span class="n">1</span><span>Open the link above in <b>Safari</b> or <b>Chrome</b></span></li>
+        <li><span class="n">2</span><span>Tap the <b>Share</b> / <b>Menu</b> button</span></li>
+        <li><span class="n">3</span><span>Choose <b>&ldquo;Add to Home Screen&rdquo;</b></span></li>
+        <li><span class="n">4</span><span>Launch it like any app &mdash; same account, same progress</span></li>
+      </ul>
+    </div>
+
+    <p class="foot">
+      Your player data, buddies, land and progress are all stored on your
+      account &mdash; nothing is lost. The app returns once we have a larger
+      testing group.
+    </p>
+  </div>
+
+<script>
+  var GAME_URL = "https://vicsanity623.github.io/Elden-Earth-v0-1-10-90b/game.html";
+
+  function openGame() {
+    // Prefer an external browser so the player gets real web ads + a proper
+    // installable PWA. window.open(_system) is honoured by most WebViews;
+    // fall back to a plain anchor if not.
+    try {
+      if (window.open) {
+        var w = window.open(GAME_URL, "_system");
+        if (w) return;
+      }
+    } catch (e) {}
+    try { window.open(GAME_URL, "_blank"); } catch (e) {}
+  }
+
+  function copyUrl() {
+    var hint = document.getElementById("copy-hint");
+    var done = function () {
+      if (!hint) return;
+      hint.textContent = "Copied ✓";
+      setTimeout(function () { hint.textContent = "Tap to copy"; }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(GAME_URL).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+    function fallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = GAME_URL;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        done();
+      } catch (e) {}
+    }
+  }
+</script>
+</body>
+</html>

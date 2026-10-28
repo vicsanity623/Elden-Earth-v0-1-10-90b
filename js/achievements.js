@@ -420,12 +420,29 @@ const Achievements = (() => {
    */
   let unsub = null;
   let refreshTimer = null;
+  // Boot-time retry: init() can run before sign-in has resolved `player.id`,
+  // in which case startRealtime() bailed and NOTHING ever listened again —
+  // so every badge sat at 0/N even though the server was counting fine
+  // (saves_private.stats.plotsAscended etc. were all there).
+  let pendingRetry = null;
   function startRealtime() {
     if (unsub) return;
     try {
       const db = Store.getDb && Store.getDb();
       const uid = Store.get()?.player?.id;
-      if (!db || !uid) return;
+      if (!db || !uid) {
+        if (!pendingRetry) {
+          pendingRetry = setInterval(() => {
+            if (unsub) { clearInterval(pendingRetry); pendingRetry = null; return; }
+            startRealtime();
+          }, 2000);
+          setTimeout(() => {
+            if (pendingRetry) { clearInterval(pendingRetry); pendingRetry = null; }
+          }, 60000);
+        }
+        return;
+      }
+      if (pendingRetry) { clearInterval(pendingRetry); pendingRetry = null; }
       unsub = db.collection("saves_private").doc(uid).onSnapshot((snap) => {
         if (!snap || !snap.exists) return;
         const priv = snap.data() || {};
@@ -552,6 +569,16 @@ const Achievements = (() => {
   function init() {
     startRealtime();
     renderAll();
+    try {
+      if (typeof firebase !== "undefined" && firebase.auth) {
+        firebase.auth().onAuthStateChanged(() => {
+          // Sign-in resolves player.id after boot — make sure the listener
+          // actually attaches now that we know who we are.
+          startRealtime();
+          renderAll();
+        });
+      }
+    } catch (e) {}
   }
 
   return { init, renderTab, renderBadges, renderGrid, openGrid, renderAll, record, claimAll, hasClaimable, ALL, CATEGORIES, BY_KEY };

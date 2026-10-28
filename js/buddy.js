@@ -1344,6 +1344,24 @@ const BuddySystem = (() => {
 
     const playerXpReason = summary.outcome;
 
+    // Buddy XP is awarded for EVERY outcome — winning is how a buddy grows.
+    // The tame path used to skip this entirely, so the most common win left
+    // the buddy at 0 XP while `battlesWon` still ticked up.
+    const awardBuddyXp = (amount, label) => {
+      const target = bagAlly || activeInst;
+      if (!target || !amount) return null;
+      const r = BuddyEngine.addXp(target, amount);
+      if (r.leveled > 0) {
+        toast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
+        if (typeof PlayerXP !== "undefined") {
+          PlayerXP.addXP(PlayerXP.XP.buddyLevelUp * r.leveled, "buddy_level");
+        }
+      } else if (label) {
+        toast(`${target.nickname} gained ${amount} XP`);
+      }
+      return r;
+    };
+
     if (summary.outcome === "tame" && summary.tamed) {
       const tamed = summary.tamed;
       if (b.bag.length < 30) {
@@ -1354,6 +1372,8 @@ const BuddySystem = (() => {
       } else {
         toast("Your Buddy Bag is full (30 max)");
       }
+      // Winning the fight is what earns the XP — same as feast/loss.
+      awardBuddyXp(BuddyEngine.battleXpReward(wildInst, "win"));
       if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.tame, "tame");
     } else if (summary.outcome === "feast") {
       b.totalFeasted += 1;
@@ -1378,6 +1398,7 @@ const BuddySystem = (() => {
       if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.battleLoss, "battle_loss");
     } else if (summary.outcome === "released") {
       toast("The wild buddy was released unharmed");
+      awardBuddyXp(Math.floor(BuddyEngine.battleXpReward(wildInst, "win") * 0.6));
       if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.battleWin, "battle_win");
     }
 

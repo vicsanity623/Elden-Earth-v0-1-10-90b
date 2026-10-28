@@ -4716,13 +4716,18 @@
     const spinBtn = el("spin-btn");
 
     // Rewarded-ad placements policy (AdMob/Play): ads ACCELERATE, never gate.
-    // 10 free spins/day are the baseline, "Watch Ad to Spin" tops them up, and
+    // 3 free spins/day are the baseline, "Watch Ad to Spin" tops them up, and
     // paying diamonds stays available beside the ad — a hard ad-wall would be
     // flagged as deceptive design.
+    // AD_SPIN_DAILY_CAP: cut from 10 to 3 while the native app is paused —
+    // the AdMob units behind those ads are DEMO units that earn nothing, so
+    // 10 free spins a day was giving away value for no revenue. Keep this in
+    // sync with `wheel_spin.cap` in functions/index.js.
+    const AD_SPIN_DAILY_CAP = 3;
     function adWheelSpinsLeft() {
       const st = Store.get();
       const used = Number(st && st.player && st.player.adRewardCounts && st.player.adRewardCounts.wheel_spin) || 0;
-      return Math.max(0, 10 - used);
+      return Math.max(0, AD_SPIN_DAILY_CAP - used);
     }
 
     function updateSpinButtonState() {
@@ -5433,6 +5438,13 @@
     if (typeof Cashout !== "undefined") Cashout.init();
     if (typeof AgeGate !== "undefined") AgeGate.init();
     if (typeof Achievements !== "undefined") Achievements.init();
+    // AdSense placements — fills every .ee-ad-slot in the modals. Only ever
+    // renders in the browser (EEAdPolicy.adsAllowed is false in the native
+    // shell, where the AdMob units are DEMO units that earn nothing).
+    if (typeof EEAdSlots !== "undefined") {
+      try { EEAdSlots.init(); } catch (e) { console.warn("[AdSlots] init failed:", e); }
+    }
+
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     // Plot Rush (monthly challenge) — separate doc/schedule from the weekly
     // Global Challenge, so the two can be live at the same time.
