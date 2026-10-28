@@ -119,8 +119,9 @@
         <span id="url-text">https://vicsanity623.github.io/Elden-Earth-v0-1-10-90b/game.html</span>
         <small id="copy-hint">Tap to copy</small>
       </div>
-      <button class="btn primary" onclick="openGame()">Open Elden Earth</button>
+      <button class="btn primary" onclick="openGame()">Open in Browser</button>
       <button class="btn ghost" onclick="copyUrl()">Copy Link</button>
+      <button class="btn ghost" onclick="closeApp()">Exit App</button>
     </div>
 
     <div class="card">
@@ -144,16 +145,36 @@
   var GAME_URL = "https://vicsanity623.github.io/Elden-Earth-v0-1-10-90b/game.html";
 
   function openGame() {
-    // Prefer an external browser so the player gets real web ads + a proper
-    // installable PWA. window.open(_system) is honoured by most WebViews;
-    // fall back to a plain anchor if not.
+    // MUST go through the native bridge. window.open() is NOT safe here: the
+    // Android WebView's onCreateWindow re-targets new windows back into the
+    // main WebView, which loaded the full game inside the app and completely
+    // bypassed this shutdown screen. openExternal() fires an Intent.ACTION_VIEW
+    // so the link opens in the player's real browser instead.
     try {
-      if (window.open) {
-        var w = window.open(GAME_URL, "_system");
-        if (w) return;
+      if (window.AndroidBridge && typeof window.AndroidBridge.openExternal === "function") {
+        window.AndroidBridge.openExternal(GAME_URL);
+        return;
       }
     } catch (e) {}
+    try {
+      if (window.EldenEarthNative && typeof window.EldenEarthNative.openExternal === "function") {
+        window.EldenEarthNative.openExternal(GAME_URL);
+        return;
+      }
+    } catch (e) {}
+    // Not running inside the app (someone opened this page in a browser) —
+    // a plain window.open is fine there.
     try { window.open(GAME_URL, "_blank"); } catch (e) {}
+  }
+
+  function closeApp() {
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.closeApp === "function") {
+        window.AndroidBridge.closeApp();
+        return;
+      }
+    } catch (e) {}
+    try { window.close(); } catch (e) {}
   }
 
   function copyUrl() {
