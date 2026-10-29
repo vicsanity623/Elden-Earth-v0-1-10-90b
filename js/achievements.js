@@ -67,6 +67,24 @@ const Achievements = (() => {
     { id: "friends_made",    cat: "social",   stat: "friendsMade", title: "Make {n} friends",      tiers: [{t:1,eb:25,rp:2},{t:5,eb:100,rp:5},{t:25,eb:400,rp:10}] },
     { id: "chat_messages",   cat: "social",   stat: "chatMessages",  title: "Send {n} chat messages",            tiers: [{t:10,eb:25,rp:2},{t:100,eb:100,rp:5},{t:1000,eb:400,rp:10}] },
 
+  // ============ PvP ARENA & BUDDY MASTERY (2026-10) ============
+  // Deliberately NO EB in this block — these pay Diamonds + Berries plus a
+  // small RP stipend, matching the reward philosophy for the new features.
+  // --- Combat: PvP Arena ---
+  { id: "arena_wins",       cat: "combat",  stat: "arenaWins",       title: "Win {n} PvP Arena battles",   tiers: [{t:1,diamonds:10,berries:25,rp:1},{t:10,diamonds:30,berries:75,rp:2},{t:50,diamonds:75,berries:200,rp:5}] },
+  { id: "arena_battles",    cat: "combat",  stat: "arenaBattles",    title: "Fight {n} PvP Arena battles", tiers: [{t:10,diamonds:10,berries:25,rp:1},{t:50,diamonds:30,berries:75,rp:2},{t:150,diamonds:75,berries:200,rp:5}] },
+  { id: "defense_wins",     cat: "combat",  stat: "defenseBattlesWon", title: "Win {n} battles with a Defense Buddy set", tiers: [{t:5,diamonds:15,berries:40,rp:1},{t:25,diamonds:40,berries:125,rp:2},{t:100,diamonds:100,berries:300,rp:5}] },
+  { id: "wild_battles_won", cat: "combat",  stat: "wildBattlesWon",  title: "Win {n} wild buddy battles",  tiers: [{t:10,diamonds:10,berries:25,rp:1},{t:50,diamonds:30,berries:75,rp:2},{t:250,diamonds:75,berries:200,rp:5}] },
+  { id: "buddies_feasted",  cat: "combat",  stat: "buddiesFeasted",  title: "Feast on {n} wild buddies",    tiers: [{t:1,diamonds:15,berries:50,rp:1},{t:10,diamonds:40,berries:100,rp:2},{t:50,diamonds:100,berries:250,rp:5}] },
+  // --- Mastery: buddy & trainer growth ---
+  { id: "buddies_tamed",    cat: "mastery", stat: "buddiesTamed",    title: "Tame {n} wild buddies",       tiers: [{t:1,diamonds:20,berries:50,rp:1},{t:10,diamonds:50,berries:125,rp:2},{t:50,diamonds:125,berries:300,rp:5}] },
+  { id: "buddy_level_ups",  cat: "mastery", stat: "buddyLevelUps",   title: "Level up a buddy {n} times",  tiers: [{t:5,diamonds:10,berries:30,rp:1},{t:25,diamonds:30,berries:90,rp:2},{t:100,diamonds:75,berries:250,rp:5}] },
+  { id: "trainer_levels",   cat: "mastery", stat: "trainerLevels",   title: "Gain {n} trainer levels",     tiers: [{t:5,diamonds:15,berries:50,rp:1},{t:15,diamonds:40,berries:125,rp:2},{t:40,diamonds:100,berries:300,rp:5}] },
+  { id: "buddies_owned",    cat: "mastery", stat: "buddiesOwned", derived: true, title: "Own {n} buddies at once", tiers: [{t:5,diamonds:15,berries:40,rp:1},{t:15,diamonds:40,berries:100,rp:2},{t:25,diamonds:100,berries:250,rp:5}] },
+  { id: "buddy_max_level",  cat: "mastery", stat: "buddyMaxLevel", derived: true, title: "Raise a buddy to level {n}", tiers: [{t:20,diamonds:25,berries:75,rp:1},{t:35,diamonds:60,berries:150,rp:3},{t:50,diamonds:150,berries:400,rp:5}] },
+  // --- Economy: arena currency ---
+  { id: "arena_ap",         cat: "economy", stat: "arenaApEarned",   title: "Earn {n} Arena Points",       tiers: [{t:25,diamonds:10,berries:30,rp:1},{t:150,diamonds:30,berries:90,rp:2},{t:600,diamonds:75,berries:250,rp:5}] },
+
     { id: "citadels_taken",  cat: "combat",   stat: "citadelsTaken", title: "Capture {n} citadels",              tiers: [{t:1,eb:50,rp:2},{t:10,eb:150,rp:5},{t:50,eb:500,rp:10}] },
     { id: "defenders_recalled", cat: "combat", stat: "defendersRecalled", title: "Recall {n} citadel defenders", tiers: [{t:1,eb:25,rp:2},{t:10,eb:100,rp:5},{t:50,eb:400,rp:10}] },
     { id: "citadels_upgraded", cat: "combat", stat: "citadelsUpgraded", title: "Upgrade {n} citadels",          tiers: [{t:1,eb:50,rp:2},{t:5,eb:150,rp:5},{t:25,eb:500,rp:10}] },
@@ -92,6 +110,8 @@ const Achievements = (() => {
         title: tr.title.replace("{n}", String(tier.t)),
         eb: tier.eb,
         rp: tier.rp,
+        diamonds: tier.diamonds || 0,
+        berries: tier.berries || 0,
       });
     });
   });
@@ -117,6 +137,18 @@ const Achievements = (() => {
 
   function stats() {
     try { return Store.get()?.achievementStats || {}; } catch (e) { return {}; }
+  }
+
+  // Render whatever a tier actually pays. New-feature badges pay Diamonds +
+  // Berries (no EB); the legacy tracks pay EB + RP. One formatter so the list,
+  // the popup and the toast can never disagree.
+  function rewardText(def) {
+    const bits = [];
+    if (def.eb) bits.push(`+${def.eb} EB`);
+    if (def.diamonds) bits.push(`\uD83D\uDD25 ${def.diamonds}`.replace("\uD83D\uDD25", "\uD83D\uDD25"));
+    if (def.berries) bits.push(`\uD83C\uDF53 ${def.berries}`);
+    if (def.rp) bits.push(`+${def.rp}RP`);
+    return bits.join(" \u00B7 ");
   }
 
   function statValue(def) {
@@ -149,6 +181,14 @@ const Achievements = (() => {
       case "extractorLevel": return Number(state.extractor && state.extractor.level) || 0;
       // friendsMade is a counter (recordActivity), not derived — see the note
       // on the friends_made track definition.
+      case "buddiesOwned": {
+        const bag = (state.buddy && Array.isArray(state.buddy.bag)) ? state.buddy.bag : [];
+        return bag.length;
+      }
+      case "buddyMaxLevel": {
+        const bag = (state.buddy && Array.isArray(state.buddy.bag)) ? state.buddy.bag : [];
+        return bag.reduce((m, b) => Math.max(m, (b && b.level) || 1), 0);
+      }
       case "badgesEarned":   return Object.keys(claims()).length;
       default: return 0;
     }
@@ -211,7 +251,7 @@ const Achievements = (() => {
             ${badgeMarkup(a, { earned: done || complete })}
             <div class="ach-body">
               <div class="ach-title">${a.title}</div>
-              <div class="ach-reward">+${a.eb} EB${a.rp ? ` <span class="quest-rp">+${a.rp}RP</span>` : ""}</div>
+              <div class="ach-reward">${rewardText(a)}</div>
               ${done ? "" : `
                 <div class="quest-progress">
                   <div class="quest-progress-track"><div class="quest-progress-fill" style="width:${pct}%"></div></div>
@@ -276,7 +316,7 @@ const Achievements = (() => {
         Store.save && Store.save(false);
       }
 
-      toast(`🏅 Achievement unlocked! ${def.title} · +${def.eb} EB${def.rp ? ` · +${def.rp}RP` : ""}`, 5000);
+      toast(`🏅 Achievement unlocked! ${def.title} · ${rewardText(def)}`, 5000);
       renderAll();
     } catch (e) {
       console.warn("[Achievements] claim failed:", e);
@@ -369,7 +409,7 @@ const Achievements = (() => {
       </div>
       <div class="badge-detail-req">
         <span class="badge-detail-label">Reward</span>
-        <span>+${def.eb} EB${def.rp ? ` · +${def.rp} RP` : ""}</span>
+        <span>${rewardText(def)}</span>
       </div>
       <div class="badge-detail-req">
         <span class="badge-detail-label">Unlocked</span>
@@ -507,7 +547,7 @@ const Achievements = (() => {
     if (claimingAll) return;
     claimingAll = true;
 
-    let granted = 0, skipped = 0, ebTotal = 0, rpTotal = 0;
+    let granted = 0, skipped = 0, ebTotal = 0, rpTotal = 0, diaTotal = 0, berryTotal = 0;
 
     for (let i = 0; i < ready.length; i++) {
       const def = ready[i];
@@ -518,6 +558,8 @@ const Achievements = (() => {
           granted++;
           ebTotal += Number(res.eb) || 0;
           rpTotal += Number(res.rp) || 0;
+          diaTotal += Number(res.diamonds) || 0;
+          berryTotal += Number(res.berries) || 0;
 
           const state = Store.get();
           if (state) {
@@ -531,7 +573,7 @@ const Achievements = (() => {
 
           // Staggered so the toasts stack up instead of replacing each other.
           setTimeout(() => {
-            toast(`🏅 ${def.title} · +${def.eb} EB${def.rp ? ` · +${def.rp}RP` : ""}`, 3500);
+            toast(`🏅 ${def.title} · ${rewardText(def)}`, 3500);
           }, i * 300);
         } else {
           skipped++;
@@ -548,8 +590,8 @@ const Achievements = (() => {
     if (typeof window.updateCalendarHUD === "function") window.updateCalendarHUD();
 
     setTimeout(() => {
-      if (skipped) toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP (${skipped} skipped)`, 5000);
-      else toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${rpTotal}RP`, 5000);
+      if (skipped) toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${diaTotal}💎 · +${berryTotal}🍓 · +${rpTotal}RP (${skipped} skipped)`, 5000);
+      else toast(`✨ Claimed ${granted} badges · +${ebTotal} EB · +${diaTotal}💎 · +${berryTotal}🍓 · +${rpTotal}RP`, 5000);
     }, ready.length * 300 + 150);
 
     claimingAll = false;

@@ -5494,6 +5494,12 @@
     if (typeof Arena !== "undefined") {
       try { Arena.init(); } catch (e) { console.warn("[Arena] init failed:", e); }
     }
+    // Admin approval panel — an extra "Admin" tab inside Player Info.
+    // Only rendered for GAME_ADMIN_UIDS; the server re-checks the
+    // allowlist on every call, so this UI is never the security boundary.
+    if (typeof AdminPanel !== "undefined") {
+      try { AdminPanel.init(); } catch (e) { console.warn("[AdminPanel] init failed:", e); }
+    }
     if (typeof PlotChallenge !== "undefined") {
       try {
         PlotChallenge.init();
