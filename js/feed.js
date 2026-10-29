@@ -12,6 +12,8 @@ const Feed = (() => {
   let unreadCount = 0;
   const MAX_EVENTS = 50;
   const events = [];
+  const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+  const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
 
   // Universal ISO 3166-1 country code to flag emoji
   function getFlagEmoji(countryCode) {
@@ -260,7 +262,7 @@ const Feed = (() => {
       message = `🎉 <strong>${escapeHtml(playerName)}</strong> hit the <strong>${escapeHtml(amount)} EB</strong> Super Bonus on the Wheel!`;
     } else if (type === "diamond_jackpot") {
       const amount = details.amount || 12;
-      message = `💎 <strong>${escapeHtml(playerName)}</strong> won the <strong>+${escapeHtml(amount)} Diamond Bonus</strong> on the Wheel! 🚀`;
+      message = `${iconDiamond} <strong>${escapeHtml(playerName)}</strong> won the <strong>+${escapeHtml(amount)} Diamond Bonus</strong> on the Wheel! 🚀`;
     } else if (type === "daily") {
       const day = details.day || 1;
       message = `📅 <strong>${escapeHtml(playerName)}</strong> has logged in for <strong>${escapeHtml(day)} day${day > 1 ? "s" : ""} in a row!</strong> Welcome back! 🔥`;
