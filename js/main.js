@@ -4617,7 +4617,7 @@
     el("opt-in-beta-btn")?.addEventListener("click", async () => {
       const state = Store.get();
       if (state.player?.betaFounder) {
-        showToast("🧪 You're already an Alpha Founder — thanks for testing!", 3500);
+        showToast("⋆☬⋆ You're already an Alpha Founder — thanks for testing!", 3500);
         return;
       }
       if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
@@ -4644,8 +4644,8 @@
       if (title) title.textContent = "✓ Alpha Founder";
       if (sub) sub.textContent = "You're on the closed beta list — your Google account email goes to the Play test invite.";
       showToast(res.already
-        ? "🧪 You're already on the list!"
-        : `🧪 You're on the list! +1,000 EB & +50 ${iconDiamond} Founders Pack added!`, 6000);
+        ? "⋆☬⋆ You're already on the list!"
+        : `⋆☬⋆ You're on the list! +1,000 EB & +50 ${iconDiamond} Founders Pack added!`, 6000);
     });
 
     el("menu-btn").addEventListener("click", () => {
