@@ -245,7 +245,7 @@ const PlotChallenge = (() => {
         if (d.eb) bits.push(`🪙 ${d.eb} EB`);
         if (d.ebShare) bits.push(`🪙 ${fmtNum(d.ebShare)} EB`);
         if (d.diamonds) bits.push(`💎 ${d.diamonds}`);
-        if (d.plots && d.plots.length) bits.push(`🏗️ ${d.plots.length} plot${d.plots.length > 1 ? "s" : ""}`);
+        if (d.plots && d.plots.length) bits.push(`🗺️ ${d.plots.length} plot${d.plots.length > 1 ? "s" : ""}`);
         toast("🎉 Claimed! " + bits.join(" · "));
         fetchEvent();
       } else {
@@ -273,7 +273,7 @@ const PlotChallenge = (() => {
     if (r.live && ev && !isExpired(ev)) {
       return `
         <button class="events-hub-row is-live" data-hub-action="monthly">
-          <span class="events-hub-row-icon">🏗️</span>
+          <span class="events-hub-row-icon">🗺️</span>
           <span class="events-hub-row-body">
             <span class="events-hub-row-title">Plot Rush</span>
             <span class="events-hub-row-sub">${fmtNum(total)} / ${fmtNum(goal)} plots claimed</span>
@@ -285,7 +285,7 @@ const PlotChallenge = (() => {
     if (r.live && ev && isExpired(ev)) {
       return `
         <button class="events-hub-row" data-hub-action="monthly">
-          <span class="events-hub-row-icon">🏗️</span>
+          <span class="events-hub-row-icon">🗺️</span>
           <span class="events-hub-row-body">
             <span class="events-hub-row-title">Plot Rush</span>
             <span class="events-hub-row-sub">Round ended — view results &amp; rewards</span>
@@ -296,7 +296,7 @@ const PlotChallenge = (() => {
     // Between rounds — count down to the next open.
     return `
       <button class="events-hub-row is-disabled" data-hub-action="monthly">
-        <span class="events-hub-row-icon">🏗️</span>
+        <span class="events-hub-row-icon">🗺️</span>
         <span class="events-hub-row-body">
           <span class="events-hub-row-title">Plot Rush</span>
           <span class="events-hub-row-sub">Starts in ${fmtDaysAway(r.start - Date.now())}</span>
