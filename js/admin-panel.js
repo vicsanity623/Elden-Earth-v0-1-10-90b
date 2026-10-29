@@ -27,7 +27,13 @@ const AdminPanel = (() => {
   function isAdmin() {
     try {
       const uid = Store.get()?.player?.id;
-      return !!(uid && (window.CONFIG && CONFIG.GAME_ADMIN_UIDS || []).includes(uid));
+      // `CONFIG` is declared with `const` in js/config.js, so it is a LEXICAL
+      // global — window.CONFIG is undefined. Reading window.CONFIG silently
+      // made isAdmin() always false and the Admin tab never appeared.
+      const cfg = (typeof CONFIG !== "undefined" && CONFIG)
+        || (typeof window !== "undefined" && window.CONFIG)
+        || {};
+      return !!(uid && (cfg.GAME_ADMIN_UIDS || []).includes(uid));
     } catch (e) {
       return false;
     }
@@ -175,6 +181,9 @@ const AdminPanel = (() => {
     }
     lastLoad = Date.now();
 
+    // `pending` = never reviewed. `unapplied` = someone flipped status to
+    // "approved" by hand in Firestore, but no code ever wrote it to the
+    // player's save — so it still needs an Apply from here.
     const avatars = Array.isArray(d.avatars) ? d.avatars : [];
     const names = Array.isArray(d.names) ? d.names : [];
 
@@ -190,7 +199,7 @@ const AdminPanel = (() => {
             <div class="adm-meta">${escapeHtml(r.userId || r.id)} · submitted ${fmtAge(r.submittedAt)}</div>
           </div>
           <div class="adm-actions">
-            <button class="adm-btn ok" data-act="avatar-approve" data-uid="${escapeHtml(r.userId || r.id)}">Approve</button>
+            <button class="adm-btn ok" data-act="avatar-approve" data-uid="${escapeHtml(r.userId || r.id)}">${r.status === "approved" ? "Apply" : "Approve"}</button>
             <button class="adm-btn no" data-act="avatar-reject" data-uid="${escapeHtml(r.userId || r.id)}">Reject</button>
           </div>
         </div>`).join("") : `<div class="adm-empty">No avatar requests waiting. 🎉</div>`}

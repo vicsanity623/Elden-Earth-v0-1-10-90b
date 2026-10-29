@@ -337,6 +337,14 @@ const Store = (() => {
             localStorage.setItem(KEY, JSON.stringify(state));
           }
           let mirrorDirty = false;
+          // Approved avatar is server-authoritative — adopt it immediately so a
+          // player online while an admin approves sees their new face without
+          // waiting for a reload.
+          if (result.data?.authoritativeAvatar) {
+            if (!state.player) state.player = {};
+            state.player.avatar = String(result.data.authoritativeAvatar);
+            console.log("[Cloud] Adopted approved avatar");
+          }
           if (result.data?.authoritative && typeof result.data.authoritative === "object") {
             // Economy values are SERVER-AUTHORITATIVE and adopted on every sync
             // response. Without this each device kept ticking its own local copy
