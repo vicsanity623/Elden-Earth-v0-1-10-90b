@@ -10,6 +10,8 @@ const Diamonds = (() => {
   let onDenied = () => {};
   let spawnTimer = null;
   let spawnInFlight = false;
+  const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+  const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
 
   // Floating Combat Text Helper
   function spawnFloatingText(x, y, htmlContent) {
@@ -246,13 +248,13 @@ const Diamonds = (() => {
           delete state.liveDiamonds[did];
           if (markers[did]) { markers[did].remove(); delete markers[did]; }
           Store.save(false);
-          toastFn("💎 That diamond has vanished.", 2500);
+          toastFn(`${iconDiamond} That diamond has vanished.`, 2500);
         } else if (serverResult.reason === "position_mismatch") {
           toastFn("📍 Position updated — try again in a moment.", 3000);
         } else if (serverResult.reason === "already_collected") {
           delete state.liveDiamonds[did];
           if (markers[did]) { markers[did].remove(); delete markers[did]; }
-          toastFn("💎 Already collected!", 2500);
+          toastFn(`${iconDiamond} Already collected!`, 2500);
         } else if (serverResult.reason === "velocity_check_failed") {
           toastFn("🚫 Movement anomaly — collection blocked.", 3500);
         } else if (serverResult.reason === "rate_limited") {
