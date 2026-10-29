@@ -102,10 +102,10 @@ const PlotChallenge = (() => {
     return `
       <div class="ge-rewards-box">
         <strong>🏆 TOP 500 PLOT REWARDS</strong>
-        <div class="ge-reward-line"><span>🥇 Rank 1</span><span>10 RP · 1,000 EB · 250 💎 · 1 Epic Lucky plot</span></div>
-        <div class="ge-reward-line"><span>🥈 Rank 2</span><span>5 RP · 500 EB · 100 💎 · 1 Epic plot</span></div>
-        <div class="ge-reward-line"><span>🥉 Rank 3</span><span>2 RP · 100 EB · 50 💎</span></div>
-        <div class="ge-reward-line"><span class="muted">✓ Top 500</span><span class="muted">Share of the 100,000 EB pool</span></div>
+        <div class="ge-reward-line"><span>🥇 Rank 1</span><span>10 RP · 1,000 ${iconCoin} EB · 250 ${iconDiamond} · 1 Epic Lucky plot</span></div>
+        <div class="ge-reward-line"><span>🥈 Rank 2</span><span>5 RP · 500 ${iconCoin} EB · 100 ${iconDiamond} · 1 Epic plot</span></div>
+        <div class="ge-reward-line"><span>🥉 Rank 3</span><span>2 RP · 100 ${iconCoin} EB · 50 ${iconDiamond}</span></div>
+        <div class="ge-reward-line"><span class="muted">✓ Top 500</span><span class="muted">Share of the 100,000 ${iconCoin} EB pool</span></div>
       </div>`;
   }
 
