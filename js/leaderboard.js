@@ -301,7 +301,7 @@ const Leaderboard = (() => {
         avatar: state.player.avatar || "🙂",
         plotsCount: Object.keys(state.plots || {}).length,
         cash: Number(state.cash) || 0,
-        lifetimeRent: Number(state.lifetimeRent || state.cash) || 0,
+        lifetimeRent: Math.max(Number(state.lifetimeRent) || 0, Number(state.cash) || 0),
         cities: {}, states: {}, countries: {},
         citiesClean: {}, statesClean: {}, countriesClean: {}
       };

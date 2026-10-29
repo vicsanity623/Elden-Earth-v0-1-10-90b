@@ -578,7 +578,7 @@
     if (citadelTab) citadelTab.style.display = isOtherPlayer ? "none" : "";
 
     // Initial Rent Display (Shows Lifetime Accrued Rent, NOT spendable balance)
-    let rentVal = isOtherPlayer ? 0 : (state.lifetimeRent || state.cash || 0);
+    let rentVal = isOtherPlayer ? 0 : Math.max(Number(state.lifetimeRent) || 0, Number(state.cash) || 0);
     el("info-total-rent").textContent = Fmt.rcPrecise(rentVal);
 
     // REWARD POINTS — private. The block is hidden outright on another player's

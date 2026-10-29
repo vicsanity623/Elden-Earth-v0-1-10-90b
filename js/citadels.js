@@ -56,8 +56,25 @@ const Citadels = (() => {
       return; // Already planted on another device, no second capsule!
     }
 
-    // Trigger unlock only if never awarded and balance >= $0.01
-    if (!state.capsule.awarded && (Number(state.lifetimeRent || state.cash) || 0) >= CONFIG.CITADEL_UNLOCK_BALANCE) {
+    const earned = Math.max(
+      Number(state.lifetimeRent) || 0,
+      Number(state.cash) || 0
+    );
+
+    // HEAL: if the discovery was already shown but the flag got reverted by a
+    // stale cloud copy, restore the award without re-showing the modal.
+    if (!state.capsule.awarded && wasCapsuleNotified() && earned >= CONFIG.CITADEL_UNLOCK_BALANCE) {
+      state.capsule.awarded = true;
+      if (!state.capsule.rarity) state.capsule.rarity = "common";
+      Store.save(true);
+      return;
+    }
+
+    // Trigger unlock only if never awarded and balance >= $0.01.
+    // NOTE: this must be a MAX of the two balances — `lifetimeRent || cash`
+    // silently preferred a small non-zero lifetimeRent over a much larger cash
+    // balance and never unlocked for those players.
+    if (!state.capsule.awarded && earned >= CONFIG.CITADEL_UNLOCK_BALANCE) {
       const rarities = Object.values(CONFIG.CITADEL_RARITIES);
       const totalWeight = rarities.reduce((s, r) => s + r.weight, 0);
       let roll = Math.random() * totalWeight;
