@@ -146,6 +146,50 @@ const Arena = (() => {
   margin:10px 2px 0; font-size:10.5px; color:#8fa6c4; line-height:1.55; text-align:center;
 }
 .ar-empty{ padding:22px 12px; text-align:center; color:#8aa0bd; font-size:12px; line-height:1.7; }
+
+/* ---- ⓘ Rewards tooltip ---- */
+.ar-info-btn{
+  position:absolute; left:12px; top:12px;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:0; border:none; background:transparent; cursor:pointer;
+  color:#fff; font-family:inherit;
+}
+.ar-info-btn:active{ transform:scale(.94); }
+.ar-info-icon{
+  width:26px; height:26px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.9);
+  display:flex; align-items:center; justify-content:center;
+  font-size:15px; font-weight:900; font-family:Georgia,serif;
+}
+.ar-info-label{
+  font-size:11px; font-weight:800; letter-spacing:.3px;
+  text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+.ar-rewards-card{
+  width:100%; max-width:400px; max-height:88vh; overflow-y:auto;
+  padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));
+  border-radius:18px; position:relative;
+  background:linear-gradient(165deg,rgba(30,38,66,.99),rgba(18,22,40,.99));
+  border:1px solid rgba(150,180,240,.26);
+  box-shadow:0 24px 70px rgba(0,0,0,.6);
+  animation:bbPop .3s cubic-bezier(.22,1,.36,1);
+}
+.ar-rewards-head{ text-align:center; margin-bottom:14px; padding-right:14px; }
+.ar-rewards-icon{ font-size:38px; line-height:1; margin-bottom:6px; }
+.ar-rewards-head h3{ margin:0 0 6px; font-size:20px; font-weight:900; color:#fff; }
+.ar-rewards-head p{ margin:0; font-size:11.5px; color:#a9bede; line-height:1.6; }
+.ar-rewards-list{ display:flex; flex-direction:column; gap:8px; }
+.ar-rewards-row{
+  display:flex; align-items:center; gap:11px; padding:11px 12px;
+  border-radius:13px; background:rgba(255,255,255,.055);
+  border:1px solid rgba(255,255,255,.1);
+}
+.ar-rewards-body{ flex:1 1 auto; min-width:0; }
+.ar-rewards-place{ font-size:13px; font-weight:900; color:#fff; letter-spacing:.2px; }
+.ar-rewards-items{ font-size:10.5px; color:#a9bede; margin-top:3px; line-height:1.55; }
+.ar-rewards-note{
+  margin:12px 2px 14px; font-size:10.5px; color:#8fa6c4; line-height:1.6; text-align:center;
+}
 `;
     const style = document.createElement("style");
     style.id = STYLE_ID;
@@ -223,6 +267,10 @@ const Arena = (() => {
 
     box.innerHTML = `
       <div class="ar-banner">
+        <button class="ar-info-btn" id="ar-info-btn" aria-label="Season rewards">
+          <span class="ar-info-icon">i</span>
+          <span class="ar-info-label">Rewards</span>
+        </button>
         <h2>PvP Arena</h2>
         <div class="ar-sub">Mon–Sun</div>
         <div class="ar-tag">Battle other players. Climb Ranks. Win Rewards!</div>
@@ -270,6 +318,9 @@ const Arena = (() => {
       </div>
     `;
 
+    const info = el("ar-info-btn");
+    if (info) info.addEventListener("click", openRewards);
+
     const cancel = el("ar-cancel-btn");
     if (cancel) cancel.addEventListener("click", closeLobby);
     const battle = el("ar-battle-btn");
@@ -305,6 +356,66 @@ const Arena = (() => {
       }
       renderLobby();
     }, 1000);
+  }
+
+  /* ------------------------------------------------- rewards tooltip */
+  // Season-end payout breakdown. Mirrors ARENA_REWARDS in functions/arena.js —
+  // the two must stay in sync or players are shown one thing and paid another.
+  function rewardsRows() {
+    return [
+      { medal: "m1", place: "Rank 1",
+        items: ["1\u00D7 Lucky Legendary Plot", "10 RP", "5\u00D7 Elden Stop Seeds", "500 \uD83D\uDD25"] },
+      { medal: "m2", place: "Rank 2",
+        items: ["1\u00D7 Lucky Epic Plot", "8 RP", "3\u00D7 Elden Stop Seeds", "250 \uD83D\uDD25"] },
+      { medal: "m3", place: "Rank 3",
+        items: ["1\u00D7 Lucky Rare Plot", "5 RP", "1\u00D7 Elden Stop Seed", "75 \uD83D\uDD25"] },
+      { medal: "", place: "Ranks 4+",
+        items: ["Scaling diamonds by rank tier", "Min 20 \uD83D\uDD25 \u00B7 Max 70 \uD83D\uDD25"] },
+    ];
+  }
+
+  function openRewards() {
+    let overlay = el("ar-rewards-modal");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "ar-rewards-modal";
+      overlay.className = "modal hidden";
+      overlay.innerHTML = `
+        <div class="ar-rewards-card">
+          <button class="bd-close">✕</button>
+          <div class="ar-rewards-head">
+            <div class="ar-rewards-icon">🏆</div>
+            <h3>Season Rewards</h3>
+            <p>Delivered at the end of every week (Sunday 23:59 UTC) to the
+               top 500 on the leaderboard.</p>
+          </div>
+          <div class="ar-rewards-list">
+            ${rewardsRows().map(r => `
+              <div class="ar-rewards-row">
+                <div class="ar-medal ${r.medal}">${r.medal ? r.place.split(" ")[1] : "4+"}</div>
+                <div class="ar-rewards-body">
+                  <div class="ar-rewards-place">${r.place}</div>
+                  <div class="ar-rewards-items">${r.items.join(" &middot; ")}</div>
+                </div>
+              </div>`).join("")}
+          </div>
+          <div class="ar-rewards-note">
+            Rewards are claimed from the popup after the season settles.
+            Everyone who battled at least once is eligible.
+          </div>
+          <button class="bb-btn bb-primary" id="ar-rewards-close">Got it</button>
+        </div>`;
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRewards(); });
+      document.body.appendChild(overlay);
+      overlay.querySelector(".bd-close").addEventListener("click", closeRewards);
+      overlay.querySelector("#ar-rewards-close").addEventListener("click", closeRewards);
+    }
+    overlay.classList.remove("hidden");
+  }
+
+  function closeRewards() {
+    const overlay = el("ar-rewards-modal");
+    if (overlay) overlay.classList.add("hidden");
   }
 
   function closeLobby() {
