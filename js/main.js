@@ -4946,15 +4946,17 @@
 
         if (winningSlice.type === "diamond") {
           const winDiamonds = 1 * multAward;
-          el("wheel-result").textContent = `Your diamond found its way back to you. (${iconDiamond} +${winDiamonds})`;
-          showToast(`${iconDiamond} +${winDiamonds} Diamond${winDiamonds > 1 ? 's' : ''} Refunded!`);
+          // 1. Uses .innerHTML so the image renders on the modal!
+          el("wheel-result").innerHTML = `Your diamond found its way back to you. (${iconDiamond} +${winDiamonds})`;
+          // 2. Uses clean emoji so the floating toast doesn't print raw HTML code!
+          showToast(`💎 +${winDiamonds} Diamond${winDiamonds > 1 ? 's' : ''} Refunded!`);
           launchFlyingGemStream(originX, originY, winDiamonds);
 
         } else if (winningSlice.type === "diamond_jackpot") {
           // +12 or +24 Diamond Jackpot!
           const winDiamonds = (Number(winningSlice.amount) || 12) * multAward;
-          el("wheel-result").textContent = `🎉 MEGA BONUS! +${winDiamonds} Diamonds!`;
-          showToast(`${iconDiamond} MEGA BONUS! Won +${winDiamonds} Diamonds!`);
+          el("wheel-result").innerHTML = `🎉 MEGA BONUS! +${winDiamonds} Diamonds!`;
+          showToast(`💎 MEGA BONUS! Won +${winDiamonds} Diamonds!`);
 
           // Only broadcast diamond jackpots on 1X spins (not 10X) to prevent feed flooding
           if (multAward === 1 && typeof Feed !== "undefined") {
