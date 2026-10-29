@@ -3012,21 +3012,43 @@
       const state = Store.get();
       if (!state) return { date: "", quests: {} };
       const today = new Date().toISOString().slice(0, 10);
+
+      // Fresh quest entry — ALWAYS with an explicit progress counter.
+      // Seeding without `progress` left it undefined, and any later merge or
+      // read could see a stale number carried in from a previous day.
+      const freshQuest = () => ({ completed: false, claimed: false, progress: 0 });
+
       if (!state.dailyQuests || state.dailyQuests.date !== today) {
-        state.dailyQuests = {
-          date: today,
-          quests: {
-            login: { completed: false, claimed: false },
-            wheel: { completed: false, claimed: false },
-            gift: { completed: false, claimed: false },
-            mayor: { completed: false, claimed: false },
-            survey: { completed: false, claimed: false }
-          }
+        // FULL reset: build every quest on today's board from scratch. The old
+        // version seeded only the original five and then kept whatever else was
+        // already in the map, which is how yesterday's `completed: true` rode
+        // into a brand new day and the 5-count quests arrived pre-completed.
+        const quests = {
+          login: freshQuest(),
+          wheel: freshQuest(),
+          gift: freshQuest(),
+          mayor: freshQuest(),
+          survey: freshQuest()
         };
+        activeQuestDefs().forEach(q => { quests[q.id] = freshQuest(); });
+        state.dailyQuests = { date: today, quests };
       }
+
       activeQuestDefs().forEach(q => {
-        if (!state.dailyQuests.quests[q.id]) {
-          state.dailyQuests.quests[q.id] = { completed: false, claimed: false };
+        const item = state.dailyQuests.quests[q.id];
+        if (!item) {
+          state.dailyQuests.quests[q.id] = freshQuest();
+          return;
+        }
+        // Sanity: a counter can never sit above its target, and a quest cannot
+        // be "completed" without actually having reached it. This is what
+        // turns the 5/5-but-not-claimed and the pre-completed day into
+        // impossible states rather than merely unlikely ones.
+        const needed = Number(q.progressNeeded) || 0;
+        item.progress = Math.max(0, Math.floor(Number(item.progress) || 0));
+        if (needed > 1) {
+          if (item.progress > needed) item.progress = needed;
+          item.completed = item.claimed === true ? item.completed : (item.progress >= needed);
         }
       });
       // The login quest is auto-completed and auto-claimed together with the
@@ -3069,9 +3091,14 @@
 
       const needed = Number(qDef.progressNeeded) || 0;
       if (needed > 1) {
-        q.progress = (Number(q.progress) || 0) + 1;
-        if (q.progress >= needed) q.completed = true;
+        // Clamp first: a stale/oversized counter must never let one action
+        // "complete" a multi-count quest, and progress can never exceed the
+        // target shown in the UI.
+        const base = Math.max(0, Math.min(needed - 1, Math.floor(Number(q.progress) || 0)));
+        q.progress = base + 1;
+        q.completed = q.progress >= needed;
       } else {
+        q.progress = 1;
         q.completed = true;
       }
       Store.save(true);

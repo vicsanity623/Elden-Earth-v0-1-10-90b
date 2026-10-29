@@ -674,9 +674,13 @@ const Store = (() => {
             const l = (localQuests.quests || {})[id] || {};
             const c = (cloudQuests.quests || {})[id] || {};
             // Once claimed/completed on either side, it stays claimed/completed.
+            // `progress` MUST be carried across too — the old merge dropped it,
+            // so a mid-day sync silently reset every counter quest to 0/5 and
+            // a same-day doc could arrive carrying yesterday's `completed`.
             mergedQuestMap[id] = {
               completed: Boolean(l.completed) || Boolean(c.completed),
               claimed: Boolean(l.claimed) || Boolean(c.claimed),
+              progress: Math.max(Number(l.progress) || 0, Number(c.progress) || 0),
             };
           });
           mergedQuests = { date: localQuests.date, quests: mergedQuestMap };
@@ -684,6 +688,19 @@ const Store = (() => {
           // Different days recorded — keep whichever actually matches today.
           const today = new Date().toISOString().slice(0, 10);
           mergedQuests = localQuests.date === today ? localQuests : cloudQuests;
+        }
+
+        // A doc dated anything other than today must never be presented as
+        // today's board. Strip the per-quest state so nothing stale can leak
+        // before getDailyQuestsState() rebuilds it — stale `completed` and
+        // `progress` riding in on a merge is exactly what made "recall 5
+        // defenders" start the day at 5/5.
+        if (mergedQuests && mergedQuests.date !== new Date().toISOString().slice(0, 10)) {
+          const blank = {};
+          Object.keys(mergedQuests.quests || {}).forEach((id) => {
+            blank[id] = { completed: false, claimed: false, progress: 0 };
+          });
+          mergedQuests = { date: mergedQuests.date, quests: blank };
         }
 
         // --- VERSION-AWARE CONFLICT RESOLUTION (LWW) ---
