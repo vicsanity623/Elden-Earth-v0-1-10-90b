@@ -1102,6 +1102,7 @@ const BuddySystem = (() => {
       inst.nickname = clean;
       persist();
       syncCompanion();
+      syncDefenderSnapshot();
       openDetail(uid);
     });
 
@@ -1203,6 +1204,7 @@ const BuddySystem = (() => {
           inst.customization[tier.slot] = equipped ? null : tier.id;
           persist();
           syncCompanion();
+          syncDefenderSnapshot();
           openCustomizeModal(uid);
         });
       }
@@ -1388,6 +1390,7 @@ const BuddySystem = (() => {
       const r = BuddyEngine.addXp(target, amount);
       if (r.leveled > 0) {
         toast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
+        syncDefenderSnapshot();
         if (typeof PlayerXP !== "undefined") {
           PlayerXP.addXP(PlayerXP.XP.buddyLevelUp * r.leveled, "buddy_level");
         }
@@ -1414,6 +1417,7 @@ const BuddySystem = (() => {
       b.totalFeasted += 1;
       const gained = summary.bonusXp || 0;
       const result = BuddyEngine.addXp(bagAlly || activeInst, gained + BuddyEngine.battleXpReward(wildInst, "win"));
+      if (result.leveled > 0) syncDefenderSnapshot();
       if (bagAlly) {
         bagAlly.happiness = Math.min(100, (bagAlly.happiness || 50) + (summary.happinessGain || 10));
         bagAlly.feasts = (bagAlly.feasts || 0) + 1;
@@ -1658,6 +1662,26 @@ const BuddySystem = (() => {
   function activeBuddy() {
     const b = buddyState();
     return b.bag.find(x => x.uid === b.activeUid) || b.bag[0] || null;
+  }
+
+  /**
+   * Re-publish the Defense Buddy snapshot whenever it changes (level up,
+   * rename, new cosmetic). Without this the arena kept fighting the exact
+   * stats/level/cosmetics the buddy had the moment "Set as Defense Buddy" was
+   * pressed — so a buddy that grew to Lv8 still fought as Lv5 for everyone
+   * else until the player manually re-set it.
+   */
+  function syncDefenderSnapshot() {
+    try {
+      if (typeof Arena === "undefined" || !Arena.setDefender) return;
+      const st = Arena.getState && Arena.getState();
+      const defId = st && st.me && st.me.defenderBuddyId;
+      if (!defId) return;
+      const b = buddyState();
+      if (!b.bag.some((x) => x && x.uid === defId)) return;
+      // Fire and forget — a failed re-publish must never block a level-up.
+      Arena.setDefender(defId);
+    } catch (e) {}
   }
 
   // Push the current active buddy (and its cosmetics) to the map companion AND

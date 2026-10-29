@@ -555,7 +555,12 @@ const BuddyBattle = (() => {
 
     refreshHud();
     renderMoves();
-    log(`A wild ${ctx.wild.name} (Lv. ${ctx.wild.inst.level}) appeared!`, "strong");
+    if (ctx.mode === "pvp") {
+      const opp = (ctx.spawn && ctx.spawn.opponentName) || ctx.wild.name;
+      log(`⚔️ Arena match — ${opp}'s Defense Buddy (Lv. ${ctx.wild.inst.level})!`, "strong");
+    } else {
+      log(`A wild ${ctx.wild.name} (Lv. ${ctx.wild.inst.level}) appeared!`, "strong");
+    }
     log(`${ctx.ally.name} is ready to fight.`, "good");
 
     // Mount the two 3D previews with their unique hues.

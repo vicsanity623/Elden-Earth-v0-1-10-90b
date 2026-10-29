@@ -147,12 +147,20 @@ const BuddyEngine = (() => {
     let cw;
     if (o.colorHsl && typeof o.colorHsl === "object") {
       const named = colorwayForHue(o.colorHsl.h);
-      cw = {
-        name: o.colorway || named.name,
-        h: o.colorHsl.h,
-        s: o.colorHsl.s,
-        l: o.colorHsl.l,
-      };
+      const name = o.colorway || named.name;
+      // HEAL STALE PAINT: saves written before the colorway table could carry
+      // an `colorHsl` that disagrees with its own name (an "Ivory" buddy
+      // painted purple). If the paint is more than a jitter away from the
+      // named colorway, the NAME wins — that is what the UI shows.
+      const canon = BuddyData.COLORWAYS.find(c => c.name === name) || named;
+      let dh = Math.abs((o.colorHsl.h || 0) - canon.h);
+      if (dh > 0.5) dh = 1 - dh;
+      const ds = Math.abs((o.colorHsl.s == null ? 0.6 : o.colorHsl.s) - canon.s);
+      const dl = Math.abs((o.colorHsl.l == null ? 0.5 : o.colorHsl.l) - canon.l);
+      const drifted = dh > 0.12 || ds > 0.22 || dl > 0.22;
+      cw = drifted
+        ? { name, h: canon.h, s: canon.s, l: canon.l }
+        : { name, h: o.colorHsl.h, s: o.colorHsl.s, l: o.colorHsl.l };
     } else if (o.colorway) {
       const entry = BuddyData.COLORWAYS.find(c => c.name === o.colorway) || BuddyData.COLORWAYS[0];
       cw = { name: entry.name, h: entry.h, s: entry.s, l: entry.l };
