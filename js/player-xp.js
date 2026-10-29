@@ -34,6 +34,9 @@ const PlayerXP = (() => {
 
   let lastLevel = 1;
   let hooksInstalled = false;
+  
+  const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+  const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
 
   /* ------------------------------------------------------------- State */
   function ensureState() {
@@ -382,8 +385,8 @@ const PlayerXP = (() => {
   function rewardChips(r) {
     const bits = [];
     if (r.berries) bits.push(`🍓 ${r.berries}`);
-    if (r.eb) bits.push(`🪙 ${r.eb} EB`);
-    if (r.diamonds) bits.push(`💎 ${r.diamonds}`);
+    if (r.eb) bits.push(`${iconCoin} ${r.eb} EB`);
+    if (r.diamonds) bits.push(`${iconDiamond} ${r.diamonds}`);
     if (r.rp) bits.push(`⭐ ${r.rp} RP`);
     return bits;
   }
