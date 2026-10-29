@@ -764,6 +764,56 @@ const BuddySystem = (() => {
   padding:3px 7px; border-radius:99px; color:#0b1020;
   background:linear-gradient(120deg,#7dd3fc,#c4b5fd);
 }
+/* ---- compact layout: these two screens must fit a phone without a
+   mile of scrolling. Everything is scaled to the viewport so it also
+   behaves on small Androids and large iPhones. ---- */
+.bd-modal .bd-card{
+  max-height:84vh !important;
+  max-height:84dvh !important;
+  overflow-y:auto !important;
+  padding:14px 13px calc(14px + env(safe-area-inset-bottom,0px)) !important;
+}
+.bd-preview{
+  height:150px !important;
+  max-height:20vh !important;
+  margin-bottom:8px !important;
+}
+.bd-modal h2{ font-size:17px !important; margin:0 0 2px !important; }
+.bd-modal .bd-sub{ font-size:11px !important; margin:0 0 8px !important; line-height:1.45 !important; }
+.bd-grid{
+  grid-template-columns:repeat(3,1fr) !important;
+  gap:6px !important;
+  margin:10px 0 !important;
+}
+.bd-stat{ padding:8px 9px !important; }
+.bd-stat .k{ font-size:8.5px !important; }
+.bd-stat .v{ font-size:15px !important; margin-top:1px !important; }
+.bd-hp-wrap{ padding:9px 10px !important; }
+.bd-hp-row .bd-hp-bar{ height:9px !important; }
+.bd-hp-note{ font-size:9.5px !important; margin-top:5px !important; }
+.bd-btn{ padding:10px 8px !important; font-size:11.5px !important; }
+.bd-row{ margin:7px 0 !important; gap:7px !important; }
+.bd-modal .bd-empty{ padding:16px 10px !important; font-size:11px !important; }
+/* section headings were eating a lot of vertical space */
+.bd-modal div[style*="letter-spacing:1.2px"]{ margin:8px 0 4px !important; }
+/* trainer: denser reward list + fewer upcoming rows */
+.bd-reward-line{ padding:4px 0 !important; font-size:11px !important; }
+.bd-cos-list{ gap:5px !important; margin:8px 0 !important; }
+.bd-cos-item{ padding:8px 10px !important; }
+.bd-cos-item .ci-icon{ width:30px !important; height:30px !important; font-size:14px !important; }
+.bd-cos-item .ci-name{ font-size:11px !important; }
+.bd-cos-item .ci-desc{ font-size:9px !important; }
+.bd-cos-item .ci-btn{ padding:6px 9px !important; font-size:9.5px !important; }
+/* very small screens: tighten further */
+@media (max-height: 720px){
+  .bd-preview{ height:118px !important; max-height:16vh !important; }
+  .bd-stat .v{ font-size:13px !important; }
+  .bd-modal h2{ font-size:16px !important; }
+}
+@media (max-width: 380px){
+  .bd-grid{ gap:5px !important; }
+  .bd-btn{ font-size:10.5px !important; padding:9px 6px !important; }
+}
 .bd-empty{
   padding:26px 14px; text-align:center; color:#8aa0bd; font-size:12.5px; line-height:1.7;
 }
@@ -1564,7 +1614,7 @@ const BuddySystem = (() => {
         Coming Up
       </div>
       <div class="bd-cos-list">
-        ${(typeof BuddyData !== "undefined" ? BuddyData.upcomingTrainerRewards(p.level, 3) : []).map(u => `
+        ${(typeof BuddyData !== "undefined" ? BuddyData.upcomingTrainerRewards(p.level, 2) : []).map(u => `
           <div class="bd-cos-item">
             <div class="ci-icon">🎁</div>
             <div class="ci-body">
