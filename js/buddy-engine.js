@@ -468,11 +468,18 @@ const BuddyEngine = (() => {
   /* ------------------------------------------------- Encounter helpers */
   // Wild encounter level is bracketed by the player's strongest buddy level so
   // early players never get one-shot and late players still find challenges.
-  function rollWildLevel(playerTopLevel, rarityId) {
-    const top = Math.max(1, playerTopLevel | 0);
-    const spread = rarityId === "legendary" ? 4 : (rarityId === "rare" ? 3 : 5);
-    const min = Math.max(1, top - spread);
-    const max = Math.min(BuddyData.BUDDY_MAX_LEVEL, top + 2);
+  // Wild encounter level tracks the player's PROGRESSION, not just their best
+  // buddy — pass max(trainerLevel, topBuddyLevel) as the reference so fights
+  // stay competitive as the player grows instead of outlevelling every fight.
+  function rollWildLevel(playerRefLevel, rarityId) {
+    const ref = Math.max(1, playerRefLevel | 0);
+    // Tighter spread at higher tiers: legendaries always push back.
+    const spread = rarityId === "legendary" ? 2
+      : rarityId === "rare" ? 3
+      : rarityId === "uncommon" ? 4
+      : 5;
+    const min = Math.max(1, ref - spread);
+    const max = Math.min(BuddyData.BUDDY_MAX_LEVEL, ref + 3);
     return ri(min, Math.max(min, max));
   }
 

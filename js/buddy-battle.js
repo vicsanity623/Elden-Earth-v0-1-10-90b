@@ -249,6 +249,53 @@ const BuddyBattle = (() => {
   font-size:10px; font-weight:700; letter-spacing:.5px;
   background:rgba(255,255,255,.1); color:#dbe6fb; border:1px solid rgba(150,180,240,.2);
 }
+
+/* ---- impact feedback (CSS-only so it stays cheap on mobile) ---- */
+.bb-flash{
+  position:absolute; inset:0; z-index:9; pointer-events:none;
+  animation:bbFlash .42s ease-out forwards;
+}
+.bb-flash-ally{ background:radial-gradient(circle at 30% 62%, rgba(255,90,90,.42), transparent 62%); }
+.bb-flash-enemy{ background:radial-gradient(circle at 70% 28%, rgba(255,90,90,.42), transparent 62%); }
+@keyframes bbFlash{ from{opacity:1;} to{opacity:0;} }
+
+.bb-dmgfloat{
+  position:absolute; left:50%; top:22%; transform:translateX(-50%);
+  z-index:12; pointer-events:none;
+  font-size:26px; font-weight:900; color:#fff; letter-spacing:.5px;
+  text-shadow:0 2px 10px rgba(0,0,0,.65), 0 0 18px rgba(255,80,80,.6);
+  animation:bbFloat 1.05s cubic-bezier(.22,1,.36,1) forwards;
+}
+.bb-dmgfloat.bb-crit{ font-size:32px; color:#fde047; text-shadow:0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(253,224,71,.8); }
+.bb-dmgfloat.bb-super{ color:#f97316; }
+@keyframes bbFloat{
+  0%{ opacity:0; transform:translate(-50%,10px) scale(.7); }
+  18%{ opacity:1; transform:translate(-50%,-6px) scale(1.12); }
+  100%{ opacity:0; transform:translate(-50%,-46px) scale(1); }
+}
+
+.bb-lunge{ animation:bbLunge .6s cubic-bezier(.22,1,.36,1); }
+@keyframes bbLunge{
+  0%{ transform:translate(0,0); }
+  32%{ transform:translate(-10px,-14px) scale(1.05); }
+  100%{ transform:translate(0,0); }
+}
+
+.bb-result-ribbon{
+  margin:6px 0 4px; padding:12px 14px; border-radius:14px; text-align:center;
+  background:linear-gradient(135deg,rgba(251,191,36,.22),rgba(251,146,60,.12));
+  border:1px solid rgba(251,191,36,.42);
+}
+.bb-result-ribbon.loss{
+  background:linear-gradient(135deg,rgba(220,38,38,.22),rgba(120,20,20,.12));
+  border-color:rgba(220,38,38,.42);
+}
+.bb-result-ribbon .bb-rr-k{
+  font-size:10px; letter-spacing:1.8px; text-transform:uppercase;
+  color:#fbbf24; font-weight:800;
+}
+.bb-result-ribbon.loss .bb-rr-k{ color:#fca5a5; }
+.bb-result-ribbon .bb-rr-v{ font-size:15px; color:#fff; font-weight:800; margin-top:3px; }
 `;
     const style = document.createElement("style");
     style.id = STYLE_ID;
@@ -320,6 +367,43 @@ const BuddyBattle = (() => {
   }
 
   /* ============================================================ helpers */
+  /* ------------------------------------------------------- hit feedback */
+  // Deep-ish impact treatment: a colour flash across the stage, a floating
+  // damage number over the target, and a short lunge toward the opponent.
+  // Everything is CSS-driven so it stays cheap on mobile GPUs.
+  function showHitEffects(targetIsWild, amount, crit, effectiveness) {
+    const root = el("bb-root");
+    if (!root) return;
+
+    // 1. stage flash
+    const flash = document.createElement("div");
+    flash.className = "bb-flash " + (targetIsWild ? "bb-flash-ally" : "bb-flash-enemy");
+    root.appendChild(flash);
+    setTimeout(() => { try { flash.remove(); } catch (e) {} }, 420);
+
+    // 2. floating damage number over the target
+    const hostId = targetIsWild ? "bb-wild-model" : "bb-ally-model";
+    const host = el(hostId);
+    if (host) {
+      const num = document.createElement("div");
+      num.className = "bb-dmgfloat" + (crit ? " bb-crit" : "") + (effectiveness > 1 ? " bb-super" : "");
+      num.textContent = "-" + amount;
+      host.appendChild(num);
+      setTimeout(() => { try { num.remove(); } catch (e) {} }, 1100);
+    }
+
+    // 3. the attacker lunges toward the opponent
+    const attackerId = targetIsWild ? "bb-ally-model" : "bb-wild-model";
+    const attacker = el(attackerId);
+    if (attacker) {
+      attacker.classList.remove("bb-lunge");
+      // force reflow so the animation can retrigger
+      void attacker.offsetWidth;
+      attacker.classList.add("bb-lunge");
+      setTimeout(() => { try { attacker.classList.remove("bb-lunge"); } catch (e) {} }, 620);
+    }
+  }
+
   function escapeHtml(str) {
     return String(str == null ? "" : str)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -475,14 +559,21 @@ const BuddyBattle = (() => {
     log(`${ctx.ally.name} is ready to fight.`, "good");
 
     // Mount the two 3D previews with their unique hues.
+    //
+    // `animate:false` + a fixed `yaw` means the combatants hold their poses and
+    // face each other instead of slowly rotating — the old spinning preview
+    // made every fight look like a turntable. The ally (bottom) shows its back
+    // to the camera and looks "up" at the opponent; the wild buddy (top) faces
+    // the player.
     try {
       previewWild = BuddyPreview.create(el("bb-wild-model"), ctx.wild.inst, {
-        animate: true,
+        animate: false,
+        yaw: 0,
         anim: "idle",
-        onReady: () => {},
       });
       previewPlayer = BuddyPreview.create(el("bb-ally-model"), ctx.ally.inst, {
-        animate: true,
+        animate: false,
+        yaw: Math.PI,
         anim: "idle",
       });
     } catch (e) {
@@ -522,7 +613,9 @@ const BuddyBattle = (() => {
         await executeMove(step.side, step.target, step.slot.def);
       }
       refreshHud();
-      await sleep(430);
+      // Spec: ~2s between actions so attack animations, damage floats and
+      // the combat log are readable on mobile.
+      await sleep(2000);
     }
 
     // End-of-turn status chips.
@@ -548,7 +641,7 @@ const BuddyBattle = (() => {
 
     if (BuddyEngine.isStunned(attacker)) {
       log(`${attacker.name} is stunned and can't move!`, "bad");
-      await sleep(520);
+      await sleep(1100);
       return;
     }
 
@@ -565,8 +658,9 @@ const BuddyBattle = (() => {
 
     if (res.damage > 0) {
       defender.hp = Math.max(0, defender.hp - res.damage);
+      showHitEffects(defender === ctx.wild, res.damage, res.crit, res.effectiveness);
       refreshHud();
-      await sleep(360);
+      await sleep(1000);
       if (res.healed > 0) {
         log(`${attacker.name} drained ${res.healed} HP!`, "good");
         refreshHud();
@@ -676,6 +770,10 @@ const BuddyBattle = (() => {
     showOverlay(`
       <h3>${won ? "🏆 Victory!" : "💀 Defeat"}</h3>
       <p class="bb-sub">${escapeHtml(title)}</p>
+      <div class="bb-result-ribbon ${won ? "" : "loss"}">
+        <div class="bb-rr-k">Match Result</div>
+        <div class="bb-rr-v">${won ? "VICTORY — your buddy proved its worth" : "DEFEAT — your buddy was outmatched"}</div>
+      </div>
       <div class="bb-stat-grid">
         <div class="bb-stat"><div class="bb-st-k">Result</div><div class="bb-st-v" style="color:${won ? "#4ade80" : "#f87171"}">${won ? "WIN" : "LOSS"}</div></div>
         <div class="bb-stat"><div class="bb-st-k">Turns</div><div class="bb-st-v">${ctx.turn}</div></div>

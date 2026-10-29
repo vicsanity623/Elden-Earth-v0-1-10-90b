@@ -415,7 +415,10 @@ const BuddyPreview = (() => {
     let hue = 0.5;
     let raf = 0;
     let t0 = performance.now();
-    let yaw = 0;
+    // Starting facing angle. Battle screens set `yaw` so the player's buddy
+    // shows its back to the camera (facing the opponent) while the opponent
+    // faces the player — and `animate:false` keeps them from slowly spinning.
+    let yaw = (typeof o.yaw === "number") ? o.yaw : 0;
 
     function clearModel() {
       if (modelRoot) {
@@ -613,6 +616,8 @@ const BuddyPreview = (() => {
     api.resize = resize;
     // 0 = floating at rest, 1 = slumped over (used when a buddy faints).
     api.setSink = (v) => { sinkOverride = Math.max(0, Math.min(1, v || 0)); };
+    // Fix the facing angle without starting the spin.
+    api.setYaw = (v) => { yaw = Number(v) || 0; };
     // 0 = upright float, 1 = leaning forward into travel.
     api.setLean = (v) => { o.hoverLean = Math.max(0, Math.min(1, v || 0)); };
     // Render a frame and grab the canvas immediately, while the drawing buffer

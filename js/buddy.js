@@ -333,9 +333,19 @@ const BuddySystem = (() => {
   }
 
   /* ======================================================= WILD SPAWNS */
+  // Wild level tracks the player's PROGRESSION: the stronger of their trainer
+  // level and their best buddy, so wild fights stay competitive as they grow.
+  function wildRefLevel() {
+    const b = buddyState();
+    const topBuddy = b.bag.reduce((m, x) => Math.max(m, x.level || 1), 1);
+    const trainer = (typeof PlayerXP !== "undefined" && PlayerXP.getState)
+      ? (PlayerXP.getState().level || 1) : 1;
+    return Math.max(topBuddy, trainer);
+  }
+
   function localRollSpawn() {
     const b = buddyState();
-    const topLevel = b.bag.reduce((m, x) => Math.max(m, x.level || 1), 1);
+    const topLevel = wildRefLevel();
     const speciesId = BuddyData.rollSpecies();
     const sp = BuddyData.getSpecies(speciesId);
     const rarity = sp ? sp.rarity : "common";
