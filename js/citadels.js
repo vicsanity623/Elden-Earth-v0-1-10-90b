@@ -23,6 +23,20 @@ const Citadels = (() => {
   }
 
   // --- 1. Capsule Drop Unlock & Cross-Device Sync Guard ---
+
+  // "Seen it" latch — deliberately in localStorage, NOT in the save blob.
+  // state.capsule can be wiped by a cloud sync whose doc predates the award
+  // (Object.assign(defaultState(), cloudData) drops the field entirely), which
+  // is exactly what made the discovery modal re-fire over and over. localStorage
+  // is never part of that merge, so once it is set the modal can never return.
+  const CAPSULE_NOTIFIED_KEY = "eldenEarth.capsuleNotified";
+  function wasCapsuleNotified() {
+    try { return localStorage.getItem(CAPSULE_NOTIFIED_KEY) === "1"; } catch (e) { return true; }
+  }
+  function markCapsuleNotified() {
+    try { localStorage.setItem(CAPSULE_NOTIFIED_KEY, "1"); } catch (e) {}
+  }
+
   function checkCapsuleUnlock() {
     const state = Store.get();
     if (!state || !state.player?.id) return;
@@ -38,6 +52,7 @@ const Citadels = (() => {
       state.capsule.planted = true;
       state.capsule.tileId = myCitadel.id;
       state.capsule.rarity = myCitadel.rarity;
+      markCapsuleNotified(); // already owns one — the discovery must never replay
       return; // Already planted on another device, no second capsule!
     }
 
@@ -60,8 +75,18 @@ const Citadels = (() => {
       state.capsule.rarity = picked.key;
       Store.save(true);
 
-      showCapsuleDiscoveryModal(picked);
+      // Show the discovery ONCE, ever. The latch is written BEFORE the modal so
+      // a rapid re-entry (two ticks firing together) cannot open it twice.
+      if (!wasCapsuleNotified()) {
+        markCapsuleNotified();
+        showCapsuleDiscoveryModal(picked);
+      }
     }
+
+    // Repair path: the player already earned it but the latch is missing (an
+    // older session, or a device that synced before this patch). Latch it
+    // silently so nobody gets one more replay.
+    if (state.capsule.awarded) markCapsuleNotified();
   }
 
   function showCapsuleDiscoveryModal(rarityObj) {

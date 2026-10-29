@@ -85,6 +85,9 @@ const Store = (() => {
         starterChosen: false, lastRegenAt: 0,
       },
       playerXP: { xp: 0, level: 1, totalXp: 0, lastGrantAt: 0 },
+      // Realm Capsule (citadel drop). Must be part of the default shape so a
+      // cloud sync can never drop the field and re-trigger the discovery modal.
+      capsule: { awarded: false, rarity: null, planted: false, tileId: null },
       lastTick: Date.now(),
       createdAt: Date.now(),
       antiCheatStrikes: 0,
@@ -559,6 +562,7 @@ const Store = (() => {
                     if (cloudData.extractor) state.extractor = cloudData.extractor;
                     if (cloudData.pet) state.pet = cloudData.pet;
                     if (cloudData.buddy) state.buddy = cloudData.buddy;
+                    if (cloudData.capsule) state.capsule = cloudData.capsule;
                     if (cloudData.playerXP) state.playerXP = cloudData.playerXP;
                     if (cloudData.berries !== undefined) state.berries = cloudData.berries;
                     if (cloudData.calendar) state.calendar = cloudData.calendar;
@@ -761,7 +765,13 @@ const Store = (() => {
           const prevBoostExpiry = Number(state.boostExpiry) || 0;
           const prevBoostMultiplier = Number(state.boostMultiplier) || 30;
           const prevLoginClaimedDate = state.loginClaimedDate || null;
+          // The capsule award is rolled LOCALLY the moment a player crosses
+          // $0.01. If the cloud copy predates that (or simply has no field),
+          // Object.assign would drop it — and the discovery modal would fire
+          // again on every load. Carry the local award across.
+          const prevCapsule = state.capsule;
           state = Object.assign(defaultState(), cloudData);
+          if (!state.capsule && prevCapsule) state.capsule = prevCapsule;
           state._gameVersion = (typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0";
           state.calendar = mergedCalendar;
           state.dailyQuests = mergedQuests;
@@ -1266,6 +1276,7 @@ let lastConflictCheck = {};
           if (cloudData.extractor) state.extractor = cloudData.extractor;
           if (cloudData.pet) state.pet = cloudData.pet;
           if (cloudData.buddy) state.buddy = cloudData.buddy;
+          if (cloudData.capsule) state.capsule = cloudData.capsule;
           if (cloudData.playerXP) state.playerXP = cloudData.playerXP;
           if (cloudData.berries !== undefined) state.berries = cloudData.berries;
           if (cloudData.calendar) state.calendar = cloudData.calendar;
