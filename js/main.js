@@ -165,7 +165,7 @@
     if (!t) return;
     // Move to end of body so it always paints ABOVE modals (DOM order matters)
     document.body.appendChild(t);
-    t.textContent = msg;
+    t.innerHTML = msg;
     t.classList.remove("hidden");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.add("hidden"), ms);
@@ -4249,7 +4249,7 @@
         Grid.render();
       }
 
-      showToast(`${iconDiamond} Diamond Extractor Constructed!`);
+      showToast("Diamond Extractor Constructed!");
       openExtractorModal();
     });
 
