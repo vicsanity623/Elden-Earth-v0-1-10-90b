@@ -19,6 +19,10 @@ const PlotChallenge = (() => {
     try { if (typeof showToast === "function") { showToast(msg, ms); return; } } catch (e) {}
     console.log("[PlotChallenge]", msg);
   };
+  
+  const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+  const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+
 
   let lastEvent = null;
   let lastMe = null;
@@ -242,10 +246,11 @@ const PlotChallenge = (() => {
       if (d.ok) {
         const bits = [];
         if (d.rp) bits.push(`⭐ ${d.rp} RP`);
-        if (d.eb) bits.push(`🪙 ${d.eb} EB`);
-        if (d.ebShare) bits.push(`🪙 ${fmtNum(d.ebShare)} EB`);
-        if (d.diamonds) bits.push(`💎 ${d.diamonds}`);
+        if (d.eb) bits.push(`${iconCoin} ${d.eb} EB`);
+        if (d.ebShare) bits.push(`${iconCoin} ${fmtNum(d.ebShare)} EB`);
+        if (d.diamonds) bits.push(`${iconDiamond} ${d.diamonds}`);
         if (d.plots && d.plots.length) bits.push(`🗺️ ${d.plots.length} plot${d.plots.length > 1 ? "s" : ""}`);
+        
         toast("🎉 Claimed! " + bits.join(" · "));
         fetchEvent();
       } else {
