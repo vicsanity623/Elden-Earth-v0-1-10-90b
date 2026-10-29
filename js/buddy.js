@@ -975,6 +975,9 @@ const BuddySystem = (() => {
     const grade = BuddyEngine.ivGrade(pct);
     const xp = BuddyEngine.xpProgress(inst);
     const hp = buddyHp(inst);
+    const isDefender = (typeof Arena !== "undefined" && Arena.getState)
+      ? ((Arena.getState() && Arena.getState().me && Arena.getState().me.defenderBuddyId) === inst.uid)
+      : false;
 
     buildModal(DETAIL_ID, `
       <button class="bd-close">✕</button>
@@ -1053,6 +1056,15 @@ const BuddySystem = (() => {
       <div class="bd-row">
         <button class="bd-btn" id="bd-detail-cos">✨ Customize</button>
       </div>
+      <div class="bd-row">
+        <button class="bd-btn gold" id="bd-detail-defender">
+          🛡️ ${isDefender ? "Defense Buddy Set" : "Set as Defense Buddy"}
+        </button>
+      </div>
+      <div class="bd-hp-note">
+        Your Defense Buddy is what other players fight in the PvP Arena.
+        Its stats are snapshotted the moment you set it.
+      </div>
     `);
     wireClose(DETAIL_ID);
 
@@ -1086,6 +1098,19 @@ const BuddySystem = (() => {
     document.getElementById("bd-detail-cos").addEventListener("click", () => {
       closeModal(DETAIL_ID);
       openCustomizeModal(inst.uid);
+    });
+
+    const defBtn = document.getElementById("bd-detail-defender");
+    if (defBtn) defBtn.addEventListener("click", async () => {
+      if (typeof Arena === "undefined" || !Arena.setDefender) {
+        toast("⚠️ Arena is unavailable right now.");
+        return;
+      }
+      defBtn.disabled = true;
+      defBtn.textContent = "Setting…";
+      const ok = await Arena.setDefender(inst.uid);
+      if (ok) openDetail(uid);
+      else defBtn.disabled = false;
     });
 
     const healBtn = document.getElementById("bd-detail-heal");
@@ -1455,6 +1480,13 @@ const BuddySystem = (() => {
     const diamondImg = new Image();
     diamondImg.src = "assets/diamond-spawn.png";
     const b = buddyState();
+    // Lifetime PvP record lives server-side (arena_defenders) so it survives
+    // weekly season resets and device changes.
+    const arState = (typeof Arena !== "undefined" && Arena.getState) ? Arena.getState() : null;
+    const pvp = (arState && arState.me) ? {
+      wins: Number(arState.me.lifetimeWins) || 0,
+      losses: Number(arState.me.lifetimeLosses) || 0,
+    } : { wins: 0, losses: 0 };
     const p = (typeof PlayerXP !== "undefined") ? PlayerXP.progress() : { level: 1, xp: 0, need: 1, pct: 0, title: "Wanderer", totalXp: 0 };
 
     buildModal(TRAINER_ID, `
@@ -1484,6 +1516,8 @@ const BuddySystem = (() => {
         <div class="bd-stat"><div class="k">Wins</div><div class="v">${b.totalWins}</div></div>
         <div class="bd-stat"><div class="k">Tamed</div><div class="v">${b.totalTamed}</div></div>
         <div class="bd-stat"><div class="k">Feasted</div><div class="v">${b.totalFeasted}</div></div>
+        <div class="bd-stat"><div class="k">PvP Wins</div><div class="v">${pvp.wins}</div></div>
+        <div class="bd-stat"><div class="k">PvP Losses</div><div class="v">${pvp.losses}</div></div>
       </div>
 
       <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:14px 0 6px">

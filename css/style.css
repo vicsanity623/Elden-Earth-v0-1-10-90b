@@ -10823,3 +10823,24 @@ body.birds-eye-mode .top-hud-row {
 }
 /* Never let an ad cover or sit under a primary action. */
 .modal-actions .ee-ad-slot { margin-bottom: 0; }
+
+
+/* ===================== PVP ARENA (MORE tile) =====================
+   Wide button pinned to the bottom of the MORE sheet. */
+.pvp-arena-tile {
+  width: 100%;
+  margin-top: 12px;
+  padding: 20px 14px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(150deg, rgba(255,255,255,.07), rgba(255,255,255,.035));
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer;
+}
+.pvp-arena-tile:active { transform: scale(.98); }
+.pvp-arena-icon { font-size: 27px; line-height: 1; }
+.pvp-arena-label {
+  font-family: "Cinzel","Times New Roman",serif;
+  font-size: 24px; font-weight: 900; letter-spacing: 1.6px;
+  color: #e8eefc;
+}

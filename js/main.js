@@ -3554,6 +3554,17 @@
       el(tabId)?.classList.add("is-active");
     }
 
+    // Weekly asynchronous PvP Arena — battles AI-controlled Defense Buddies
+    // owned by other players. See js/arena.js for the lobby + matchmaking.
+    el("pvp-arena-btn")?.addEventListener("click", () => {
+      closeModal("more-modal");
+      if (typeof Arena !== "undefined" && Arena.openLobby) {
+        Arena.openLobby();
+      } else {
+        showToast("⚠️ Arena is unavailable right now.");
+      }
+    });
+
     el("calendar-btn")?.addEventListener("click", () => {
       closeAllPanels();
       setActiveTab("calendar-btn");
@@ -5480,6 +5491,9 @@
     if (typeof GlobalEvent !== "undefined") GlobalEvent.init();
     // Plot Rush (monthly challenge) — separate doc/schedule from the weekly
     // Global Challenge, so the two can be live at the same time.
+    if (typeof Arena !== "undefined") {
+      try { Arena.init(); } catch (e) { console.warn("[Arena] init failed:", e); }
+    }
     if (typeof PlotChallenge !== "undefined") {
       try {
         PlotChallenge.init();

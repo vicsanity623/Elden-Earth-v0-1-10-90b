@@ -320,6 +320,12 @@ const BuddyBattle = (() => {
   }
 
   /* ============================================================ helpers */
+  function escapeHtml(str) {
+    return String(str == null ? "" : str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
   function typeChip(typeId) {
     const t = BuddyData.getType(typeId);
     if (!t) return "";
@@ -451,13 +457,17 @@ const BuddyBattle = (() => {
       spawn: o.spawn || null,
       bag: o.bag || [],
       onResult: o.onResult || function () {},
+      mode: o.mode === "pvp" ? "pvp" : "wild",
       busy: true,
       turn: 0,
       over: false,
     };
 
-    // Wild buddy flavour: label it as a wild encounter.
-    ctx.wild.name = "Wild " + ctx.wild.name;
+    // Wild buddy flavour: label it as a wild encounter. In the arena the
+    // opponent is another player's Defense Buddy, so it keeps its own name.
+    if (ctx.mode !== "pvp") {
+      ctx.wild.name = "Wild " + ctx.wild.name;
+    }
 
     refreshHud();
     renderMoves();
@@ -651,13 +661,44 @@ const BuddyBattle = (() => {
     log(`${ctx.ally.name} fainted! You have no buddies left.`, "bad");
     await sleep(560);
     ctx.over = true;
+    if (ctx.mode === "pvp") {
+      showPvpResult(false);
+      return;
+    }
     showDefeat();
+  }
+
+  /* ------------------------------------------------------- PvP endings */
+  function showPvpResult(won) {
+    setBusy(true);
+    const spawn = ctx.spawn || {};
+    const title = spawn.opponentName ? `vs ${spawn.opponentName}` : "Arena Match";
+    showOverlay(`
+      <h3>${won ? "🏆 Victory!" : "💀 Defeat"}</h3>
+      <p class="bb-sub">${escapeHtml(title)}</p>
+      <div class="bb-stat-grid">
+        <div class="bb-stat"><div class="bb-st-k">Result</div><div class="bb-st-v" style="color:${won ? "#4ade80" : "#f87171"}">${won ? "WIN" : "LOSS"}</div></div>
+        <div class="bb-stat"><div class="bb-st-k">Turns</div><div class="bb-st-v">${ctx.turn}</div></div>
+        <div class="bb-stat"><div class="bb-st-k">Arena Points</div><div class="bb-st-v">${won ? "+2" : "+0"}</div></div>
+        <div class="bb-stat"><div class="bb-st-k">Rank Points</div><div class="bb-st-v">${won ? "+10" : "−5"}</div></div>
+      </div>
+      <div class="bb-btns">
+        <button class="bb-btn bb-primary" id="bb-pvp-done">Continue</button>
+      </div>
+    `);
+    el("bb-pvp-done").addEventListener("click", () => {
+      finish(won ? "win" : "loss", {});
+    });
   }
 
   /* ================================================== outcome: the choice */
   function showOutcomeChoice() {
     setBusy(true);
     hideOverlay();
+    if (ctx.mode === "pvp") {
+      showPvpResult(true);
+      return;
+    }
 
     showOverlay(`
       <h3>The wild ${ctx.wild.name} has fainted</h3>
