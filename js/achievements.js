@@ -143,14 +143,13 @@ const Achievements = (() => {
   // Berries (no EB); the legacy tracks pay EB + RP. One formatter so the list,
   // the popup and the toast can never disagree.
   function rewardText(def) {
-    const bits = [];
+  const bits = [];
     if (def.eb) bits.push(`+${def.eb} EB`);
-    if (def.diamonds) bits.push(`\uD83D\uDD25 ${def.diamonds}`.replace("\uD83D\uDD25", "\uD83D\uDD25"));
-    if (def.berries) bits.push(`\uD83C\uDF53 ${def.berries}`);
+    if (def.diamonds) bits.push(`${def.diamonds} Diamonds`);
+    if (def.berries) bits.push(`🍓 ${def.berries}`);
     if (def.rp) bits.push(`+${def.rp}RP`);
-    return bits.join(" \u00B7 ");
+    return bits.join(" · ");
   }
-
   function statValue(def) {
     const state = (() => { try { return Store.get(); } catch (e) { return null; } })();
     if (!state) return 0;

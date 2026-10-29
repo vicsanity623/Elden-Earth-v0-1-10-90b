@@ -36,6 +36,11 @@ deploy-functions.sh
 storage.rules
 functions/
 *.service-account.json
+
+# Generated monthly player-growth outputs (merged CSVs, SVG charts, python venv)
+functions/player-growth-monthly-*.csv
+functions/charts/
+functions/.venv/
 server/access-control.log
 server/access-control.js
 
