@@ -5449,20 +5449,28 @@ body.buy-mode #treasury-ad-container {
   opacity: 0.6;
   pointer-events: none;
 }
+
 .founder-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 3px 10px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 4px 14px;
+  border-radius: 4px; /* Sleek slightly-rounded rectangle instead of an oval capsule */
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #0a0f18;
-  background: linear-gradient(135deg, #ffd76a, #e8c56a);
-  border: 1px solid #f0d48a;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #ffd074;
+  background: radial-gradient(ellipse at top, rgba(255, 215, 106, 0.12), rgba(10, 15, 24, 0.85));
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 208, 116, 0.4);
+  box-shadow: 
+    0 0 15px rgba(255, 180, 50, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  text-shadow: 0 0 8px rgba(255, 200, 80, 0.8);
   vertical-align: middle;
   white-space: nowrap;
 }
+
 .founder-badge.hidden {
   display: none !important;
 }
