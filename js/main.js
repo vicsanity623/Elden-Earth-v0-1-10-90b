@@ -9,6 +9,9 @@
   let toastTimer = null;
   let pulseAnimId = null;
   let _lastKnownCity = null;
+  
+  const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
+  const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
 
   // --- AUTOMATION / HEADLESS DETECTION ---
   function detectAutomation() {
@@ -1773,7 +1776,7 @@
       Grid.render();
 
       Diamonds.init(map, {
-        onCollect: () => { updateTopbar(); showToast("Found a diamond! ◆ +1"); },
+        onCollect: () => { updateTopbar(); showToast(`Found a diamond! ${iconDiamond} +1`); },
         onDenied: () => {},
       });
       Diamonds.setPlayerPosition(currentPos.lat, currentPos.lon);
@@ -2810,7 +2813,7 @@
         const isFutureLocked = dayNum > claimedCount + 1;
 
         // Check if day has diamonds
-        const diamondText = r.diamonds ? ` & +${r.diamonds} ◆` : "";
+        const diamondText = r.diamonds ? ` & +${r.diamonds} ${iconDiamond}` : "";
         const dayRp = rpForCalendarDay(dayNum);
         const rpText = dayRp ? ` <span class="quest-rp">+${dayRp}RP</span>` : "";
         const rewardLabel = `+${r.eb} EB${diamondText}${rpText}`;
@@ -4246,7 +4249,7 @@
         Grid.render();
       }
 
-      showToast("💎 Diamond Extractor Constructed!");
+      showToast(`${iconDiamond} Diamond Extractor Constructed!`);
       openExtractorModal();
     });
 
@@ -4285,7 +4288,7 @@
         state.extractor.stored = 0;
         Store.save(true);
         updateTopbar();
-        showToast(`💎 Collected ${optimisticCount} Diamond${optimisticCount > 1 ? "s" : ""} from Extractor!${useAdDouble ? " (2x ad bonus!)" : ""}`);
+        showToast(`${iconDiamond} Collected ${optimisticCount} Diamond${optimisticCount > 1 ? "s" : ""} from Extractor!${useAdDouble ? " (2x ad bonus!)" : ""}`);
         checkExtractorTick();
         launchFlyingGemStream(originX, originY, optimisticCount);
 
@@ -4312,7 +4315,7 @@
             Store.save(true);
             updateTopbar();
             showToast(result && result.reason === "nothing_stored"
-              ? "💎 Nothing to collect yet!"
+              ? `${iconDiamond} Nothing to collect yet!`
               : "⚠️ Collect could not be verified.", 3500);
             return;
           }
@@ -4642,7 +4645,7 @@
       if (sub) sub.textContent = "You're on the closed beta list — your Google account email goes to the Play test invite.";
       showToast(res.already
         ? "🧪 You're already on the list!"
-        : "🧪 You're on the list! +1,000 EB & +50 💎 Founders Pack added!", 6000);
+        : `🧪 You're on the list! +1,000 EB & +50 ${iconDiamond} Founders Pack added!`, 6000);
     });
 
     el("menu-btn").addEventListener("click", () => {
@@ -4943,15 +4946,15 @@
 
         if (winningSlice.type === "diamond") {
           const winDiamonds = 1 * multAward;
-          el("wheel-result").textContent = `Your diamond found its way back to you. (◆ +${winDiamonds})`;
-          showToast(`💎 +${winDiamonds} Diamond${winDiamonds > 1 ? 's' : ''} Refunded!`);
+          el("wheel-result").textContent = `Your diamond found its way back to you. (${iconDiamond} +${winDiamonds})`;
+          showToast(`${iconDiamond} +${winDiamonds} Diamond${winDiamonds > 1 ? 's' : ''} Refunded!`);
           launchFlyingGemStream(originX, originY, winDiamonds);
 
         } else if (winningSlice.type === "diamond_jackpot") {
-          // 💎 +12 or +24 Diamond Jackpot!
+          // +12 or +24 Diamond Jackpot!
           const winDiamonds = (Number(winningSlice.amount) || 12) * multAward;
           el("wheel-result").textContent = `🎉 MEGA BONUS! +${winDiamonds} Diamonds!`;
-          showToast(`💎 MEGA BONUS! Won +${winDiamonds} Diamonds!`);
+          showToast(`${iconDiamond} MEGA BONUS! Won +${winDiamonds} Diamonds!`);
 
           // Only broadcast diamond jackpots on 1X spins (not 10X) to prevent feed flooding
           if (multAward === 1 && typeof Feed !== "undefined") {
@@ -4968,7 +4971,7 @@
           }
 
         } else {
-          // 🪙 Elden Bucks Winner
+          // Elden Bucks Winner
           const winAmount = (Number(winningSlice.amount) || 0) * multAward;
           el("wheel-result").textContent = `🎉 You won ${winAmount} EB!`;
           showToast(`🎉 Won +${winAmount} Elden Bucks!`);
