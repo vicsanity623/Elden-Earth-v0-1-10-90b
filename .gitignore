@@ -18,6 +18,10 @@ post-changelogzen.sh
 /server/ban-farm-accounts.js
 /server/purge-farm-accounts.js
 /server/seed-demo.js
+/tools/verify-achievements.js
+/tools/verify-arena-economy.js
+/tools/verify-blocking-audience.js
+/tools/verify-bot-signature.js
 
 # Peer
 SCPR.md

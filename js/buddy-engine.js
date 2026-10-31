@@ -245,6 +245,12 @@ const BuddyEngine = (() => {
       refreshStats(inst);
       inst.currentHp = inst.stats.hp; // level-up restores to full
       out.learned = inst.moves.filter(m => !beforeMoves.includes(m));
+
+      // The buddy-level badge counts LEVELS, not level-up events — a buddy
+      // can jump several at once, so report the actual delta.
+      if (typeof Achievements !== "undefined") {
+        Achievements.record("buddyLevelUps", out.leveled);
+      }
     }
     return out;
   }

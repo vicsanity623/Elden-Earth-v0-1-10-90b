@@ -1497,6 +1497,15 @@ const BuddySystem = (() => {
       if (typeof PlayerXP !== "undefined" && summary.outcome === "tame") {
         PlayerXP.addXP(PlayerXP.XP.battleWin, "battle_win");
       }
+      // Combat badges. The wild buddy only reaches the feast/tame choice
+      // after it faints, so both outcomes are a win. `released` is not —
+      // the player chose to walk away, and counting it would let someone
+      // grind the badge without ever fighting.
+      if (typeof Achievements !== "undefined") {
+        Achievements.record("wildBattlesWon");
+        if (summary.outcome === "tame") Achievements.record("buddiesTamed");
+        if (summary.outcome === "feast") Achievements.record("buddiesFeasted");
+      }
     }
 
     // Recovery floor. A buddy must never be saved at 1 HP — the next fight

@@ -87,6 +87,12 @@ const PlayerXP = (() => {
       const fromLevel = lastLevel;
       lastLevel = leveledTo;
       toastLevelUp(leveledTo, fromLevel);
+
+      // Report the LEVELS gained, not the level-up event — a single XP grant
+      // can cross several thresholds at once, and the badge counts levels.
+      if (typeof Achievements !== "undefined") {
+        Achievements.record("trainerLevels", Math.max(1, leveledTo - (fromLevel || 1)));
+      }
     }
 
     renderHUD();

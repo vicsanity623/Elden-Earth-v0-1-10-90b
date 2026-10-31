@@ -16,6 +16,16 @@ const Arena = (() => {
   const STYLE_ID = "arena-style";
 
   let lastState = null;
+  // Wall-clock time at which `lastState` arrived. The regen countdown is
+  // derived from this locally so it ticks once a second without a round trip
+  // per tick.
+  let lastStateAt = 0;
+  // Guards the countdown-completion re-fetch from firing once per render tick
+  // while the request is still in flight.
+  let regenRefetchPending = false;
+  // ...and from firing once per tick when the server clock lags and still
+  // reports the countdown as already elapsed.
+  let lastRegenRefetchAt = 0;
   let countdownTimer = null;
 
   /* ---------------------------------------------------------- formatting */
@@ -134,6 +144,28 @@ const Arena = (() => {
   letter-spacing:.2px;
 }
 .ar-season-line b{ color:#fff; font-variant-numeric:tabular-nums; }
+.ar-entry-strip{
+  display:flex; gap:6px; margin:10px auto 0; justify-content:center;
+}
+.ar-entry-cell{
+  flex:1 1 0; max-width:120px; padding:7px 4px; text-align:center;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;
+}
+.ar-entry-num{
+  display:block; color:#fff; font-size:15px; font-weight:900;
+  font-variant-numeric:tabular-nums; line-height:1.2;
+}
+.ar-entry-lbl{
+  display:block; color:#93a4c0; font-size:10px; text-transform:uppercase;
+  letter-spacing:.4px; margin-top:2px;
+}
+.ar-regen-line{
+  margin:8px 0 0; text-align:center; font-size:12px; color:#fcd34d;
+  letter-spacing:.2px;
+}
+.ar-regen-line b{ color:#fff; font-variant-numeric:tabular-nums; }
+.ar-regen-line.full{ color:#86efac; }
 .ar-actions{ display:flex; gap:10px; margin-top:14px; }
 .ar-actions .btn{ flex:1 1 0; padding:15px 10px; font-size:15px; }
 .ar-battle-btn{
@@ -210,10 +242,28 @@ const Arena = (() => {
     }
   }
 
+  /**
+   * Fold a server-sent entry view into the cached lobby state and re-render.
+   *
+   * Every function that returns entry numbers goes through here, so the three
+   * call sites (getState, findMatch, resolveBattle) can never drift into
+   * showing different values for the same player.
+   */
+  function applyEntry(entry) {
+    lastState = lastState || {};
+    lastState.me = Object.assign({}, lastState.me, entry);
+    lastStateAt = Date.now();   // countdown restarts from this response
+    renderLobby();
+  }
+
   async function fetchState() {
     const d = await call("arenaGetState", {});
     if (d && d.ok) {
       lastState = d;
+      // Stamp receipt so the regen countdown can tick locally between
+      // fetches. The server sends a snapshot, not a live timer, so without
+      // this the countdown would sit frozen until the next round trip.
+      lastStateAt = Date.now();
       renderLobby();
     }
     return d;
@@ -231,26 +281,66 @@ const Arena = (() => {
 
     const remain = Math.max(0, (Number(season.end) || Date.now()) - Date.now());
     const freeLeft = Number(me.freeLeft) || 0;
+    const freeBankMax = Number(me.freeBankMax) || 5;
     const paidLeft = Number(me.paidLeft) || 0;
+    const paidCost = Number(rules.paidCost) || 3;
     const ap = Number(me.ap) || 0;
-    const maxDay = (rules.maxPerDay) || 15;
+    const maxDay = Number(rules.maxPerDay) || 15;
     const usedToday = Number(me.battlesToday) || 0;
 
-    // Footer button state, exactly per spec.
+    // Live regen countdown. The server reports freeNextInMs as a snapshot;
+    // subtract the time elapsed since that snapshot arrived so the number
+    // ticks down every second without re-fetching.
+    const sentNextIn = (me.freeNextInMs === null || me.freeNextInMs === undefined)
+      ? null : Number(me.freeNextInMs);
+    const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
+    let nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
+
+    // When the locally-ticked countdown reaches zero a real entry has landed,
+    // but the server still holds the old snapshot. Re-fetch so the Battle
+    // button unlocks instead of sitting stale until the player taps it.
+    //
+    // Cooldown-guarded: if the server clock lags the client's, the response
+    // can still read <= 0, and without this the guard would reset and fire
+    // another fetch on every 1s tick — one request per second, forever.
+    if (nextIn !== null && nextIn <= 0 && freeLeft < freeBankMax
+        && !regenRefetchPending && Date.now() - lastRegenRefetchAt > 5000) {
+      lastRegenRefetchAt = Date.now();
+      regenRefetchPending = true;
+      fetchState().then(() => { regenRefetchPending = false; });
+    }
+
+    const mmss = (ms) => {
+      const s = Math.ceil(ms / 1000);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    };
+
+    // Footer button state. Order matters: the daily cap outranks everything,
+    // then a banked free entry, then an affordable paid bypass, then either
+    // "wait for the timer" or "you are out" — never the old flat dead-end.
     let btnLabel, btnSub = "", btnDisabled = false;
     if (usedToday >= maxDay) {
       btnLabel = "Daily limit reached";
-      btnSub = `${usedToday}/${maxDay} battles used`;
+      btnSub = `${usedToday}/${maxDay} battles used — resets at midnight`;
       btnDisabled = true;
     } else if (freeLeft > 0) {
-      btnLabel = `Battle (${freeLeft}/5)`;
+      btnLabel = `Battle (${freeLeft}/${freeBankMax})`;
       btnSub = `${usedToday}/${maxDay} today`;
-    } else if (paidLeft > 0 && ap >= (rules.paidCost || 2)) {
-      btnLabel = `Battle (${rules.paidCost || 2} AP)`;
-      btnSub = `Remaining Paid: ${paidLeft}/10`;
+    } else if (paidLeft > 0 && ap >= paidCost) {
+      btnLabel = `Battle (${paidCost} AP)`;
+      btnSub = `Paid left ${paidLeft} · ${usedToday}/${maxDay} today`;
+    } else if (nextIn !== null && nextIn > 0) {
+      // The fix for the old lockout: waiting, not out.
+      btnLabel = `Free entry in ${mmss(nextIn)}`;
+      btnSub = paidLeft > 0 ? `or ${paidCost} AP to skip the wait` : "Next free entry incoming";
+      btnDisabled = true;
+    } else if (paidLeft > 0) {
+      btnLabel = "No attempts left";
+      btnSub = `Need ${paidCost} AP — you have ${ap}`;
+      btnDisabled = true;
     } else {
       btnLabel = "No attempts left";
-      btnSub = paidLeft > 0 ? `Need ${rules.paidCost || 2} AP` : "Come back tomorrow";
+      btnSub = "Come back tomorrow";
       btnDisabled = true;
     }
 
@@ -292,6 +382,26 @@ const Arena = (() => {
           <div class="ar-pill alt">${fmtNum(me.losses)} Losses</div>
         </div>
         <div class="ar-pill alt" style="display:inline-block">Rank : ${me.rank ? me.rank : "—"}</div>
+
+        <div class="ar-entry-strip">
+          <div class="ar-entry-cell">
+            <span class="ar-entry-num">${freeLeft}/${freeBankMax}</span>
+            <span class="ar-entry-lbl">Free</span>
+          </div>
+          <div class="ar-entry-cell">
+            <span class="ar-entry-num">${paidLeft}</span>
+            <span class="ar-entry-lbl">Paid left</span>
+          </div>
+          <div class="ar-entry-cell">
+            <span class="ar-entry-num">${usedToday}/${maxDay}</span>
+            <span class="ar-entry-lbl">Battles today</span>
+          </div>
+        </div>
+        ${nextIn !== null && nextIn > 0 ? `
+          <div class="ar-regen-line">
+            ⏳ Next free entry in <b>${mmss(nextIn)}</b> · fills to ${freeBankMax}
+          </div>` : (freeLeft >= freeBankMax ? `
+          <div class="ar-regen-line full">✅ Free entry bank is full</div>` : "")}
       </div>
 
       <div class="ar-season-line">
@@ -448,8 +558,15 @@ const Arena = (() => {
         no_defender: "Set a Defense Buddy first.",
         daily_limit: "Daily battle limit reached.",
         no_attempts: "No attempts left today.",
+        // Not an error — the timer is simply still running. Say so, with the
+        // countdown, instead of blaming the player's connection.
+        regen_wait: d && d.entry && d.entry.freeNextInMs
+          ? `No entries yet — the next free one lands in ${Math.ceil(d.entry.freeNextInMs / 60000)} min.`
+          : "No entries yet — your next free entry is on its way.",
         no_opponents: "No opponents available yet — set a Defense Buddy and check back.",
       }[d && d.reason] || "Could not find a match — try again.";
+      // Keep the lobby's own numbers in step whenever the server tells us.
+      if (d && d.entry) applyEntry(d.entry);
       if (typeof showToast === "function") showToast("⚠️ " + why);
       return;
     }
@@ -515,15 +632,21 @@ const Arena = (() => {
 
     const d = await call("arenaResolveBattle", { matchId, won, turns });
     if (d && d.ok) {
-      lastState = lastState || {};
-      lastState.me = Object.assign({}, lastState.me, {
+      // applyEntry takes the whole entry view wholesale rather than
+      // cherry-picking fields — cherry-picking is what let the old
+      // `dailyFree` survive as a silent 0 on the client for so long.
+      applyEntry({
         ap: d.ap, wins: d.wins, losses: d.losses, score: d.score,
-        freeLeft: d.freeLeft, paidLeft: d.paidLeft, battlesToday: d.battlesToday,
+        freeLeft: d.freeLeft,
+        freeBankMax: d.freeBankMax,
+        freeNextInMs: d.freeNextInMs,
+        paidLeft: d.paidLeft, battlesToday: d.battlesToday,
       });
       if (typeof showToast === "function") {
+        const apLine = `+${d.apAwarded} AP`;
         showToast(won
-          ? `🏆 Victory! +${d.apAwarded} AP · Rank points +${10}`
-          : `💀 Defeat. Rank points -5`);
+          ? `🏆 Victory! ${apLine} · Rank points +10`
+          : `💀 Defeat. ${apLine} · Rank points -5`);
       }
     } else if (typeof showToast === "function") {
       showToast("⚠️ Result could not be saved — try again.");
