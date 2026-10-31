@@ -22,6 +22,7 @@ post-changelogzen.sh
 /tools/verify-arena-economy.js
 /tools/verify-blocking-audience.js
 /tools/verify-bot-signature.js
+/tools/verify-arena-fairness.js
 
 # Peer
 SCPR.md

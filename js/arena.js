@@ -564,6 +564,10 @@ const Arena = (() => {
           ? `No entries yet — the next free one lands in ${Math.ceil(d.entry.freeNextInMs / 60000)} min.`
           : "No entries yet — your next free entry is on its way.",
         no_opponents: "No opponents available yet — set a Defense Buddy and check back.",
+        // Every available opponent has already been fought 3 times today. This
+        // is the fairness cap doing its job, so say so plainly rather than
+        // making it sound like a fault.
+        opponents_capped: "You've faced every opponent 3 times today — come back tomorrow for fresh matchups.",
       }[d && d.reason] || "Could not find a match — try again.";
       // Keep the lobby's own numbers in step whenever the server tells us.
       if (d && d.entry) applyEntry(d.entry);
@@ -604,7 +608,11 @@ const Arena = (() => {
         mode: "pvp",
         ally,
         wild: wildInst,
-        spawn: { id: d.matchId, opponentName: opponent.name, opponentAvatar: opponent.avatar, opponentTitle: opponent.title },
+        // A sparring fight has no real opponent behind it — say so on the
+        // banner instead of presenting the player's own avatar as an enemy.
+        spawn: d.sparring
+          ? { id: d.matchId, opponentName: "Sparring Dummy", opponentAvatar: "🥋", opponentTitle: "Practice — no rank at stake" }
+          : { id: d.matchId, opponentName: opponent.name, opponentAvatar: opponent.avatar, opponentTitle: opponent.title },
         bag: [],
         onResult: (summary) => settle(summary, d.matchId, wildInst, ally),
       });
@@ -616,17 +624,29 @@ const Arena = (() => {
     const won = summary && summary.outcome === "win";
     const turns = (summary && summary.turns) || 1;
 
-    // The winning buddy grows, same as wild battles.
+    // Both outcomes train the buddy.
+    //
+    // The losing buddy used to get NOTHING — no AP it could feel, no XP, no
+    // chance to grow. That made an arena loss a pure dead-end, which is the
+    // opposite of the intent: the whole point of paying 1 AP to lose is that
+    // the player still comes away progressing. A loss now earns quarter-rate
+    // buddy XP (the same discount wild losses have always used), so a buddy
+    // can still level up from arena losses.
     try {
-      if (won && typeof BuddyEngine !== "undefined") {
+      if (typeof BuddyEngine !== "undefined" && ally) {
         const target = ally;
-        const r = BuddyEngine.addXp(target, BuddyEngine.battleXpReward(wildInst, "win"));
+        const outcome = won ? "win" : "loss";
+        const xp = BuddyEngine.battleXpReward(wildInst, outcome);
+        const r = BuddyEngine.addXp(target, xp);
         if (r.leveled > 0 && typeof showToast === "function") {
           showToast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
         }
-        if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.battleWin, "arena_win");
-      } else if (typeof PlayerXP !== "undefined") {
-        PlayerXP.addXP(PlayerXP.XP.battleLoss, "arena_loss");
+        if (typeof PlayerXP !== "undefined") {
+          PlayerXP.addXP(
+            won ? PlayerXP.XP.battleWin : PlayerXP.XP.battleLoss,
+            won ? "arena_win" : "arena_loss"
+          );
+        }
       }
     } catch (e) {}
 

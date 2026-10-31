@@ -782,8 +782,9 @@ const BuddyBattle = (() => {
       <div class="bb-stat-grid">
         <div class="bb-stat"><div class="bb-st-k">Result</div><div class="bb-st-v" style="color:${won ? "#4ade80" : "#f87171"}">${won ? "WIN" : "LOSS"}</div></div>
         <div class="bb-stat"><div class="bb-st-k">Turns</div><div class="bb-st-v">${ctx.turn}</div></div>
-        <div class="bb-stat"><div class="bb-st-k">Arena Points</div><div class="bb-st-v">${won ? "+2" : "+0"}</div></div>
+        <div class="bb-stat"><div class="bb-st-k">Arena Points</div><div class="bb-st-v">${won ? "+2" : "+1"}</div></div>
         <div class="bb-stat"><div class="bb-st-k">Rank Points</div><div class="bb-st-v">${won ? "+10" : "−5"}</div></div>
+        <div class="bb-stat"><div class="bb-st-k">Buddy XP</div><div class="bb-st-v" style="color:${won ? "#4ade80" : "#fbbf24"}">${won ? "Full" : "Training"}</div></div>
       </div>
       <div class="bb-btns">
         <button class="bb-btn bb-primary" id="bb-pvp-done">Continue</button>
