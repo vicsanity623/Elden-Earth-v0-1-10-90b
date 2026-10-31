@@ -16,7 +16,7 @@ const BuddySystem = (() => {
 
   /* ------------------------------------------------------------ config */
   const METERS_PER_SPAWN = 152.4;      // 500 feet
-  const MAX_DAILY_SPAWNS = 10;
+  const MAX_DAILY_SPAWNS = 50;
   const MAX_ACTIVE_SPAWNS = 3;
   const SPAWN_TTL_MS = 8 * 60 * 1000;  // wild spawns despawn after 8 minutes
   const SPAWN_RENDER_RADIUS_M = 1400;
@@ -340,7 +340,7 @@ const BuddySystem = (() => {
     const topBuddy = b.bag.reduce((m, x) => Math.max(m, x.level || 1), 1);
     const trainer = (typeof PlayerXP !== "undefined" && PlayerXP.getState)
       ? (PlayerXP.getState().level || 1) : 1;
-    return Math.max(topBuddy, trainer);
+    return Math.max(1, topBuddy);
   }
 
   function localRollSpawn() {

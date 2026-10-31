@@ -486,14 +486,16 @@ const BuddyEngine = (() => {
   // buddy — pass max(trainerLevel, topBuddyLevel) as the reference so fights
   // stay competitive as the player grows instead of outlevelling every fight.
   function rollWildLevel(playerRefLevel, rarityId) {
-    const ref = Math.max(1, playerRefLevel | 0);
-    // Tighter spread at higher tiers: legendaries always push back.
+    // Lower the reference level by 2 or 3 so encounters lean easier
+    const ref = Math.max(1, (playerRefLevel - 2) | 0);
+    
     const spread = rarityId === "legendary" ? 2
       : rarityId === "rare" ? 3
       : rarityId === "uncommon" ? 4
       : 5;
+      
     const min = Math.max(1, ref - spread);
-    const max = Math.min(BuddyData.BUDDY_MAX_LEVEL, ref + 3);
+    const max = Math.min(BuddyData.BUDDY_MAX_LEVEL, ref + 1); // Reduced from +3 to +1
     return ri(min, Math.max(min, max));
   }
 
