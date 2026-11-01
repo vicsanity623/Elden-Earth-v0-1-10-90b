@@ -430,6 +430,22 @@ const ServerAntiCheat = (() => {
     }
   }
 
+  async function applyReferral(payload) {
+    // referrals.js calls ServerAntiCheat.applyReferral({ referralCode }) —
+    // this wrapper was missing entirely, so EVERY referral code threw
+    // "applyReferral is not a function" and showed "Could not verify code"
+    // for every player. The server callable (exports.applyReferral) exists;
+    // only the client bridge was absent.
+    if (!functions) return { ok: false, reason: "functions_not_initialized" };
+    try {
+      const fn = functions.httpsCallable("applyReferral");
+      return (await fn(payload || {})).data;
+    } catch (e) {
+      console.warn("[ServerAntiCheat] applyReferral failed:", e.message);
+      return { ok: false, reason: "server_error" };
+    }
+  }
+
   async function checkCountryAccess(countryCode, usStateCode) {
     // Fail OPEN on transport problems — a network hiccup must never masquerade
     // as a region block. Genuine blocks come back from the SERVER as
@@ -760,5 +776,5 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimAdReward, joinClosedBeta, claimNewPlayerBonus, claimEventReward, claimReferralBonuses, claimReferralRoyalties, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange, getAgeStatus };
+  return { init, startKeepAlive, sendPosition, validatePurchase, validateCollect, relocatePlot, pickupPlot, ascendPlot, getGlobalEvent, claimGlobalEventReward, processEventPayouts, spinWheel, activateBoost, claimBoost, recallCitadel, conquerCitadel, spawnDiamonds, citadelAction, claimQuestReward, collectExtractor, upgradeExtractor, claimAdReward, joinClosedBeta, claimNewPlayerBonus, claimEventReward, claimReferralBonuses, claimReferralRoyalties, applyReferral, isReady, fixAllPlotData, reconcilePlotData, giftPlots, fixTerritoryNames, claimMailbox, claimWeeklyPool, plantEldenStop, spinEldenStop, checkChatEligibility, validateUsername, filterChatMessage, submitWithdrawalRequest, approveWithdrawal, rejectWithdrawal, listWithdrawals, checkCountryAccess, retroactiveWeeklyPoolPayout, getWeeklyPoolInfo, createTrade, selectTradePlot, confirmTrade, cancelTrade, getTrade, listTradeResults, ackTradeResults, requestNameChange, listNameChangeRequests, approveNameChange, rejectNameChange, getAgeStatus };
 })();
