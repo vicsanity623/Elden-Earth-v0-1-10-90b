@@ -22,13 +22,13 @@ const BuddySystem = (() => {
   const SPAWN_RENDER_RADIUS_M = 1400;
 
   // Anti-cheat: how "real" walking must look before it counts.
-  const MIN_STEP_M = 8;                // ignore GPS jitter below this
-  const MAX_STEP_M = 260;              // never credit a single hop above this
-  const MIN_SPEED_MPS = 0.35;          // slower = standing still / drifting
-  const MAX_SPEED_MPS = 12;            // faster = vehicle / teleport
-  const REVISIT_RADIUS_M = 25;         // new ground only — kills fan loops
-  const REVISIT_GRACE_MS = 45 * 1000;  // ignore points this recent when checking
-  const REVISIT_HISTORY = 60;
+  const MIN_STEP_M = 4;                // Reduced from 8: catches smaller backyard steps
+  const MAX_STEP_M = 260;              // unchanged
+  const MIN_SPEED_MPS = 0.25;          // Slightly lowered from 0.35 to allow leisurely pacing
+  const MAX_SPEED_MPS = 12;            // unchanged
+  const REVISIT_RADIUS_M = 12;         // Reduced from 25 to 12 meters (~39 feet)
+  const REVISIT_GRACE_MS = 25 * 1000;  // Reduced from 45s to 25s for shorter loops
+  const REVISIT_HISTORY = 40;          // Reduced from 60 to prevent long memory of the yard
   const CREDIT_WINDOW_MS = 60 * 1000;
 
   // ------------------------------------------------- Travel record reset --
