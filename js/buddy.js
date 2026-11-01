@@ -70,6 +70,24 @@ const BuddySystem = (() => {
   const BAG_ID = "buddy-bag-modal";
   const DETAIL_ID = "buddy-detail-modal";
   const FEAST_ID = "buddy-feast-modal";
+  const BREED_ID = "buddy-breed-modal";
+  const TRAINING_ID = "buddy-training-modal";
+  // Mirror of the server cooldowns (functions/buddy.js).
+  const BREED_PARENT_MS = 7 * 24 * 60 * 60 * 1000;
+  const BREED_PAIR_MS = 30 * 24 * 60 * 60 * 1000;
+  const TRAIN_DURATIONS = [
+    { ms: 3600000,  label: "1 Hour",  short: "1h"  },
+    { ms: 14400000, label: "4 Hours", short: "4h"  },
+    { ms: 43200000, label: "12 Hours", short: "12h" },
+    { ms: 86400000, label: "24 Hours", short: "24h" },
+  ];
+  // Loot odds per duration — mirror of TRAIN_LOOT (display only).
+  const TRAIN_ODDS = {
+    1:  { eb: 40, dia: 10, plot: 0 },
+    4:  { eb: 65, dia: 25, plot: 2 },
+    12: { eb: 85, dia: 45, plot: 5 },
+    24: { eb: 95, dia: 65, plot: 12 },
+  };
   const ENCOUNTER_ID = "buddy-encounter-modal";
   const TRAINER_ID = "buddy-trainer-modal";
   const CUSTOMIZE_ID = "buddy-customize-modal";
@@ -722,6 +740,60 @@ const BuddySystem = (() => {
 }
 .bd-feast-row.sel .fr-pick{background:#f43f5e; color:#fff;}
 
+/* ---- breed picker ---- */
+.bd-breed-list{
+  display:flex; flex-direction:column; gap:7px; margin:10px 0;
+  max-height:44vh; overflow-y:auto;
+}
+.bd-breed-row{
+  display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:12px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(150,180,240,.14);
+  cursor:pointer; transition:border-color .15s ease, background .15s ease;
+}
+.bd-breed-row:active{transform:scale(.99);}
+.bd-breed-row.sel{border-color:rgba(244,63,94,.75); background:rgba(190,50,60,.18);}
+.bd-breed-row.locked{opacity:.55; cursor:not-allowed;}
+.bd-breed-row .fr-body{flex:1 1 auto; min-width:0;}
+.bd-breed-row .fr-nm{font-size:12.5px; font-weight:800; color:#eaf1ff;}
+.bd-breed-row .fr-sub{font-size:10.5px; color:#9db8dd; margin-top:2px;}
+.bd-breed-row .fr-cd{color:#fbbf24; font-weight:800;}
+
+/* ---- training ---- */
+.bd-train-cards{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0;}
+.bd-train-card{
+  padding:12px 9px; border-radius:13px; cursor:pointer; text-align:center;
+  background:rgba(255,255,255,.055); border:1px solid rgba(150,180,240,.16);
+  transition:border-color .15s ease, background .15s ease;
+}
+.bd-train-card:active{transform:scale(.97);}
+.bd-train-card.sel{border-color:rgba(52,211,153,.75); background:rgba(16,185,129,.14);}
+.bd-train-card .tc-dur{font-size:14px; font-weight:900; color:#fff;}
+.bd-train-card .tc-xp{font-size:11.5px; font-weight:900; color:#34d399; margin-top:4px;}
+.bd-train-card .tc-loot{font-size:9.5px; color:#9db8dd; margin-top:4px; line-height:1.45;}
+.bd-train-status{
+  padding:12px; border-radius:13px; margin:10px 0;
+  background:rgba(52,211,153,.08); border:1px solid rgba(52,211,153,.3);
+}
+.bd-train-reward{
+  display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:12px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(150,180,240,.14); margin-top:7px;
+}
+.bd-train-reward .tr-body{flex:1 1 auto; min-width:0;}
+.bd-train-reward .tr-k{font-size:12px; font-weight:800; color:#eaf1ff;}
+.bd-train-reward .tr-v{font-size:10.5px; color:#9db8dd; margin-top:1px;}
+.bd-train-reward .tr-btn{
+  flex:0 0 auto; padding:8px 13px; border-radius:10px; border:none; cursor:pointer;
+  font-family:inherit; font-size:11px; font-weight:900;
+  background:linear-gradient(135deg,#059669,#34d399); color:#04121a;
+}
+.bd-train-reward .tr-btn:disabled{background:rgba(255,255,255,.12); color:#7f97ba; cursor:default;}
+
+/* training badge on bag cells */
+.bd-bag-cell .bd-tr{
+  position:absolute; top:5px; left:5px; font-size:8.5px; padding:1px 6px;
+  border-radius:99px; background:#d97706; color:#fff; font-weight:800;
+}
+
 /* ---- encounter modal ---- */
 .bd-vs{
   display:flex; align-items:center; justify-content:center; gap:10px;
@@ -1048,6 +1120,9 @@ const BuddySystem = (() => {
         <button class="bd-btn" id="bd-bag-trainer">🏆 Trainer</button>
         <button class="bd-btn" id="bd-bag-customize">✨ Customize</button>
       </div>
+      <div class="bd-row">
+        <button class="bd-btn" id="bd-bag-training">🏋️ Training</button>
+      </div>
       <div class="bd-empty" id="bd-bag-empty" style="display:${b.bag.length ? "none" : "block"}">
         No buddies yet. Walk around the map to find wild buddies, then battle
         and tame them.
@@ -1067,6 +1142,7 @@ const BuddySystem = (() => {
         cell.className = "bd-bag-cell" + (inst.uid === b.activeUid ? " active" : "");
         cell.innerHTML = `
           ${inst.uid === b.activeUid ? '<div class="bd-act">ACTIVE</div>' : ""}
+        ${(b.training && b.training.buddyUid === inst.uid) ? '<div class="bd-tr">TRAINING</div>' : ""}
           <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)">
             <img class="bd-orb-img" alt="" />
           </div>
@@ -1110,6 +1186,11 @@ const BuddySystem = (() => {
       closeModal(BAG_ID);
       openCustomizeModal(active.uid);
     });
+    document.getElementById("bd-bag-training").addEventListener("click", () => {
+      const t = buddyState().training;
+      if (t) openTrainingModal(t.buddyUid);
+      else toast("No training in progress — open a buddy and tap 🏋️ Train");
+    });
 
     openModal(BAG_ID);
   }
@@ -1130,6 +1211,8 @@ const BuddySystem = (() => {
     const isDefender = (typeof Arena !== "undefined" && Arena.getState)
       ? ((Arena.getState() && Arena.getState().me && Arena.getState().me.defenderBuddyId) === inst.uid)
       : false;
+    const training = b.training && typeof b.training === "object" ? b.training : null;
+    const thisTraining = training && training.buddyUid === inst.uid ? training : null;
 
     buildModal(DETAIL_ID, `
       <button class="bd-close">✕</button>
@@ -1146,6 +1229,23 @@ const BuddySystem = (() => {
         <span class="bd-tag">${(sp.rarity || "common")} rarity</span>
         <span class="bd-tag">Grade ${grade.letter} · ${pct}% IV</span>
       </div>
+
+      ${thisTraining ? `
+      <div class="bd-train-status">
+        <div style="font-size:12.5px;font-weight:900;color:#34d399">
+          🏋️ Training ${Date.now() >= Number(thisTraining.endsAt) ? "— complete!" : "in progress…"}
+        </div>
+        <div style="font-size:10.5px;color:#9db8dd;margin-top:3px">
+          ${Date.now() >= Number(thisTraining.endsAt)
+            ? "Your rewards are ready to claim."
+            : `Ends in ${fmtRemain(Number(thisTraining.endsAt) - Date.now())} · ≈${Number((thisTraining.rolls || {}).xp) || 0} XP incoming`}
+        </div>
+        <div class="bd-row" style="margin-top:8px">
+          <button class="bd-btn" id="bd-detail-train-view">
+            ${Date.now() >= Number(thisTraining.endsAt) ? "🎁 Claim Rewards" : "View Training"}
+          </button>
+        </div>
+      </div>` : ""}
 
       <div style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#7f97ba; margin:12px 0 5px">
         Health
@@ -1225,6 +1325,15 @@ const BuddySystem = (() => {
         Feed another buddy to this one for a big XP boost and a full heal.
         The feasted buddy is gone forever.
       </div>
+
+      <div class="bd-row" style="margin-top:10px">
+        <button class="bd-btn" id="bd-detail-train">🏋️ Train…</button>
+        <button class="bd-btn" id="bd-detail-breed">🍼 Breed…</button>
+      </div>
+      <div class="bd-hp-note">
+        Train away for 1–24h to earn XP, EB, diamonds and rare plot finds —
+        or breed for a brand-new buddy. Both are validated by the server.
+      </div>
     `);
     wireClose(DETAIL_ID);
 
@@ -1237,6 +1346,7 @@ const BuddySystem = (() => {
     } catch (e) {}
 
     document.getElementById("bd-detail-active").addEventListener("click", () => {
+      if (thisTraining) { toast("🏋️ Away training — this buddy is unavailable until the session ends"); return; }
       b.activeUid = inst.uid;
       persist();
       toast(`${inst.nickname} is now your active buddy`);
@@ -1263,6 +1373,7 @@ const BuddySystem = (() => {
 
     const defBtn = document.getElementById("bd-detail-defender");
     if (defBtn) defBtn.addEventListener("click", async () => {
+      if (thisTraining) { toast("🏋️ Away training — this buddy is unavailable until the session ends"); return; }
       if (typeof Arena === "undefined" || !Arena.setDefender) {
         toast("⚠️ Arena is unavailable right now.");
         return;
@@ -1284,7 +1395,26 @@ const BuddySystem = (() => {
     });
 
     const feastBtn = document.getElementById("bd-detail-feast");
-    if (feastBtn) feastBtn.addEventListener("click", () => openFeastModal(inst.uid));
+    if (feastBtn) feastBtn.addEventListener("click", () => {
+      if (thisTraining) { toast("🏋️ Away training — this buddy is unavailable until the session ends"); return; }
+      openFeastModal(inst.uid);
+    });
+
+    const trainBtn = document.getElementById("bd-detail-train");
+    if (trainBtn) trainBtn.addEventListener("click", () => {
+      // Routes internally: shows the live progress screen when ANY session
+      // is running, otherwise the duration picker for this buddy.
+      openTrainingModal(inst.uid);
+    });
+
+    const trainViewBtn = document.getElementById("bd-detail-train-view");
+    if (trainViewBtn) trainViewBtn.addEventListener("click", () => openTrainingModal(inst.uid));
+
+    const breedBtn = document.getElementById("bd-detail-breed");
+    if (breedBtn) breedBtn.addEventListener("click", () => {
+      if (thisTraining) { toast("🏋️ Away training — breeding waits until the session ends"); return; }
+      openBreedModal(inst.uid);
+    });
 
     openModal(DETAIL_ID);
   }
@@ -1441,6 +1571,427 @@ const BuddySystem = (() => {
     });
 
     openModal(FEAST_ID);
+  }
+
+  /* ------------------------------------------------- breed + training */
+  function fmtRemain(ms) {
+    if (ms <= 0) return "0m";
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  }
+
+  // Advisory cooldown display — the server re-checks everything on breed.
+  function breedCooldownFor(b, aUid, partnerUid, now) {
+    const pairKey = [aUid, partnerUid].sort().join("|");
+    const pairs = (b.breedPairs && typeof b.breedPairs === "object") ? b.breedPairs : {};
+    const lasts = (b.breedLastAt && typeof b.breedLastAt === "object") ? b.breedLastAt : {};
+    const pairLast = Number(pairs[pairKey]) || 0;
+    if (pairLast && now - pairLast < BREED_PAIR_MS) {
+      return { ready: false, label: `Pair cooldown — ${fmtRemain(BREED_PAIR_MS - (now - pairLast))} left` };
+    }
+    const last = Math.max(Number(lasts[aUid]) || 0, Number(lasts[partnerUid]) || 0);
+    if (last && now - last < BREED_PARENT_MS) {
+      return { ready: false, label: `Parent cooldown — ${fmtRemain(BREED_PARENT_MS - (now - last))} left` };
+    }
+    return { ready: true, label: "Ready to breed · 7d parent / 30d pair cooldown" };
+  }
+
+  async function doBreed(parentAUid, parentBUid) {
+    try {
+      if (typeof firebase === "undefined" || !firebase.functions) {
+        toast("⚠️ Offline — breeding needs a connection");
+        return null;
+      }
+      const fn = firebase.functions().httpsCallable("breedBuddy");
+      const res = await fn({ parentAUid, parentBUid });
+      const d = (res && res.data) || {};
+      if (!d.ok) {
+        const why = {
+          same_buddy: "Pick two different buddies",
+          buddy_not_found: "That buddy is no longer in your bag — refresh and try again",
+          buddy_in_training: "A parent is away training — wait for the session to end",
+          bag_full: "Your Buddy Bag is full (30/30) — feast someone first",
+          parent_cooldown: `A parent bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
+          pair_cooldown: `This pair bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
+          too_soon: "Hold on a moment…",
+        }[d.reason] || "Breeding failed — try again";
+        toast(why);
+        return null;
+      }
+      // Adopt the server's result: new bag (with baby) + cooldown maps.
+      const b = buddyState();
+      if (Array.isArray(d.bag)) b.bag = d.bag;
+      if (d.breedLastAt && typeof d.breedLastAt === "object") b.breedLastAt = d.breedLastAt;
+      if (d.breedPairs && typeof d.breedPairs === "object") b.breedPairs = d.breedPairs;
+      if (Number.isFinite(d.totalBred)) b.totalBred = d.totalBred;
+      persist();
+      renderHudBadge();
+      syncCompanion();
+      return d;
+    } catch (e) {
+      toast("⚠️ Breeding failed — check your connection");
+      return null;
+    }
+  }
+
+  function openBreedModal(parentAUid) {
+    const b = buddyState();
+    const parentA = b.bag.find(x => x.uid === parentAUid);
+    if (!parentA) return;
+    injectStyle();
+
+    const now = Date.now();
+    const candidates = b.bag.filter(x => x && x.uid !== parentAUid);
+
+    buildModal(BREED_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🍼 Breed</h2>
+      <p class="bd-sub">
+        Pick a partner for <b>${parentA.nickname}</b>. The baby is born fully
+        grown at Level 5 with inherited IVs, stat mutations and a chance at a
+        rarity upgrade. Parents rest <b>7 days</b>; this pair rests <b>30 days</b>.
+      </p>
+      <div class="bd-breed-list" id="bd-breed-list"></div>
+      <div class="bd-empty" style="display:${candidates.length ? "none" : "block"}">
+        You need at least one other buddy in the bag to breed.
+      </div>
+      <div class="bd-row" style="margin-top:10px">
+        <button class="bd-btn danger" id="bd-breed-confirm" disabled>Select a partner</button>
+      </div>
+    `);
+    wireClose(BREED_ID);
+
+    let selected = null;
+    const listEl = document.getElementById("bd-breed-list");
+    candidates.forEach(c => {
+      const sp = BuddyData.getSpecies(c.speciesId) || {};
+      const rarity = BuddyData.getRarity(sp.rarity);
+      const grade = BuddyEngine.ivGrade(BuddyEngine.ivPercent(c.ivs));
+      const cd = breedCooldownFor(b, parentAUid, c.uid, now);
+      const row = document.createElement("div");
+      row.className = "bd-breed-row" + (cd.ready ? "" : " locked");
+      row.innerHTML = `
+        <div class="fr-body">
+          <div class="fr-nm">${c.nickname}
+            <span class="bd-tag" style="margin:0 0 0 5px">Lv.${c.level}</span>
+          </div>
+          <div class="fr-sub">
+            <span style="color:${rarity.color}">${rarity.name}</span>
+            &middot; Grade ${grade.letter}
+            &middot; ${cd.ready ? `<span style="color:#34d399">${cd.label}</span>` : `<span class="fr-cd">⏱ ${cd.label}</span>`}
+          </div>
+        </div>
+        <div class="fr-pick">${cd.ready ? "＋" : "🔒"}</div>
+      `;
+      if (cd.ready) {
+        row.addEventListener("click", () => {
+          selected = c;
+          listEl.querySelectorAll(".bd-breed-row").forEach(r => r.classList.remove("sel"));
+          row.classList.add("sel");
+          const confirm = document.getElementById("bd-breed-confirm");
+          if (confirm) {
+            confirm.disabled = false;
+            confirm.textContent = `🍼 Breed ${parentA.nickname} × ${c.nickname}`;
+          }
+        });
+      }
+      listEl.appendChild(row);
+    });
+
+    const confirmBtn = document.getElementById("bd-breed-confirm");
+    if (confirmBtn) confirmBtn.addEventListener("click", async () => {
+      if (!selected || confirmBtn.disabled) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Breeding…";
+      const partner = selected;
+      const d = await doBreed(parentAUid, partner.uid);
+      if (!d) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = `🍼 Breed ${parentA.nickname} × ${partner.nickname}`;
+        return;
+      }
+      closeModal(BREED_ID);
+      const baby = d.baby || {};
+      const sp = BuddyData.getSpecies(baby.speciesId) || {};
+      const rarity = BuddyData.getRarity(sp.rarity);
+      toast(`🍼 ${baby.nickname} was born! ${rarity.name} ${sp.name || ""} · Level ${baby.level}`);
+      openDetail(baby.uid); // show off the newborn
+    });
+
+    openModal(BREED_ID);
+  }
+
+  /* ------------------------------------------------------- training UI */
+  let trainTimer = null;
+  function clearTrainTimer() {
+    if (trainTimer) { clearInterval(trainTimer); trainTimer = null; }
+  }
+
+  async function doStartTraining(buddyUid, durationMs) {
+    try {
+      if (typeof firebase === "undefined" || !firebase.functions) {
+        toast("⚠️ Offline — training needs a connection");
+        return null;
+      }
+      const fn = firebase.functions().httpsCallable("buddyStartTraining");
+      const res = await fn({ buddyUid, durationMs });
+      const d = (res && res.data) || {};
+      if (!d.ok) {
+        const why = {
+          already_training: "Another buddy is already training — wait for it to finish",
+          claim_first: "Claim your finished training rewards first",
+          buddy_not_found: "That buddy is no longer in your bag",
+          too_soon: "Hold on a moment…",
+        }[d.reason] || "Could not start training";
+        toast(why);
+        return null;
+      }
+      const b = buddyState();
+      if (d.training) b.training = d.training;
+      persist();
+      renderHudBadge();
+      return d;
+    } catch (e) {
+      toast("⚠️ Training failed — check your connection");
+      return null;
+    }
+  }
+
+  async function doClaimTraining(reward) {
+    try {
+      if (typeof firebase === "undefined" || !firebase.functions) {
+        toast("⚠️ Offline — claiming needs a connection");
+        return null;
+      }
+      const fn = firebase.functions().httpsCallable("buddyClaimTraining");
+      const res = await fn({ reward });
+      const d = (res && res.data) || {};
+      if (!d.ok) {
+        const why = {
+          no_training: "No training session found",
+          not_ready: `Still training — ${fmtRemain(d.retryAfterMs || 0)} left`,
+          already_claimed: "Already claimed",
+          nothing_to_claim: "That reward wasn't found this time",
+          buddy_not_found: "That buddy is no longer in your bag",
+          too_soon: "Hold on a moment…",
+        }[d.reason] || "Claim failed — try again";
+        toast(why);
+        return null;
+      }
+      // Adopt the server result.
+      const b = buddyState();
+      if (d.bag) b.bag = d.bag;
+      if (d.sessionCleared) delete b.training;
+      else if (d.training) b.training = d.training;
+      persist();
+      renderHudBadge();
+      syncCompanion();
+      try {
+        if (d.xpResult && d.xpResult.leveled > 0) {
+          if (typeof Achievements !== "undefined") {
+            Achievements.record("buddyLevelUps", d.xpResult.leveled);
+          }
+          syncDefenderSnapshot();
+        }
+      } catch (e) {}
+      return d;
+    } catch (e) {
+      toast("⚠️ Claim failed — check your connection");
+      return null;
+    }
+  }
+
+  function openTrainingModal(buddyUid) {
+    const b = buddyState();
+    if (b.training && typeof b.training === "object") {
+      renderTrainingProgress(b.training);
+      return;
+    }
+    const inst = b.bag.find(x => x.uid === buddyUid);
+    if (!inst) { toast("Pick a buddy first"); return; }
+    injectStyle();
+    clearTrainTimer();
+
+    const sp = BuddyData.getSpecies(inst.speciesId) || {};
+    const mul = (BuddyData.getRarity(sp.rarity) || {}).xpMul || 1;
+
+    buildModal(TRAINING_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🏋️ Train ${inst.nickname}</h2>
+      <p class="bd-sub">
+        Send ${inst.nickname} away to train. Rewards are rolled by the server
+        when the session starts and claimed when it ends. ${inst.nickname} is
+        unavailable while training.
+      </p>
+      <div class="bd-train-cards" id="td-cards"></div>
+      <div class="bd-row" style="margin-top:4px">
+        <button class="bd-btn" id="td-start" disabled>Pick a session</button>
+      </div>
+    `);
+    wireClose(TRAINING_ID);
+
+    let selected = null;
+    const cards = document.getElementById("td-cards");
+    TRAIN_DURATIONS.forEach((dur) => {
+      const hours = dur.ms / 3600000;
+      const estXp = Math.max(1, Math.floor(hours * (18 + inst.level * 6) * mul));
+      const odds = TRAIN_ODDS[hours] || TRAIN_ODDS[1];
+      const card = document.createElement("div");
+      card.className = "bd-train-card";
+      card.innerHTML = `
+        <div class="tc-dur">${dur.label}</div>
+        <div class="tc-xp">≈ ${estXp} XP</div>
+        <div class="tc-loot">
+          🪙 EB ${odds.eb}% · 💎 ${odds.dia}%<br/>🗺️ Plot ${odds.plot ? odds.plot + "%" : "—"}
+        </div>
+      `;
+      card.addEventListener("click", () => {
+        selected = dur;
+        cards.querySelectorAll(".bd-train-card").forEach(c => c.classList.remove("sel"));
+        card.classList.add("sel");
+        const btn = document.getElementById("td-start");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = `🏋️ Start ${dur.label} Training`;
+        }
+      });
+      cards.appendChild(card);
+    });
+
+    const startBtn = document.getElementById("td-start");
+    if (startBtn) startBtn.addEventListener("click", async () => {
+      if (!selected || startBtn.disabled) return;
+      startBtn.disabled = true;
+      startBtn.textContent = "Starting…";
+      const dur = selected;
+      const d = await doStartTraining(inst.uid, dur.ms);
+      if (!d) {
+        startBtn.disabled = false;
+        startBtn.textContent = `🏋️ Start ${dur.label} Training`;
+        return;
+      }
+      renderTrainingProgress(d.training);
+    });
+
+    openModal(TRAINING_ID);
+  }
+
+  function renderTrainingProgress(training) {
+    const b = buddyState();
+    const inst = b.bag.find(x => x.uid === training.buddyUid);
+    injectStyle();
+    clearTrainTimer();
+
+    const rolls = (training.rolls && typeof training.rolls === "object") ? training.rolls : {};
+    const claimed = (training.claimed && typeof training.claimed === "object") ? training.claimed : {};
+    const dur = TRAIN_DURATIONS.find(d => d.ms === Number(training.durationMs));
+
+    const claimables = [];
+    if (Number(rolls.xp) > 0) claimables.push({ k: "xp", icon: "⭐", label: "Buddy XP", val: `${rolls.xp} XP` });
+    if (Number(rolls.eb) > 0) claimables.push({ k: "eb", icon: "🪙", label: "Elden Bucks", val: `${rolls.eb} EB` });
+    if (Number(rolls.diamonds) > 0) claimables.push({ k: "diamonds", icon: "💎", label: "Diamonds", val: `${rolls.diamonds} 💎` });
+    if (rolls.plotRarity) claimables.push({ k: "plot", icon: "🗺️", label: "Plot find", val: `${String(rolls.plotRarity).toUpperCase()} rarity plot` });
+
+    buildModal(TRAINING_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🏋️ Training</h2>
+      <p class="bd-sub">${inst ? inst.nickname : "Your buddy"} &middot; ${dur ? dur.label : "Session"}
+        &middot; started server-side, claimed server-side.</p>
+      <div class="bd-train-status">
+        <div id="td-phase" style="font-size:12.5px;font-weight:900;color:#34d399">Training in progress…</div>
+        <div class="bd-progress" style="margin-top:8px">
+          <i id="td-bar" style="width:0%; background:linear-gradient(90deg,#059669,#34d399)"></i>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;color:#9db8dd">
+          <span id="td-xp">+0 XP</span>
+          <span id="td-time">…</span>
+        </div>
+      </div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7f97ba;margin:12px 0 0">
+        Rewards
+      </div>
+      <div id="td-rewards"></div>
+    `);
+    wireClose(TRAINING_ID);
+
+    const rewardsEl = document.getElementById("td-rewards");
+    function paintRewards(done) {
+      if (!rewardsEl) return;
+      rewardsEl.innerHTML = claimables.map(c => {
+        const isClaimed = claimed[c.k] === true;
+        const btn = isClaimed
+          ? `<button class="tr-btn" disabled>✓ Claimed</button>`
+          : `<button class="tr-btn" data-reward="${c.k}" ${done ? "" : "disabled"}>${done ? "CLAIM" : "…"}</button>`;
+        return `
+          <div class="bd-train-reward">
+            <div class="tr-body">
+              <div class="tr-k">${c.icon} ${c.label}</div>
+              <div class="tr-v">${c.val}</div>
+            </div>
+            ${btn}
+          </div>`;
+      }).join("");
+      rewardsEl.querySelectorAll(".tr-btn[data-reward]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const reward = btn.dataset.reward;
+          btn.disabled = true;
+          btn.textContent = "…";
+          const d = await doClaimTraining(reward);
+          if (!d) { paintRewards(Date.now() >= Number(training.endsAt)); return; }
+
+          if (d.sessionCleared) {
+            clearTrainTimer();
+            closeModal(TRAINING_ID);
+            const bits = [];
+            if (reward === "xp") {
+              bits.push(`+${d.value} XP`);
+              if (d.xpResult && d.xpResult.leveled > 0) {
+                bits.push(`Level ${d.xpResult.fromLevel} → ${d.xpResult.toLevel}!`);
+              }
+            } else if (reward === "eb") bits.push(`+${d.value} EB`);
+            else if (reward === "diamonds") bits.push(`+${d.value} 💎`);
+            else if (reward === "plot") bits.push(`🗺️ ${String(d.value).toUpperCase()} plot added to your bag`);
+            toast(`🏋️ Training complete! ${bits.join(" · ")}`);
+            openDetail(training.buddyUid); // back to the buddy screen
+            return;
+          }
+          // Partial claim — re-render from the server's session state.
+          renderTrainingProgress(d.training || training);
+        });
+      });
+    }
+
+    const startAt = Number(training.startedAt) || 0;
+    const endAt = Number(training.endsAt) || 0;
+    let lastDone = null;
+    function tick() {
+      const bar = document.getElementById("td-bar");
+      if (!bar) { clearTrainTimer(); return; }
+      const now = Date.now();
+      const total = Math.max(1, endAt - startAt);
+      const p = Math.max(0, Math.min(1, (now - startAt) / total));
+      const done = now >= endAt;
+      bar.style.width = (p * 100).toFixed(1) + "%";
+      const xpEl = document.getElementById("td-xp");
+      if (xpEl) xpEl.textContent = `+${Math.floor((Number(rolls.xp) || 0) * p)} / ${rolls.xp || 0} XP`;
+      const timeEl = document.getElementById("td-time");
+      if (timeEl) timeEl.textContent = done ? "Ready to claim!" : `Ends in ${fmtRemain(endAt - now)}`;
+      const phase = document.getElementById("td-phase");
+      if (phase) phase.textContent = done ? "Session complete — claim your rewards" : "Training in progress…";
+      if (done !== lastDone) { lastDone = done; paintRewards(done); }
+      if (done) clearTrainTimer();
+    }
+    tick();
+    trainTimer = setInterval(tick, 1000);
+
+    openModal(TRAINING_ID);
   }
 
   function ivBar(label, value) {
