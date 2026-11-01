@@ -69,6 +69,7 @@ const BuddySystem = (() => {
   const TARGET_PANEL = '#player-info-modal [data-pi-panel="profile"]';
   const BAG_ID = "buddy-bag-modal";
   const DETAIL_ID = "buddy-detail-modal";
+  const FEAST_ID = "buddy-feast-modal";
   const ENCOUNTER_ID = "buddy-encounter-modal";
   const TRAINER_ID = "buddy-trainer-modal";
   const CUSTOMIZE_ID = "buddy-customize-modal";
@@ -688,6 +689,39 @@ const BuddySystem = (() => {
   border-radius:99px; background:#7c3aed; color:#fff; font-weight:800;
 }
 
+/* ---- bag sort bar ---- */
+.bd-sortbar{display:flex; align-items:center; gap:8px; margin:0 0 8px;}
+.bd-sort{
+  flex:1 1 auto; width:100%; padding:9px 10px; border-radius:11px;
+  font-family:inherit; font-size:11.5px; font-weight:800; letter-spacing:.3px;
+  color:#eaf1ff; background:rgba(32,42,70,.92);
+  border:1px solid rgba(150,180,240,.22);
+  appearance:none; -webkit-appearance:none; cursor:pointer;
+}
+.bd-sort:focus{outline:none; border-color:rgba(139,92,246,.6);}
+
+/* ---- feast picker ---- */
+.bd-feast-list{
+  display:flex; flex-direction:column; gap:7px; margin:10px 0;
+  max-height:44vh; overflow-y:auto;
+}
+.bd-feast-row{
+  display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:12px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(150,180,240,.14);
+  cursor:pointer; transition:border-color .15s ease, background .15s ease;
+}
+.bd-feast-row:active{transform:scale(.99);}
+.bd-feast-row.sel{border-color:rgba(244,63,94,.75); background:rgba(190,50,60,.18);}
+.bd-feast-row .fr-body{flex:1 1 auto; min-width:0;}
+.bd-feast-row .fr-nm{font-size:12.5px; font-weight:800; color:#eaf1ff;}
+.bd-feast-row .fr-sub{font-size:10.5px; color:#9db8dd; margin-top:2px;}
+.bd-feast-row .fr-pick{
+  flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.1); color:#dbe6fb; font-weight:900;
+}
+.bd-feast-row.sel .fr-pick{background:#f43f5e; color:#fff;}
+
 /* ---- encounter modal ---- */
 .bd-vs{
   display:flex; align-items:center; justify-content:center; gap:10px;
@@ -956,6 +990,38 @@ const BuddySystem = (() => {
   }
 
   /* --------------------------------------------------------- Buddy Bag */
+  // Sort modes for the bag grid. Grade is derived from IVs (S/A/B/C/D) —
+  // the same numbers the detail window shows — so "highest to lowest"
+  // always matches what the player sees per buddy.
+  const RARITY_RANK = { common: 1, uncommon: 2, rare: 3, legendary: 4 };
+  const GRADE_RANK = { D: 1, C: 2, B: 3, A: 4, S: 5 };
+  const BAG_SORT_MODES = [
+    "default", "grade_desc", "grade_asc", "level_desc", "level_asc",
+    "rarity_desc", "rarity_asc",
+  ];
+
+  function bagSortMode(b) {
+    return BAG_SORT_MODES.includes(b && b.bagSort) ? b.bagSort : "default";
+  }
+
+  function sortedBag(b) {
+    const mode = bagSortMode(b);
+    const list = (b.bag || []).slice();
+    if (mode === "default") return list;
+    const dir = mode.endsWith("_asc") ? 1 : -1;
+    const keyOf = (inst) => {
+      if (mode.startsWith("level")) return Number(inst.level) || 1;
+      if (mode.startsWith("rarity")) {
+        const sp = BuddyData.getSpecies(inst.speciesId) || {};
+        return RARITY_RANK[sp.rarity] || 1;
+      }
+      // Grade: letter tier, then raw IV% as the tiebreak inside a tier.
+      const pct = BuddyEngine.ivPercent(inst.ivs);
+      return (GRADE_RANK[BuddyEngine.ivGrade(pct).letter] || 1) * 1000 + pct;
+    };
+    return list.sort((a, c) => (keyOf(a) - keyOf(c)) * dir);
+  }
+
   function openBag() {
     injectStyle();
     const b = buddyState();
@@ -966,6 +1032,17 @@ const BuddySystem = (() => {
         ${b.bag.length} / 30 buddies collected &middot; ${b.totalTamed} tamed &middot;
         ${b.totalFeasted} feasted &middot; ${b.totalSpawns} wild spawns seen
       </p>
+      <div class="bd-sortbar">
+        <select id="bd-sort" class="bd-sort" aria-label="Sort buddies">
+          <option value="default">Sort: Caught order</option>
+          <option value="grade_desc">Grade: Highest → Lowest</option>
+          <option value="grade_asc">Grade: Lowest → Highest</option>
+          <option value="level_desc">Level: Highest → Lowest</option>
+          <option value="level_asc">Level: Lowest → Highest</option>
+          <option value="rarity_desc">Rarity: Highest → Lowest</option>
+          <option value="rarity_asc">Rarity: Lowest → Highest</option>
+        </select>
+      </div>
       <div class="bd-bag-list" id="bd-bag-list"></div>
       <div class="bd-row">
         <button class="bd-btn" id="bd-bag-trainer">🏆 Trainer</button>
@@ -978,35 +1055,50 @@ const BuddySystem = (() => {
     `);
     wireClose(BAG_ID);
 
-    const list = document.getElementById("bd-bag-list");
-    b.bag.forEach(inst => {
-      const sp = BuddyData.getSpecies(inst.speciesId) || {};
-      const type = BuddyData.getType((sp.types && sp.types[0]) || "metal") || { color: "#94a3b8" };
-      const hueDeg = Math.round((((inst.hue % 1) + 1) % 1) * 360);
-      const cell = document.createElement("div");
-      cell.className = "bd-bag-cell" + (inst.uid === b.activeUid ? " active" : "");
-      cell.innerHTML = `
-        ${inst.uid === b.activeUid ? '<div class="bd-act">ACTIVE</div>' : ""}
-        <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)">
-          <img class="bd-orb-img" alt="" />
-        </div>
-        <div class="bd-nm">${inst.nickname}</div>
-        <div class="bd-lv">Lv.${inst.level} · ${inst.colorway}</div>
-        <div class="bd-cell-hp"><i style="width:${buddyHp(inst).pct}%; background:${hpColor(buddyHp(inst).pct)}"></i></div>
-      `;
-      cell.addEventListener("click", () => openDetail(inst.uid));
-      list.appendChild(cell);
+    function renderBagList() {
+      const list = document.getElementById("bd-bag-list");
+      if (!list) return;
+      list.innerHTML = "";
+      sortedBag(b).forEach(inst => {
+        const sp = BuddyData.getSpecies(inst.speciesId) || {};
+        const type = BuddyData.getType((sp.types && sp.types[0]) || "metal") || { color: "#94a3b8" };
+        const hueDeg = Math.round((((inst.hue % 1) + 1) % 1) * 360);
+        const cell = document.createElement("div");
+        cell.className = "bd-bag-cell" + (inst.uid === b.activeUid ? " active" : "");
+        cell.innerHTML = `
+          ${inst.uid === b.activeUid ? '<div class="bd-act">ACTIVE</div>' : ""}
+          <div class="bd-orb" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), ${type.color} 48%, rgba(10,14,26,.92)); filter:hue-rotate(${hueDeg}deg)">
+            <img class="bd-orb-img" alt="" />
+          </div>
+          <div class="bd-nm">${inst.nickname}</div>
+          <div class="bd-lv">Lv.${inst.level} · ${inst.colorway}</div>
+          <div class="bd-cell-hp"><i style="width:${buddyHp(inst).pct}%; background:${hpColor(buddyHp(inst).pct)}"></i></div>
+        `;
+        cell.addEventListener("click", () => openDetail(inst.uid));
+        list.appendChild(cell);
 
-      // Swap the placeholder orb for a real render of this buddy so the grid
-      // shows the same creature the map companion and detail screen show.
-      const orb = cell.querySelector(".bd-orb");
-      const img = cell.querySelector(".bd-orb-img");
-      BuddyPreview.thumbnail(inst, 132, (url) => {
-        if (!url || !img || !img.isConnected) return;
-        img.src = url;
-        orb.classList.add("bd-orb-3d");
+        // Swap the placeholder orb for a real render of this buddy so the grid
+        // shows the same creature the map companion and detail screen show.
+        const orb = cell.querySelector(".bd-orb");
+        const img = cell.querySelector(".bd-orb-img");
+        BuddyPreview.thumbnail(inst, 132, (url) => {
+          if (!url || !img || !img.isConnected) return;
+          img.src = url;
+          orb.classList.add("bd-orb-3d");
+        });
       });
-    });
+    }
+
+    const sortSel = document.getElementById("bd-sort");
+    if (sortSel) {
+      sortSel.value = bagSortMode(b);
+      sortSel.addEventListener("change", () => {
+        b.bagSort = sortSel.value;
+        persist();
+        renderBagList();
+      });
+    }
+    renderBagList();
 
     document.getElementById("bd-bag-trainer").addEventListener("click", () => {
       closeModal(BAG_ID);
@@ -1125,6 +1217,14 @@ const BuddySystem = (() => {
         Your Defense Buddy is what other players fight in the PvP Arena.
         Its stats are snapshotted the moment you set it.
       </div>
+
+      <div class="bd-row" style="margin-top:10px">
+        <button class="bd-btn danger" id="bd-detail-feast">🍇 Feast…</button>
+      </div>
+      <div class="bd-hp-note">
+        Feed another buddy to this one for a big XP boost and a full heal.
+        The feasted buddy is gone forever.
+      </div>
     `);
     wireClose(DETAIL_ID);
 
@@ -1183,7 +1283,164 @@ const BuddySystem = (() => {
       openDetail(uid);
     });
 
+    const feastBtn = document.getElementById("bd-detail-feast");
+    if (feastBtn) feastBtn.addEventListener("click", () => openFeastModal(inst.uid));
+
     openModal(DETAIL_ID);
+  }
+
+  /* ------------------------------------------------------------ Feast */
+  // Estimated feast XP — MUST mirror feastBuddy on the server:
+  //   floor(floor((18 + level*7) * rarityXpMul) * 0.75) + 25
+  // Display-only; the server computes the real award.
+  function feastEstXp(inst) {
+    const sp = BuddyData.getSpecies(inst.speciesId) || {};
+    const rarity = BuddyData.getRarity(sp.rarity);
+    const level = Math.max(1, Math.min(50, Number(inst.level) || 1));
+    const base = 18 + level * 7;
+    const reward = Math.max(1, Math.floor(base * (rarity.xpMul || 1)));
+    return Math.floor(reward * 0.75) + 25;
+  }
+
+  /**
+   * Call the server feast transaction and adopt its result wholesale.
+   * @returns {object|null} server payload on success, null on failure
+   */
+  async function doFeast(receiverUid, foodUid) {
+    try {
+      if (typeof firebase === "undefined" || !firebase.functions) {
+        toast("⚠️ Offline — feasting needs a connection");
+        return null;
+      }
+      const fn = firebase.functions().httpsCallable("feastBuddy");
+      const res = await fn({ receiverUid, foodUid });
+      const d = (res && res.data) || {};
+      if (!d.ok) {
+        const why = {
+          buddy_not_found: "That buddy is no longer in your bag — refresh and try again",
+          food_is_active: "Your active buddy can't be feasted — switch active first",
+          food_is_defender: "Your Defense Buddy can't be feasted",
+          same_buddy: "Pick two different buddies",
+          too_soon: "Hold on a moment…",
+        }[d.reason] || "Feast failed — try again";
+        toast(why);
+        return null;
+      }
+      // Adopt the SERVER's result wholesale: bag, XP, levels, stats, counters.
+      const b = buddyState();
+      if (Array.isArray(d.bag)) b.bag = d.bag;
+      if (Number.isFinite(d.totalFeasted)) b.totalFeasted = d.totalFeasted;
+      persist();
+      renderHudBadge();
+      syncCompanion();
+      if (d.leveled > 0) syncDefenderSnapshot();
+      try {
+        if (typeof Achievements !== "undefined") {
+          Achievements.record("buddiesFeasted", 1);
+          if (d.leveled > 0) Achievements.record("buddyLevelUps", d.leveled);
+        }
+      } catch (e) {}
+      try {
+        if (typeof PlayerXP !== "undefined") PlayerXP.addXP((PlayerXP.XP.petFeed || 2) * 2, "buddy_feast");
+      } catch (e) {}
+      return d;
+    } catch (e) {
+      toast("⚠️ Feast failed — check your connection");
+      return null;
+    }
+  }
+
+  function openFeastModal(receiverUid) {
+    const b = buddyState();
+    const receiver = b.bag.find(x => x.uid === receiverUid);
+    if (!receiver) return;
+    injectStyle();
+
+    let defenderId = null;
+    try {
+      if (typeof Arena !== "undefined" && Arena.getState) {
+        const st = Arena.getState();
+        defenderId = (st && st.me && st.me.defenderBuddyId) || null;
+      }
+    } catch (e) {}
+
+    // You can only feast buddies that aren't the receiver, the active one,
+    // or the Defense Buddy — mirrors the server's deny rules exactly.
+    const candidates = b.bag.filter(x =>
+      x && x.uid !== receiverUid && x.uid !== b.activeUid && x.uid !== defenderId);
+
+    buildModal(FEAST_ID, `
+      <button class="bd-close">✕</button>
+      <h2>🍇 Feast</h2>
+      <p class="bd-sub">
+        Feed a buddy to <b>${receiver.nickname}</b> — it's gone forever.
+        Grants a big XP boost and fully heals ${receiver.nickname}.
+      </p>
+      <div class="bd-feast-list" id="bd-feast-list"></div>
+      <div class="bd-empty" style="display:${candidates.length ? "none" : "block"}">
+        No buddies available to feast. Your active and Defense Buddies are
+        protected — you need at least one other buddy in the bag.
+      </div>
+      <div class="bd-row" style="margin-top:10px">
+        <button class="bd-btn danger" id="bd-feast-confirm" disabled>Select a buddy</button>
+      </div>
+    `);
+    wireClose(FEAST_ID);
+
+    let selected = null;
+    const listEl = document.getElementById("bd-feast-list");
+    candidates.forEach(c => {
+      const sp = BuddyData.getSpecies(c.speciesId) || {};
+      const grade = BuddyEngine.ivGrade(BuddyEngine.ivPercent(c.ivs));
+      const rarity = BuddyData.getRarity(sp.rarity);
+      const row = document.createElement("div");
+      row.className = "bd-feast-row";
+      row.innerHTML = `
+        <div class="fr-body">
+          <div class="fr-nm">${c.nickname}
+            <span class="bd-tag" style="margin:0 0 0 5px">Lv.${c.level}</span>
+          </div>
+          <div class="fr-sub">
+            <span style="color:${rarity.color}">${rarity.name}</span>
+            &middot; Grade ${grade.letter} &middot; +${feastEstXp(c)} XP
+          </div>
+        </div>
+        <div class="fr-pick">＋</div>
+      `;
+      row.addEventListener("click", () => {
+        selected = c;
+        listEl.querySelectorAll(".bd-feast-row").forEach(r => r.classList.remove("sel"));
+        row.classList.add("sel");
+        const confirm = document.getElementById("bd-feast-confirm");
+        if (confirm) {
+          confirm.disabled = false;
+          confirm.textContent = `🍇 Feast ${c.nickname} · +${feastEstXp(c)} XP`;
+        }
+      });
+      listEl.appendChild(row);
+    });
+
+    const confirmBtn = document.getElementById("bd-feast-confirm");
+    if (confirmBtn) confirmBtn.addEventListener("click", async () => {
+      if (!selected || confirmBtn.disabled) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Feasting…";
+      const food = selected;
+      const d = await doFeast(receiverUid, food.uid);
+      if (!d) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = `🍇 Feast ${food.nickname} · +${feastEstXp(food)} XP`;
+        return;
+      }
+      closeModal(FEAST_ID);
+      openDetail(receiverUid); // refresh with the server-authoritative result
+      const bits = [`+${d.xpAward} XP`, "fully healed"];
+      if (d.leveled > 0) bits.push(`Level ${d.fromLevel} → ${d.toLevel}!`);
+      if (d.learned && d.learned.length) bits.push(`learned ${d.learned.length} move(s)`);
+      toast(`🍇 ${d.foodName} feasted · ${bits.join(" · ")}`);
+    });
+
+    openModal(FEAST_ID);
   }
 
   function ivBar(label, value) {
