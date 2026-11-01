@@ -1601,7 +1601,13 @@ const BuddySystem = (() => {
       </div>
       <div style="font-size:11px;color:#9db8dd;margin-top:6px">
         ${b.spawnsToday} / ${MAX_DAILY_SPAWNS} wild spawns today &middot;
-        ${Math.max(0, Math.round(METERS_PER_SPAWN - b.distCredit))} m until the next spawn
+        ${
+          b.spawnsToday >= MAX_DAILY_SPAWNS
+            ? "Daily cap reached"
+            : (METERS_PER_SPAWN - b.distCredit <= 0)
+              ? "<strong style='color:#55f8a0'>Ready to spawn!</strong>"
+              : Math.round(METERS_PER_SPAWN - b.distCredit) + " m until next spawn"
+        }
       </div>
       <div class="bd-hp-note">
         Walking counts anywhere &mdash; the same route works again after a short
