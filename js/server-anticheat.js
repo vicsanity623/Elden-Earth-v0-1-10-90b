@@ -431,13 +431,17 @@ const ServerAntiCheat = (() => {
   }
 
   async function checkCountryAccess(countryCode, usStateCode) {
-    if (!functions) return { allowed: false, reason: "functions_not_initialized" };
+    // Fail OPEN on transport problems — a network hiccup must never masquerade
+    // as a region block. Genuine blocks come back from the SERVER as
+    // { allowed:false, reason:"region_restricted" }; the server's payout gate
+    // still fails closed where it matters.
+    if (!functions) return { allowed: true, reason: "functions_not_initialized" };
     try {
       const fn = functions.httpsCallable("checkCountryAccess");
       return (await fn({ countryCode, usStateCode })).data;
     } catch (e) {
-      console.warn("[ServerAntiCheat] Country access check failed:", e.message);
-      return { allowed: false, reason: "server_error" };
+      console.warn("[ServerAntiCheat] Country access check failed (allowing):", e.message);
+      return { allowed: true, reason: "server_unavailable" };
     }
   }
 

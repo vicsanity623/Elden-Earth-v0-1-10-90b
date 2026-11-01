@@ -906,10 +906,17 @@
 
     const enforceRegionThenLaunch = async (coords) => {
       const regionResult = await regionPromise;
-      if (!regionResult?.allowed) {
+      // Only a GENUINE server-verified region block may show the region modal.
+      // Transport errors, missing saves and timeouts fail open (see
+      // server-anticheat.js + checkCountryAccess) — showing "Region Not
+      // Supported" for those mislabelled players (e.g. Estonia) as blocked.
+      if (!regionResult?.allowed && regionResult?.reason === "region_restricted") {
         console.warn("[Compliance] Region restricted:", regionResult);
         document.getElementById("region-blocked-modal")?.classList.remove("hidden");
         return;
+      }
+      if (!regionResult?.allowed) {
+        console.warn("[Compliance] Non-region reason (allowing):", regionResult);
       }
       // Keep the hot Cloud Functions' containers alive while this player is in
       // the game — otherwise the first spin/collect after a quiet spell pays a
