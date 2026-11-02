@@ -2360,6 +2360,7 @@
   // --- Landlord Title Pill (cycles Mayor / Governor / President) ---
   let landlordTimer = null;
   let landlordIndex = 0;
+  let _pillRankingsAt = 0;
   const LANDLORD_CYCLE_MS = 6000; // 6 seconds per title
 
   function initLandlordPill() {
@@ -2377,9 +2378,17 @@
     if (!pill || !titleEl || !locEl) return;
 
     try {
-      // Ensure leaderboard data is loaded
+      // Ensure leaderboard data is loaded — but at most once per 5 minutes.
+      // The pill cycles titles every 6s purely cosmetically; each
+      // fetchRankings() reads 50 save docs, and with cache invalidation
+      // firing on plot changes this was one of the largest Firestore read
+      // sources in the app. The rulers themselves move on a timescale of
+      // hours, so 5-minute freshness is invisible to players.
       if (typeof Leaderboard !== "undefined" && Leaderboard.fetchRankings) {
-        await Leaderboard.fetchRankings();
+        if (Date.now() - _pillRankingsAt > 300000) {
+          _pillRankingsAt = Date.now();
+          await Leaderboard.fetchRankings();
+        }
       }
 
       if (typeof Leaderboard === "undefined" || !Leaderboard.getLocalTerritoryRulers) {

@@ -267,7 +267,17 @@ const Leaderboard = (() => {
   return Math.max(totalRent, storedCash);
   }
 
+  // Burst guard for invalidation. Plot changes arrive constantly (every
+  // buy/rent/upgrade anywhere in the world fires the global listener) and
+  // clearing the ranking cache on each one sent every fetchRankings caller —
+  // notably the 6s landlord pill, whose fetch reads 50 save docs — back to
+  // Firestore nearly every tick. Invalidate at most once per 30s.
+  let lastInvalidateAt = 0;
+
   function invalidateCache() {
+    const now = Date.now();
+    if (now - lastInvalidateAt < 30000) return;
+    lastInvalidateAt = now;
     cachedData = null;
     lastFetchTime = 0;
   }
