@@ -192,6 +192,13 @@ const WeeklyPool = (() => {
     if (!serverAnswered) {
       // Offline keeps the local 1-claim lock: there is no server guard to rely on.
       if (state.lastWeeklyPoolClaim === currentWeekId) return;
+      // 🛡️ CLOUD ACCOUNTS: never open the claim popup from a LOCAL standing.
+      // The popup may only come from the server's receipt-backed "not yet
+      // claimed" answer — a local guess re-opened a claim the server had
+      // already paid (and the old offline branch then credited cash locally on
+      // top of the automatic payout). Guests have no server copy, so their
+      // local standing is all there is.
+      if (!String(state.player.id).startsWith("guest-")) return;
       const { weeklyPool, sortedTop10 } = await calculateGlobalPool();
       const myRankIdx = sortedTop10.findIndex(p => p.id === state.player.id);
       if (myRankIdx >= 0 && myRankIdx < 10) {
@@ -237,6 +244,19 @@ const WeeklyPool = (() => {
       try {
         const result = await ServerAntiCheat.claimWeeklyPool();
         if (!result || !result.claimed) {
+          const reason = result?.reason;
+          // The server receipt decides. "already_claimed" is the NORMAL case
+          // when the Monday auto-payout (or another device of the same player)
+          // already credited this week — close the popup instead of re-offering
+          // a payout that must never happen twice.
+          if (reason === "already_claimed" || reason === "not_in_top_10") {
+            document.getElementById("weekly-reward-modal")?.classList.add("hidden");
+            pendingRewardAmount = 0;
+            if (typeof showToast === "function" && reason === "already_claimed") {
+              showToast("✓ Already claimed — this week's Realm Treasury share is in your balance.", 4500);
+            }
+            return;
+          }
           if (typeof showToast === "function") showToast("⚠️ Pool claim could not be verified.", 3000);
           return;
         }
@@ -251,7 +271,20 @@ const WeeklyPool = (() => {
         return;
       }
     } else {
-      // Offline fallback — only allow if player has no cloud sync capability
+      // Offline fallback — ONLY for a pure guest save (no server copy exists).
+      // A cloud account must never be credited here: the server pays the Top 10
+      // automatically at the Monday boundary, and a local credit used to stack
+      // on top of that payout (one of the ways the same share paid twice). The
+      // popup closes and the real money lands from the server instead.
+      const isCloudAccount = !!(state.player?.id && !String(state.player.id).startsWith("guest-"));
+      if (isCloudAccount) {
+        document.getElementById("weekly-reward-modal")?.classList.add("hidden");
+        pendingRewardAmount = 0;
+        if (typeof showToast === "function") {
+          showToast("📶 Offline — your Realm Treasury share is credited by the server when you reconnect.", 5000);
+        }
+        return;
+      }
       state.cash = (Number(state.cash) || 0) + pendingRewardAmount;
       state.lifetimeRent = (Number(state.lifetimeRent) || 0) + pendingRewardAmount;
     }
