@@ -375,8 +375,8 @@ const CompanionPet = (() => {
   function loadPetModel() {
     const loader = new THREE.GLTFLoader();
     const look = getPetLook();
-    // Versioned URL — the service worker caches .glb cache-first, so an
-    // unversioned path keeps serving the previous model forever.
+    // Versioned URL — busts the browser's HTTP cache, so an unversioned path
+    // can keep serving the previous model after a rebuild.
     const loadPath = (typeof BuddyPreview !== "undefined" && BuddyPreview.modelUrl)
       ? BuddyPreview.modelUrl(look.path)
       : look.path;

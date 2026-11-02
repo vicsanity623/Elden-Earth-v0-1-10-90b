@@ -20,9 +20,9 @@ const BuddyPreview = (() => {
     robot:  "models/RobotExpressive.glb",
   };
 
-  // Bump whenever a shipped .glb changes. The service worker serves binary
-  // assets CACHE-FIRST, so without this the browser keeps handing back the old
-  // model and you see stale animations no matter how many times you rebuild.
+  // Bump whenever a shipped .glb changes. The version query busts the
+  // browser's HTTP cache, so without this the browser keeps handing back the
+  // old model and you see stale animations no matter how many times you rebuild.
   const MODEL_V = 5;
 
   function modelUrl(path) {

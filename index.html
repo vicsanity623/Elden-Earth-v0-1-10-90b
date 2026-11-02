@@ -168,5 +168,17 @@
 </div>
 
 <div id="site-footer"></div>
+<script>
+// Old Service Worker cleanup — the SW was removed (it caused stale cloud-save
+// bugs); unregister any zombie worker still installed on returning devices.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+      console.log('Old Service Worker removed cleanly.');
+    }
+  }).catch(() => {});
+}
+</script>
 </body>
 </html>

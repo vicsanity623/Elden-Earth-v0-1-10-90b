@@ -22,6 +22,7 @@
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#111827" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Elden Earth" />
 <!-- `black` (NOT black-translucent): the home-screen PWA lays out BELOW the
      status bar. With black-translucent the webview went edge-to-edge and
      Google's fullscreen ad overlay painted its "Reward in Xs / Close" bar into
@@ -2379,7 +2380,8 @@
   </div>
 </div>
 
-<!-- Service Worker Registration with Instant Auto-Update -->
+<!-- Service Worker Cleanup (registration was removed: it caused stale-save /
+     rollback bugs by serving stale cached client code) -->
 <script>
 // Former inline onclick handlers are bound here instead, so the markup carries
 // no executable attributes (required before a script-src CSP can be enforced).
@@ -2403,51 +2405,23 @@
     window.location.href = "/";
   });
 })();
-if (!(window.EEAdPolicy && window.EEAdPolicy.isNativeApp) && 'serviceWorker' in navigator) {
-  let refreshing = false;
-  // A first-time install claims the page and fires controllerchange + SW_UPDATED.
-  // Only reload when the page was ALREADY controlled by an earlier worker, so
-  // first-time visitors are not yanked mid-load / mid-login.
-  let hadController = !!navigator.serviceWorker.controller;
-
-  // 1. Reload the page as soon as the active service worker changes
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
-    if (!hadController) {
-      hadController = true;
-      return;
+// Service worker removed: it served stale cached client code which caused
+// phantom-save / rollback bugs against the Firebase cloud save. Permanently
+// unregister any zombie SW still installed on returning players' devices and
+// purge its offline caches so every launch fetches fresh code + honest saves.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+      console.log('Old Service Worker removed cleanly.');
     }
-    refreshing = true;
-    window.location.reload();
-  });
-
-  // 2. Listen for the direct update broadcast from the SW
-  navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SW_UPDATED') {
-      if (refreshing) return;
-      if (!hadController) {
-        hadController = true;
-        return;
-      }
-      refreshing = true;
-      window.location.reload();
+    // Belt & braces: wipe any leftover offline caches the zombie SW created.
+    if (self.caches && caches.keys) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => caches.delete(key));
+      }).catch(() => {});
     }
-  });
-
-  // 3. Register and check for updates whenever the tab is reopened/focused
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
-      // Check for updates on page load
-      reg.update().catch(err => console.debug('[SW] Update check failed/offline:', err));
-
-      // Check for updates whenever the user tabs back into the game
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          reg.update().catch(err => console.debug('[SW] Update check failed/offline:', err));
-        }
-      });
-    }).catch(err => console.warn('[SW] Registration error:', err));
-  });
+  }).catch(() => {});
 }
 </script>
 </body>

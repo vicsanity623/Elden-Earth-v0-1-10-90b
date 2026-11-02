@@ -1,159 +1,41 @@
-// Elden Earth — Service Worker
-// Cache-first for immutable binaries (.glb/.png/...), network-first for
-// everything else. Bump CACHE_NAME whenever a shipped asset changes.
-const CACHE_NAME = 'elden-EARTH-v116.02';
-const ASSETS_TO_CACHE = [
-    './',
-    './game.html',
-    './manifest.json',
-    './models/CesiumMan.glb',
-    './models/Fox.glb',
-    './models/Soldier.glb',
-    './models/Xbot.glb',
-    './models/Voodoo-Dool-Animated.glb',
-    './css/style.css',
-    './js/main.js',
-    './js/foliage.js',
-    './js/friends.js',
-    './js/loading.js',
-    './js/leaderboard.js',
-    './js/achievements.js',
-    './js/wheel.js',
-    './js/diamonds.js',
-    './js/auth.js',
-    './js/age.js',
-    './js/anticheat.js',
-    './js/storage.js',
-    './js/multiplier.js',
-    './js/grid.js',
-    './js/geo.js',
-    './js/treasury.js',
-    './js/feed.js',
-    './js/config.js',
-    './js/character.js',
-    './js/citadels.js',
-    './js/elden-stops.js',
-    './js/chat.js',
-    './js/pool.js',
-    './js/referrals.js',
-    './js/server-anticheat.js',
-    './js/pet.js',
-    './js/buddy-data.js',
-    './js/buddy-engine.js',
-    './js/buddy-preview.js',
-    './js/buddy-companion.js',
-    './js/player-xp.js',
-    './js/buddy-battle.js',
-    './js/buddy.js',
-    './js/ad-slots.js',
-    './js/admin-panel.js',
-    './js/arena.js',
-    './js/monthly-challenge.js',
-    './js/profanity-filter.js',
-    './js/format.js',
-    './assets/trophy.png',
-    './assets/mine-extractor.png',
-    './assets/daily.png',
-    './assets/pet-hud.png',
-    './assets/diamond-spawn.png',
-    './assets/ruler.png',
-    './assets/pool.png',
-    './assets/20x.png',
-    './assets/50x.png',
-    './assets/2eb-boost.png',
-    './assets/models/RedMushroom.glb'
-];
-
-// 1. Force Immediate Activation without waiting for tabs to close
-self.addEventListener('install', (e) => {
-    self.skipWaiting();
-    e.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            // Cache assets individually: one failed fetch must not abort the
-            // whole install (cache.addAll() is all-or-nothing).
-            return Promise.all(
-                ASSETS_TO_CACHE.map((url) =>
-                    cache.add(url).catch((err) => {
-                        console.warn(`[SW] Could not precache ${url}:`, err);
-                    })
-                )
-            );
-        })
-    );
+// Elden Earth — Service Worker REMOVED (self-destruct script).
+//
+// The old cache-first service worker caused "phantom save / rollback" bugs:
+// players ran stale cached client code and stale local state that raced
+// Firebase and overwrote fresh cloud saves. The game now ALWAYS fetches the
+// latest client from the network — no offline cache, no SW fetch interception.
+//
+// This file exists ONLY to clean up zombie workers already installed on
+// players' devices: it deletes every cache, unregisters itself, and reloads
+// open tabs onto the fresh network copy.
+//
+// KEEP THIS FILE DEPLOYED for 1–2 weeks so every existing player's device
+// cleans itself up. After that it can be deleted from Firebase Hosting.
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
-// 2. Instant Cache Purge & Force-Refresh All Open Tabs
-self.addEventListener('activate', (e) => {
-    e.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((oldCache) => {
-                    if (oldCache !== CACHE_NAME) {
-                        console.log(`[SW] Deleting stale cache: ${oldCache}`);
-                        return caches.delete(oldCache);
-                    }
-                })
-            );
-        }).then(() => {
-            // Take control of all open clients/tabs immediately
-            return self.clients.claim();
-        }).then(() => {
-            // Send a reload broadcast to all active open tabs
-            return self.clients.matchAll({ type: 'window' });
-        }).then((clients) => {
-            clients.forEach((client) => {
-                client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
-            });
-        })
-    );
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    // 1. Delete all old offline caches
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((key) => caches.delete(key)));
+    }).then(() => {
+      // 2. Take control of any open tabs so they can be reloaded
+      return self.clients.claim();
+    }).then(() => {
+      // 3. Unregister this service worker permanently
+      return self.registration.unregister();
+    }).then(() => {
+      // 4. Force reload all open tabs to fresh network
+      return self.clients.matchAll({ type: 'window' });
+    }).then((clients) => {
+      clients.forEach((client) => {
+        Promise.resolve(client.navigate(client.url)).catch(() => {});
+      });
+    })
+  );
 });
 
-// Allow clients to trigger skipWaiting manually if needed
-self.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
-    }
-});
-
-// 3. Cache-First for immutable binaries, Network-First for everything else
-self.addEventListener('fetch', (e) => {
-    if (e.request.method !== 'GET') return;
-    if (!e.request.url.startsWith(self.location.origin)) return;
-
-    // Immutable binary assets only change when CACHE_NAME is bumped on deploy,
-    // so they never need a network round-trip on every page load.
-    const path = new URL(e.request.url).pathname;
-    if (/\.(glb|gltf|woff2?|ttf|png|jpg|jpeg|webp|avif|mp3|wasm)$/.test(path)) {
-        e.respondWith(
-            caches.match(e.request).then((cached) => {
-                if (cached) return cached;
-                return fetch(e.request).then((networkResponse) => {
-                    if (networkResponse && networkResponse.status === 200) {
-                        const responseClone = networkResponse.clone();
-                        caches.open(CACHE_NAME).then((cache) => {
-                            cache.put(e.request, responseClone);
-                        });
-                    }
-                    return networkResponse;
-                });
-            })
-        );
-        return;
-    }
-
-    e.respondWith(
-        fetch(e.request, { cache: 'no-store' })
-            .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                    const responseClone = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(e.request, responseClone);
-                    });
-                }
-                return networkResponse;
-            })
-            .catch(() => {
-                return caches.match(e.request);
-            })
-    );
-});
+// Intentionally NO fetch handler and NO caching: every request goes straight
+// to the network while this worker lives out its last seconds.
