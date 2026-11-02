@@ -2662,6 +2662,27 @@ const BuddySystem = (() => {
       }
     } catch (e) {}
 
+    // The server mirrors the merged bag down on EVERY sync now
+    // (syncSafeState → authoritative.buddy). If it lands after this device
+    // booted with a stale/empty local copy, re-check the starter gate: the
+    // "Choose your Starter Buddy" picker must never open over a save that
+    // already owns buddies, and the badge/companion must show the real bag.
+    if (typeof window !== "undefined") {
+      window.addEventListener("ee:buddy-synced", () => {
+        try {
+          const b = buddyState();
+          const modal = document.getElementById("buddy-starter-modal");
+          if (modal && b.starterChosen && b.bag.length > 0) {
+            closeModal("buddy-starter-modal");
+            modal.remove();
+            toast("✅ Your Buddy Bag synced from the cloud.");
+          }
+          renderHudBadge();
+          if (typeof BuddyCompanion !== "undefined") syncCompanion();
+        } catch (e) {}
+      });
+    }
+
     // Mount the active buddy as a real 3D model walking beside the player.
     if (typeof BuddyCompanion !== "undefined" && mapInstance) {
       try {

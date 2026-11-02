@@ -353,6 +353,21 @@ const Store = (() => {
             Object.assign(state, result.data.authoritative);
             mirrorDirty = true;
           }
+          // 🛡️ Server-stamped LWW counter (syncSafeState stamps it with the
+          // server clock; it was never persisted before, so the cloud version
+          // read 0 forever and THIS device could never re-adopt the cloud save
+          // — the reason a second platform kept its day-one buddy bag).
+          const serverVersion = Number(result.data?.saveVersion);
+          if (Number.isFinite(serverVersion) && serverVersion > 0) {
+            state.saveVersion = Math.max(Number(state.saveVersion) || 0, serverVersion);
+            mirrorDirty = true;
+          }
+          // A buddy mirror just landed (authoritative.buddy) — let the buddy UI
+          // re-check its starter gate / HUD badge instead of trusting the stale
+          // local copy it booted with.
+          if (typeof window !== "undefined" && result.data?.authoritative?.buddy) {
+            try { window.dispatchEvent(new CustomEvent("ee:buddy-synced")); } catch (e) {}
+          }
           if (result.data?.plotBag && typeof result.data.plotBag === "object") {
             // Server owns plotBag — client never writes it; mirror the authoritative bag.
             state.plotBag = { ...result.data.plotBag };
@@ -489,11 +504,17 @@ const Store = (() => {
 
     // Canonical identity guard: a Google UID must always map to the same account.
     if (state && state.player && state.player.id && state.player.id !== playerId) {
-      console.warn(`[Store] Local save UID mismatch: ${state.player.id} -> ${playerId}. Resetting to canonical player record.`);
-      state = Object.assign(defaultState(), state);
+      // 🛡️ Clean slot for the NEW account. The old code did
+      // `Object.assign(defaultState(), state)`, which KEPT the previous
+      // account's buddy bag / plots / pet under the new id — and because the
+      // LWW counter used to read 0 on the cloud side, the new account's own
+      // cloud save was never adopted afterwards ("another player's save data
+      // appears after swapping accounts in the same browser"). The old
+      // account's save is untouched in the cloud; switching back adopts it.
+      console.warn(`[Store] Local save UID mismatch: ${state.player.id} -> ${playerId}. Starting a clean local slot for the new account.`);
+      state = defaultState();
       state.player.id = playerId;
-      state.player.name = state.player.name || "Traveler";
-      state.player.avatar = state.player.avatar || "🙂";
+      state.saveVersion = 0; // → the ADOPT branch below runs and loads the new account's cloud save
       localStorage.setItem(KEY, JSON.stringify(state));
     }
 
