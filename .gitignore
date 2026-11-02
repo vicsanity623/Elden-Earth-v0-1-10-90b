@@ -25,6 +25,7 @@ post-changelogzen.sh
 /tools/verify-arena-fairness.js
 /tools/verify-signup-block.js
 /tools/live-test-signup-block.js
+/tools/make-invite.js
 
 # Peer
 SCPR.md

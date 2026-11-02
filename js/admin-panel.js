@@ -190,6 +190,16 @@ const AdminPanel = (() => {
     box.innerHTML = `
       <button class="adm-refresh" id="adm-refresh-btn">↻ Refresh queue</button>
 
+      <div class="adm-sec-title">🎫 Invite Codes (single-use, 2h)</div>
+      <div class="adm-card" style="display:block;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <input id="adm-invite-email" type="text" placeholder="new player's email or phone"
+            style="flex:1 1 160px;min-width:140px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <button class="adm-btn ok" id="adm-invite-gen">Generate</button>
+        </div>
+        <div class="adm-meta" id="adm-invite-out" style="margin-top:8px;word-break:break-all;"></div>
+      </div>
+
       <div class="adm-sec-title">📷 Custom Avatar Requests (${avatars.length})</div>
       ${avatars.length ? avatars.map((r) => `
         <div class="adm-card" data-uid="${escapeHtml(r.userId || r.id)}">
@@ -223,6 +233,23 @@ const AdminPanel = (() => {
     `;
 
     box.querySelector("#adm-refresh-btn")?.addEventListener("click", refresh);
+    box.querySelector("#adm-invite-gen")?.addEventListener("click", async () => {
+      const out = box.querySelector("#adm-invite-out");
+      const input = box.querySelector("#adm-invite-email");
+      const btn = box.querySelector("#adm-invite-gen");
+      const identifier = String((input && input.value) || "").trim().toLowerCase();
+      if (!identifier) { if (out) out.textContent = "Enter an email or phone first."; return; }
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+      const res = await call("generateInviteCode", { identifier });
+      if (res && res.ok && res.code) {
+        const exp = new Date(res.expiresAt).toISOString().slice(11, 16);
+        if (out) out.innerHTML = `Code for <b>${escapeHtml(res.identifier)}</b>: <b style="font-size:16px;letter-spacing:1px;">${escapeHtml(res.code)}</b> — expires ${exp} UTC. Shown once — copy it now.`;
+        try { await navigator.clipboard.writeText(res.code); if (out) out.innerHTML += " <i>(copied)</i>"; } catch (e) {}
+      } else if (out) {
+        out.textContent = "⚠️ Could not issue code (server refused — check the identifier and the admin list).";
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "Generate"; }
+    });
     box.querySelectorAll("[data-act]").forEach((b) => {
       b.addEventListener("click", () => act(b.getAttribute("data-act"), b.getAttribute("data-uid"), b));
     });
