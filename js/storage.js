@@ -530,7 +530,9 @@ const Store = (() => {
         const saveData = saveDoc.data();
         const existingLock = saveData.sessionLock;
         const lockAge = existingLock ? (Date.now() - Number(existingLock.lockedAt || 0)) : Infinity;
-        const LOCK_STALE_MS = 30000; // Lock considered stale after 30s without heartbeat
+        // Lock considered stale after 3 missed 30s heartbeats (was 30s with a
+        // 10s heartbeat — same safety ratio at a sixth of the Firestore writes).
+        const LOCK_STALE_MS = 90000;
 
         // Also check presence collection for heartbeat (more real-time than sessionLock)
         let presenceAge = Infinity;
@@ -618,7 +620,8 @@ const Store = (() => {
       console.warn("[Session] Lock claim error (proceeding anyway):", lockErr);
     }
 
-    // Start presence heartbeat: update presence/{uid} every 10s so other tabs know this session is alive
+    // Start presence heartbeat: update presence/{uid} every 30s so other tabs know this session is alive
+    // (30s keeps the radio quiet; the lock still tolerates 3 missed beats).
     if (typeof heartbeatInterval === "undefined") {
       window.heartbeatInterval = setInterval(async () => {
         if (state && state.player && state.player.id) {
@@ -635,7 +638,7 @@ const Store = (() => {
             // Silent fail — heartbeat is best-effort
           }
         }
-      }, 10000);
+      }, 30000);
       // Cleanup on unload
       window.addEventListener("beforeunload", () => {
         if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);

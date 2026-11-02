@@ -14,6 +14,10 @@ const Character3D = (() => {
   let lastPosTime = Date.now();
   let lastCoords = null;
   let isWalking = false;
+  // BATTERY: performance.now() deadline — while in the future the model still
+  // owes the screen motion (a walk cycle, a walk<->idle crossfade, a turn).
+  // Once it passes and the player is standing still, animation work stops.
+  let activityUntil = 0;
   let modelHeading = 0;
 
   // Pre-allocated static objects (Eliminates 300+ object allocations/sec!)
@@ -100,10 +104,21 @@ const Character3D = (() => {
     }
     mapInstance.addLayer(customLayer);
 
-    // High-Efficiency Frame-Throttled Animation Loop (30 FPS Idle / 60 FPS Walking)
+    // High-Efficiency Frame-Throttled Animation Loop.
+    //
+    // BATTERY: a standing avatar used to force a FULL MapLibre repaint at
+    // 15fps forever (60fps while walking) — that is the "phone gets hot just
+    // leaving the game open" cost. Now:
+    //   · frozen idle (no motion owed) -> zero mixer work, ZERO map repaints;
+    //     the loop degrades to a cheap 4Hz poll waiting for movement
+    //   · walking / crossfades        -> 30fps (was 60) — plenty for a map
+    // The custom layer's render() still draws the (frozen) model whenever the
+    // map paints for other reasons (pan/zoom), so nothing ever disappears.
     let clock = new THREE.Clock();
     let animFrameId = null;
     let lastFrameTime = 0;
+    const WALK_FPS = 30;
+    const IDLE_POLL_MS = 250;
 
     function animate(timestamp) {
       if (document.hidden) {
@@ -117,15 +132,23 @@ const Character3D = (() => {
       if (document.body.classList.contains("map-culled-far")) return;
       if (document.body.classList.contains("be-off-player")) return;
 
-      const targetFPS = isWalking ? 60 : 15;
-      const minInterval = 1000 / targetFPS;
+      const busy = isWalking || timestamp < activityUntil;
+      if (!busy) {
+        // Frozen idle — poll cheaply so movement wakes the loop instantly.
+        if (timestamp - lastFrameTime < IDLE_POLL_MS) return;
+        lastFrameTime = timestamp;
+        return;
+      }
+
+      const minInterval = 1000 / WALK_FPS;
       const elapsed = timestamp - lastFrameTime;
 
       if (elapsed >= minInterval) {
         lastFrameTime = timestamp - (elapsed % minInterval);
 
         if (mixer) {
-          const delta = clock.getDelta();
+          // Cap delta so resuming from a freeze can't jump the clip forward.
+          const delta = Math.min(clock.getDelta(), 0.1);
           mixer.update(delta);
           if (mapInstance) mapInstance.triggerRepaint();
         }
@@ -226,11 +249,16 @@ const Character3D = (() => {
 
       if (dist > 0.5) {
         modelHeading = Math.atan2(lng - lastCoords.lng, lat - lastCoords.lat);
+        // Position/heading changed — wake the render loop briefly so the turn
+        // and step are actually shown before it freezes again.
+        activityUntil = Math.max(activityUntil, performance.now() + 400);
       }
 
       const walkingNow = speed > 0.45;
       if (walkingNow !== isWalking && currentModel) {
         isWalking = walkingNow;
+        // Render the 0.3s walk<->idle crossfade before freezing again.
+        activityUntil = Math.max(activityUntil, performance.now() + 500);
         const nextKey = isWalking ? currentModel.userData.walkKey : currentModel.userData.idleKey;
 
         if (nextKey && animationsMap[nextKey] && currentAction !== animationsMap[nextKey]) {

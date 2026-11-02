@@ -66,6 +66,16 @@ const BuddyCompanion = (() => {
   // map re-render 60x/second, which makes the map stutter and look wrong.
   let lastRepaint = 0;
   const REPAINT_INTERVAL_MS = 50;
+  // BATTERY: while the buddy is settled (not chasing the pet/player and no
+  // crossfade playing) the loop owes the screen NOTHING — no mixer, no hover
+  // bob, no cosmetic spins and no map repaint. activityUntil is a
+  // performance.now() deadline covering those transient moments; once it
+  // passes the loop degrades to a cheap 4Hz poll (IDLE_POLL_MS) that just
+  // waits for the follow target to move again. A standing buddy used to force
+  // ~20 map repaints/sec forever just to bob in place.
+  let activityUntil = 0;
+  let lastPoll = 0;
+  const IDLE_POLL_MS = 250;
   let layerAttached = false;
 
   // Reusable matrices — allocated on mount so a missing THREE (CDN failure)
@@ -140,6 +150,9 @@ const BuddyCompanion = (() => {
     // is what produced the twitching idle.
     if (currentAnim === clip.name && currentAction) return;
     currentAnim = clip.name;
+    // A new clip owes the screen motion (emotes, walk/idle fades) — keep the
+    // render loop thawed long enough to actually show it.
+    activityUntil = Math.max(activityUntil, performance.now() + 300);
 
     try {
       const action = mixer.clipAction(clip);
@@ -351,6 +364,14 @@ const BuddyCompanion = (() => {
     const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0);
     lastFrame = now;
 
+    // Frozen idle: wake only every IDLE_POLL_MS to re-check the follow target.
+    // Everything else (target math, mixer, hover, cosmetics, map repaint) is
+    // skipped until real motion resumes.
+    if (!(moving || now < activityUntil)) {
+      if (now - lastPoll < IDLE_POLL_MS) return;
+      lastPoll = now;
+    }
+
     const target = offsetFromPlayer();
     const dLat = target.lat - buddyCoords.lat;
     const dLon = target.lng - buddyCoords.lng;
@@ -358,6 +379,7 @@ const BuddyCompanion = (() => {
 
     if (dist > 0.0000025) {
       moving = true;
+      activityUntil = Math.max(activityUntil, now + 300);
       buddyCoords.lat += dLat * LERP;
       buddyCoords.lng += dLon * LERP;
 
@@ -372,8 +394,14 @@ const BuddyCompanion = (() => {
       if (moving) {
         moving = false;
         playAnim("idle");
+        // Show the walk->idle crossfade (0.2s) before freezing.
+        activityUntil = Math.max(activityUntil, now + 300);
       }
     }
+
+    // Nothing owed to the screen (no chase, no crossfade playing) — freeze
+    // before any mixer/hover/cosmetic/repaint work.
+    if (!moving && now >= activityUntil) return;
 
     if (mixer) mixer.update(dt);
 

@@ -205,7 +205,9 @@
   // The balance bar used to live on the map and was repainted every couple of
   // seconds forever. It now lives in the Player Info header, so it only needs
   // to repaint while that sheet is actually open — and when it is open it runs
-  // at 200ms so the digits tick in realtime instead of in 2s jumps.
+  // at 500ms so the digits tick in realtime instead of in 2s jumps, without
+  // rewriting the DOM 5x/second (200ms was measured hot on mobile for no
+  // visible gain at 6dp).
   function isWalletLive() {
     const m = el("player-info-modal");
     return !!m && !m.classList.contains("hidden") && m.dataset.otherPlayer !== "true";
@@ -238,7 +240,7 @@
 
   function startCashTicker() {
     if (_cashTickerId) return;
-    _cashTickerId = setInterval(renderCashReadout, 200);
+    _cashTickerId = setInterval(renderCashReadout, 500);
   }
 
   function stopCashTicker() {

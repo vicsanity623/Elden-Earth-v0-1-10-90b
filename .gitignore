@@ -23,6 +23,8 @@ post-changelogzen.sh
 /tools/verify-blocking-audience.js
 /tools/verify-bot-signature.js
 /tools/verify-arena-fairness.js
+/tools/verify-signup-block.js
+/tools/live-test-signup-block.js
 
 # Peer
 SCPR.md

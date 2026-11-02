@@ -1518,6 +1518,20 @@ const Grid = (() => {
     scheduleRender();
   }
 
+  // BATTERY: plot changes arrive in bursts — every buy/upgrade/rent anywhere
+  // in the world fires the global listener. Rebuilding the map layers on every
+  // snapshot was constant GPU churn; coalesce bursts into at most one render
+  // per 300ms. The mirror (globalPlots/Store) still updates instantly — only
+  // the visual rebuild is deferred.
+  let _plotsRenderTimer = null;
+  function schedulePlotsRender() {
+    if (_plotsRenderTimer) return;
+    _plotsRenderTimer = setTimeout(() => {
+      _plotsRenderTimer = null;
+      render();
+    }, 300);
+  }
+
   function listenToGlobalPlots() {
     const db = Store.getDb();
     if (!db) return;
@@ -1545,7 +1559,7 @@ const Grid = (() => {
             }
           }
         });
-        render();
+        schedulePlotsRender();
         // Invalidate leaderboard cache when plots change so mayorship updates in realtime
         if (typeof Leaderboard !== "undefined" && Leaderboard.invalidateCache) {
           Leaderboard.invalidateCache();
