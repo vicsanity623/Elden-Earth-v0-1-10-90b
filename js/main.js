@@ -3829,8 +3829,18 @@
     // 1c. Avatar Tap to Upload — triggers hidden file input
     el("avatar-upload-trigger")?.addEventListener("click", () => {
       const state = Store.get();
-      if (state.player?.avatarUploaded) {
-        showToast("🔒 Custom photo already uploaded.", 3000);
+      // Gate on the SERVER-DERIVED status (adopted on every sync), not the old
+      // sticky local `avatarUploaded` bool — which lived only on the device and
+      // blocked re-uploads forever after a lost file ("Custom photo already
+      // uploaded", 2026-11-03). Re-uploading simply replaces
+      // avatars/{userId}.jpg and re-queues the review.
+      const status = String(state.player?.avatarStatus || "");
+      if (status === "pending") {
+        showToast("📷 Photo already submitted — awaiting review.", 3000);
+        return;
+      }
+      if (status === "approved") {
+        showToast("🔒 Custom photo already approved.", 3000);
         return;
       }
       el("avatar-file-input")?.click();

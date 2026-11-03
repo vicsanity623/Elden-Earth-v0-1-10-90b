@@ -407,6 +407,16 @@ const Store = (() => {
             state.player.avatar = String(result.data.authoritativeAvatar);
             console.log("[Cloud] Adopted approved avatar");
           }
+          // 🛡️ Avatar submission state is SERVER-DERIVED (avatar_reviews +
+          // approvedAvatar) and adopted on every sync — the old sticky local
+          // "avatarUploaded" flag blocked re-uploads forever after a lost
+          // file ("Custom photo already uploaded", 2026-11-03).
+          const avatarState = result.data?.authoritativeAvatarState;
+          if (avatarState && typeof avatarState === "object" && state.player) {
+            state.player.avatarStatus = avatarState.status || "";
+            state.player.avatarUploaded = avatarState.uploaded === true;
+            state.player.pendingAvatar = avatarState.pendingAvatar || null;
+          }
           if (result.data?.authoritative && typeof result.data.authoritative === "object") {
             // Economy values are SERVER-AUTHORITATIVE and adopted on every sync
             // response. Without this each device kept ticking its own local copy
