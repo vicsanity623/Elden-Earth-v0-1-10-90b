@@ -355,6 +355,21 @@ const Store = (() => {
     return map;
   }
 
+  /**
+   * Snapshot of the spawn-ACCRAVAL counters (walk credit + daily budget).
+   * These move on every GPS fix, so a sync response whose payload predates
+   * the walk must not roll them back ("the distance to the next spawn
+   * reset"). Same stale-mirror guard pattern as buddy progress above.
+   */
+  function snapshotBuddyCounters(buddy) {
+    return {
+      distCredit: Number(buddy && buddy.distCredit) || 0,
+      spawnsToday: Number(buddy && buddy.spawnsToday) || 0,
+      creditWindowMeters: Number(buddy && buddy.creditWindowMeters) || 0,
+      recentPoints: (buddy && Array.isArray(buddy.recentPoints)) ? buddy.recentPoints.length : 0,
+    };
+  }
+
   function mergeBuddyMirror(remote, local, changedUids) {
     const out = { ...remote };
     try {
@@ -418,6 +433,7 @@ const Store = (() => {
     // 🛡️ Same idea for buddy progress: which buddies earn XP / take damage
     // while this sync is in flight (see mergeBuddyMirror).
     const buddyProgressAtRequest = snapshotBuddyProgress(state.buddy);
+    const buddyCountersAtRequest = snapshotBuddyCounters(state.buddy);
     return syncSafeState({ state })
       .then((result) => {
         if (result.data?.reset) {
@@ -483,6 +499,24 @@ const Store = (() => {
             // spawns/tames/renames that happened while the sync was in flight.
             if (localBuddy && state.buddy && typeof state.buddy === "object") {
               state.buddy = mergeBuddyMirror(state.buddy, localBuddy, buddyChangedUids);
+              // 🛡️ STALE-MIRROR GUARD (spawn accrual): distCredit / spawnsToday
+              // move on every GPS fix — keep the LOCAL values when they moved
+              // while this sync was in flight, or the response rolls the walk
+              // progress back ("the distance to the next spawn reset").
+              // And re-adopt any LIVE spawn the merge lost: a wild buddy must
+              // never vanish the moment it appears.
+              const countersNow = snapshotBuddyCounters(localBuddy);
+              ["distCredit", "spawnsToday", "creditWindowMeters", "recentPoints"].forEach(function (k) {
+                if (countersNow[k] !== buddyCountersAtRequest[k]) state.buddy[k] = localBuddy[k];
+              });
+              const haveSpawns = {};
+              if (!Array.isArray(state.buddy.spawns)) state.buddy.spawns = [];
+              state.buddy.spawns.forEach(function (s) { if (s && s.id) haveSpawns[String(s.id)] = true; });
+              (Array.isArray(localBuddy.spawns) ? localBuddy.spawns : []).forEach(function (s) {
+                if (s && s.id && !haveSpawns[String(s.id)] && Number(s.expiresAt) > Date.now()) {
+                  state.buddy.spawns.push(s);
+                }
+              });
             }
             mirrorDirty = true;
           }

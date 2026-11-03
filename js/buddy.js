@@ -15,7 +15,8 @@ const BuddySystem = (() => {
   "use strict";
 
   /* ------------------------------------------------------------ config */
-  const METERS_PER_SPAWN = 152.4;      // 500 feet
+  const METERS_PER_SPAWN = 76.2;       // 250 feet (half of the old 500 ft —
+                                       // players shouldn't have to walk far for a spawn)
   const MAX_DAILY_SPAWNS = 50;
   const MAX_ACTIVE_SPAWNS = 3;
   const SPAWN_TTL_MS = 8 * 60 * 1000;  // wild spawns despawn after 8 minutes
@@ -154,10 +155,22 @@ const BuddySystem = (() => {
       b.recordResetAt = 0;
     }
 
-    // Drop expired spawns on load.
+    // Drop expired spawns — and HEAL records whose TTL got lost in a sync
+    // round-trip. A spawn with a missing/NaN expiresAt used to fail this
+    // filter on the very next tick and vanish instantly ("a wild buddy
+    // appeared… and disappeared in less than a second"). Give it a fresh
+    // 8-minute window instead of deleting it.
     const now = Date.now();
     const before = b.spawns.length;
-    b.spawns = b.spawns.filter(s => s && s.expiresAt > now);
+    b.spawns = b.spawns.filter(s => {
+      if (!s || !s.id) return false;
+      const exp = Number(s.expiresAt);
+      if (!Number.isFinite(exp) || exp <= 0) {
+        s.expiresAt = (Number(s.createdAt) || now) + SPAWN_TTL_MS;
+        return true;
+      }
+      return exp > now;
+    });
     if (b.spawns.length !== before) {
       // markers are rebuilt on init anyway
     }
@@ -481,7 +494,16 @@ const BuddySystem = (() => {
 
   function addSpawnMarker(spawn) {
     if (!mapInstance || typeof mapboxgl === "undefined") return;
-    if (markers[spawn.id]) return;
+    const existing = markers[spawn.id];
+    if (existing) {
+      // A DEAD entry (map re-created / detached DOM) must not block the
+      // re-add — that was the "spawn vanishes and never comes back" path.
+      // Only skip when the marker is genuinely live on the page.
+      const dom = existing.getElement && existing.getElement();
+      if (dom && document.contains(dom)) return;
+      try { existing.remove(); } catch (e) {}
+      delete markers[spawn.id];
+    }
     try {
       const marker = new mapboxgl.Marker({
         element: markerElement(spawn),
@@ -2818,6 +2840,11 @@ const BuddySystem = (() => {
 
   /* ============================================================= INIT */
   function init(map, lng, lat) {
+    // A re-created map orphans every existing Mapbox marker (they belong to
+    // the old map object) while `markers{}` still holds their entries — which
+    // made addSpawnMarker() skip re-adding them forever. Drop the dead
+    // entries so every spawn re-attaches to the new map.
+    if (mapInstance && mapInstance !== map) markers = {};
     mapInstance = map || null;
     if (typeof lat === "number" && typeof lng === "number") {
       playerPos = { lat, lon: lng };
