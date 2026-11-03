@@ -476,6 +476,17 @@
 
   <!-- Game Treasury Bottom Ad Banner (Loaded First & Visible on Boot!) -->
   <div id="treasury-ad-container" class="treasury-ad-container">
+    <!-- Classic game build watermark (bottom-left corner). Filled from
+         CONFIG.GAME_VERSION so it always matches the real build. -->
+    <div id="game-build-tag" class="game-build-tag" aria-hidden="true"></div>
+    <script>
+      // Fill as soon as the deferred scripts (js/config.js) have executed —
+      // independent of the invite-gate/auth boot flow in js/main.js.
+      document.addEventListener("DOMContentLoaded", function () {
+        var t = document.getElementById("game-build-tag");
+        if (t) t.textContent = "v" + ((typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0");
+      });
+    </script>
     <ins class="adsbygoogle"
          style="display:inline-block;width:320px;height:50px"
          data-ad-client="ca-pub-5972331036113330"

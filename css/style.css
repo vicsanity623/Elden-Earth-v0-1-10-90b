@@ -5436,6 +5436,30 @@ body.buy-mode #treasury-ad-container {
 
 .treasury-ad-container ins.adsbygoogle {
   background: transparent !important;
+  /* The ad creative always paints ABOVE the build tag (see .game-build-tag):
+     on narrow screens where they touch, the ad must never be obscured. */
+  position: relative;
+  z-index: 1;
+}
+
+/* Classic game build watermark — the small version string in the bottom-left
+   corner of the screen. Lives in the footer band and reads CONFIG.GAME_VERSION
+   at boot (js/main.js), so it can never drift from the real build. Sits at the
+   lowest stacking level: the ad paints over it if a narrow screen makes them
+   touch (ads must never be covered by UI). */
+.game-build-tag {
+  position: absolute;
+  left: 8px;
+  bottom: calc(var(--safe-b) + 1px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: rgba(209, 212, 220, 0.42);
+  z-index: 0;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  white-space: nowrap;
 }
 
 /* ---------- Closed beta opt-in + Alpha Founder badge ---------- */

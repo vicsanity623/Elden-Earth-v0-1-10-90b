@@ -1904,6 +1904,14 @@
     wireTutorial();
     initLandlordPill();
 
+    // Classic game build watermark (bottom-left corner of the footer band).
+    // Reads CONFIG.GAME_VERSION so the corner label can never drift from the
+    // real build — js/config.js is the single source of truth.
+    const buildTag = document.getElementById("game-build-tag");
+    if (buildTag) {
+      buildTag.textContent = "v" + ((typeof CONFIG !== "undefined" && CONFIG.GAME_VERSION) || "0.0.0");
+    }
+
     // --- Battery Saver & Background Sleep Controller (0% Battery in Pocket) ---
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
