@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Realm — Player Profile | Elden Earth</title>
+<meta name="description" content="Your personal Elden Earth player profile: plots owned, balances, event standings, transaction receipts and your player growth chart.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/icon512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site/css/portal.css">
+<script async id="adsense-portal" crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5972331036113330"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+<script defer src="site/js/portal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  /* ---------- Player profile page ---------- */
+  .pp-hero { display: flex; align-items: center; gap: 22px; margin: 6px 0 30px; flex-wrap: wrap; }
+  .pp-avatar {
+    width: 86px; height: 86px; border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+    background: var(--panel-2); border: 2px solid rgba(232, 197, 106, 0.5);
+    display: flex; align-items: center; justify-content: center; font-size: 2.2rem;
+  }
+  .pp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .pp-name { font-family: var(--font-display); font-size: 2rem; color: #fff; margin: 0 0 6px; line-height: 1.1; }
+  .pp-meta { color: var(--muted); font-size: 0.92rem; margin: 0 0 10px; }
+  .pp-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pp-xp { height: 8px; width: min(360px, 100%); background: rgba(0, 0, 0, 0.35); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+  .pp-xp > i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), #c9962e); }
+
+  .pp-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 14px; }
+  .pp-chartbox {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line-soft); border-radius: var(--radius);
+    padding: 16px; height: 340px; position: relative;
+  }
+  .pp-chart-note { color: var(--faint); font-size: 0.85rem; margin-top: 10px; }
+
+  .pp-kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 0.95rem; }
+  .pp-kv:last-child { border-bottom: 0; }
+  .pp-kv .k { color: var(--muted); }
+  .pp-kv .v { font-weight: 800; color: #fff; text-align: right; }
+  .pp-kv .v.gold { color: var(--gold); }
+  .pp-kv .v.green { color: var(--green); }
+
+  .pp-receipts {
+    border: 1px solid var(--line-soft); border-radius: var(--radius);
+    overflow: hidden; background: var(--panel);
+  }
+  .pp-row {
+    display: grid; grid-template-columns: 148px 132px 1fr auto; gap: 14px; align-items: center;
+    padding: 13px 18px; border-bottom: 1px solid var(--line-soft);
+  }
+  .pp-row:last-child { border-bottom: 0; }
+  .pp-row:hover { background: rgba(255, 255, 255, 0.025); }
+  .pp-when { color: var(--faint); font-size: 0.82rem; white-space: nowrap; }
+  .pp-tag {
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 11px; border-radius: 999px; width: max-content; white-space: nowrap;
+  }
+  .pp-tag.conversion { color: var(--gold); background: rgba(232, 197, 106, 0.12); border: 1px solid rgba(232, 197, 106, 0.35); }
+  .pp-tag.upgrade { color: #9cc0ff; background: rgba(41, 98, 255, 0.14); border: 1px solid rgba(41, 98, 255, 0.4); }
+  .pp-tag.withdrawal { color: var(--green); background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.32); }
+  .pp-tag.land { color: var(--red-soft); background: rgba(226, 33, 28, 0.12); border: 1px solid rgba(226, 33, 28, 0.35); }
+  .pp-tag.event { color: #d8b4fe; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); }
+  .pp-tag.other { color: var(--muted); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+  .pp-title { font-weight: 700; color: var(--text); }
+  .pp-sub { color: var(--muted); font-size: 0.85rem; }
+  .pp-amt { font-weight: 800; white-space: nowrap; text-align: right; }
+  .pp-amt.in { color: var(--green); }
+  .pp-amt.out { color: var(--red-soft); }
+  .pp-amt.neutral { color: var(--gold); }
+  .pp-empty { padding: 26px 18px; color: var(--faint); text-align: center; }
+
+  @media (max-width: 760px) {
+    .pp-row { grid-template-columns: 1fr auto; }
+    .pp-when { order: 3; grid-column: 1 / -1; }
+    .pp-name { font-size: 1.55rem; }
+  }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+
+<div class="wrap">
+
+  <section class="page-hero">
+    <div class="crumb"><a href="index.html">Home</a> / Player profile</div>
+    <h1>My Realm</h1>
+    <p class="lead">Your land, balances, event standings and full transaction history — straight from your cloud save.</p>
+  </section>
+
+  <div class="signin-wall" id="pp-wall" style="display:none">
+    <h3 style="color:#fff;margin-top:0">Sign in to open your player profile</h3>
+    <p>Your profile is private to you. Sign in with the same Google account you play with to see your plots, receipts and growth.</p>
+    <button class="btn btn-primary" id="pp-signin">Sign in with Google</button>
+  </div>
+
+  <div id="pp-main" style="display:none">
+
+    <!-- ===== Identity ===== -->
+    <div class="pp-hero">
+      <div class="pp-avatar" id="pp-avatar">🙂</div>
+      <div>
+        <h2 class="pp-name" id="pp-name">Traveler</h2>
+        <p class="pp-meta" id="pp-meta">&nbsp;</p>
+        <div class="pp-badges" id="pp-badges"></div>
+        <div class="pp-xp"><i id="pp-xp-bar" style="width:0%"></i></div>
+        <div class="pp-meta" id="pp-xp-label" style="margin-top:6px">&nbsp;</div>
+      </div>
+    </div>
+
+    <!-- ===== Balances ===== -->
+    <section class="section" style="padding:14px 0 26px">
+      <div class="stat-strip" id="pp-strip">
+        <div class="cell"><div class="num" id="pp-plots">0</div><div class="lbl">Plots owned</div></div>
+        <div class="cell"><div class="num" id="pp-eb">0</div><div class="lbl">Total EB</div></div>
+        <div class="cell"><div class="num" id="pp-rc">0</div><div class="lbl">Total RC</div></div>
+        <div class="cell"><div class="num" id="pp-rp">0</div><div class="lbl">Total RP</div></div>
+      </div>
+      <div class="stat-strip" style="margin-top:14px">
+        <div class="cell"><div class="num" id="pp-diamonds">0</div><div class="lbl">Diamonds</div></div>
+        <div class="cell"><div class="num" id="pp-rent">0</div><div class="lbl">Lifetime RC earned</div></div>
+        <div class="cell"><div class="num" id="pp-dividends">0</div><div class="lbl">Mayor dividends</div></div>
+        <div class="cell"><div class="num" id="pp-extractor">—</div><div class="lbl">Extractor level</div></div>
+      </div>
+    </section>
+
+    <!-- ===== Growth chart ===== -->
+    <section class="section" style="padding:26px 0">
+      <div class="section-head" style="margin-bottom:0">
+        <div>
+          <span class="eyebrow">Player Growth</span>
+          <h2>Your growth over time</h2>
+          <p>The same daily growth series shown on the public <a href="growth.html">Player Growth</a> page — for your realm.</p>
+        </div>
+      </div>
+      <div class="pp-tabs" id="pp-growth-tabs">
+        <button class="chip-btn liked" data-metric="plots_history">Plots</button>
+        <button class="chip-btn" data-metric="eb">Total EB</button>
+        <button class="chip-btn" data-metric="rc">Total RC</button>
+        <button class="chip-btn" data-metric="rp">Total RP</button>
+      </div>
+      <div class="pp-chartbox"><canvas id="ppGrowthChart"></canvas></div>
+      <div class="pp-chart-note" id="pp-growth-note">History updates daily — synced from the realm's growth report. <a href="growth.html">See all players →</a></div>
+    </section>
+
+    <!-- ===== Event standings ===== -->
+    <section class="section" style="padding:26px 0">
+      <div class="section-head" style="margin-bottom:24px">
+        <div>
+          <span class="eyebrow">Events</span>
+          <h2>Event standings</h2>
+          <p>Where you stand in the current Global Challenge, Plot Rush and PvP Arena season.</p>
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="icon">🌍</div>
+          <h3>Global Challenge</h3>
+          <div class="pp-kv"><span class="k">Your rank</span><span class="v gold" id="pp-gc-rank">—</span></div>
+          <div class="pp-kv"><span class="k">Your contribution</span><span class="v" id="pp-gc-contrib">0 EB</span></div>
+          <div class="pp-kv"><span class="k">Prize status</span><span class="v" id="pp-gc-prize">—</span></div>
+          <div class="pp-kv"><span class="k">Global progress</span><span class="v" id="pp-gc-progress">—</span></div>
+        </div>
+        <div class="card">
+          <div class="icon">🗺️</div>
+          <h3>Plot Rush</h3>
+          <div class="pp-kv"><span class="k">Your rank</span><span class="v gold" id="pp-pr-rank">—</span></div>
+          <div class="pp-kv"><span class="k">Your points</span><span class="v" id="pp-pr-points">0</span></div>
+          <div class="pp-kv"><span class="k">Global progress</span><span class="v" id="pp-pr-progress">—</span></div>
+          <div class="pp-kv"><span class="k">Round</span><span class="v" id="pp-pr-round">—</span></div>
+        </div>
+        <div class="card">
+          <div class="icon">⚔️</div>
+          <h3>PvP Arena</h3>
+          <div class="pp-kv"><span class="k">Season score</span><span class="v gold" id="pp-ar-score">0</span></div>
+          <div class="pp-kv"><span class="k">Season record</span><span class="v" id="pp-ar-record">0W · 0L</span></div>
+          <div class="pp-kv"><span class="k">Lifetime points</span><span class="v" id="pp-ar-points">0</span></div>
+          <div class="pp-kv"><span class="k">Season</span><span class="v" id="pp-ar-season">—</span></div>
+        </div>
+      </div>
+
+      <h3 style="margin:34px 0 6px">Event payouts</h3>
+      <p class="pp-sub" style="margin-bottom:14px">Every prize the realm has staged or paid out to you.</p>
+      <table class="table" id="pp-payouts">
+        <thead><tr><th>Event</th><th>Round</th><th>Rank</th><th>Prize</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- ===== Transaction receipts ===== -->
+    <section class="section" style="padding:26px 0">
+      <div class="section-head" style="margin-bottom:20px">
+        <div>
+          <span class="eyebrow">Ledger</span>
+          <h2>Transaction receipts</h2>
+          <p>EB conversions, RC spending on upgrades, land purchases, withdrawals and every other economy event on your account.</p>
+        </div>
+      </div>
+      <div class="pp-tabs" id="pp-filter-tabs">
+        <button class="chip-btn liked" data-filter="all">All</button>
+        <button class="chip-btn" data-filter="conversion">EB Conversions</button>
+        <button class="chip-btn" data-filter="upgrade">Upgrades</button>
+        <button class="chip-btn" data-filter="withdrawal">Withdrawals</button>
+        <button class="chip-btn" data-filter="land">Land</button>
+        <button class="chip-btn" data-filter="event">Events</button>
+        <button class="chip-btn" data-filter="other">Other</button>
+      </div>
+      <div class="pp-receipts" id="pp-receipts">
+        <div class="pp-empty">Loading your receipts…</div>
+      </div>
+      <div style="margin-top:16px;text-align:center">
+        <button class="btn btn-ghost btn-sm" id="pp-more" style="display:none">Show more</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div id="site-footer"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var PAGE_SIZE = 40;
+  var growthChart = null;
+  var growthSeries = null;
+  var growthMetric = "plots_history";
+  var receipts = [];
+  var receiptsShown = PAGE_SIZE;
+  var receiptsFilter = "all";
+
+  var SOURCE_LABELS = {
+    extractor: "Diamond Extractor harvest",
+    extractor_upgrade: "Extractor upgrade",
+    new_player_bonus: "New Explorer Bonus",
+    founders_pack: "Founders Pack",
+    wheel_spin: "Diamond Wheel spin",
+    boost_activate: "Boost activation",
+    boost_claim: "Boost claim",
+    citadel_conquer: "Citadel conquest",
+    land_purchase: "Land purchase",
+    ascend_forge: "Plot forge",
+    event_reward: "Event prize",
+    redemption_lock: "Withdrawal request",
+    withdrawal_paid: "Withdrawal paid",
+    redemption_rejected_refund: "Withdrawal rejected — RP refunded",
+    admin_gift: "Admin gift",
+    admin_adjust: "Admin adjustment",
+    audit_backfill: "Audit backfill",
+    admin_plot_prune: "Plot prune"
+  };
+
+  var TAG_LABELS = {
+    conversion: "EB Conversion",
+    upgrade: "Upgrade",
+    withdrawal: "Withdrawal",
+    land: "Land",
+    event: "Event",
+    other: "Ledger"
+  };
+
+  var LEDGER_KINDS = {
+    extractor_upgrade: "upgrade",
+    land_purchase: "land",
+    admin_gift: "land",
+    event_reward: "event",
+    redemption_lock: "withdrawal",
+    withdrawal_paid: "withdrawal",
+    redemption_rejected_refund: "withdrawal"
+  };
+
+  // ---------- helpers ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function fmt(n, d) {
+    return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d == null ? 2 : d });
+  }
+  function ms(v) {
+    if (!v) return 0;
+    if (typeof v === "number") return v;
+    if (typeof v.toMillis === "function") return v.toMillis();
+    if (v.seconds) return v.seconds * 1000;
+    return 0;
+  }
+  function when(ts) {
+    var t = ms(ts);
+    if (!t) return "—";
+    var d = new Date(t);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+      " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+
+  // ---------- growth history (read from the daily-updated growth.html) ----------
+  function fetchGrowthSeries(name) {
+    return fetch("growth.html", { cache: "no-store" })
+      .then(function (r) { return r.text(); })
+      .then(function (text) {
+        var m = text.match(/const players = (\{[\s\S]*?\});/);
+        if (!m) return null;
+        var players = JSON.parse(m[1]);
+        if (players[name]) return players[name];
+        var lower = String(name || "").toLowerCase();
+        for (var k in players) {
+          if (Object.prototype.hasOwnProperty.call(players, k) && k.toLowerCase() === lower) return players[k];
+        }
+        return null;
+      })
+      .catch(function () { return null; });
+  }
+
+  var METRICS = {
+    plots_history: { label: "Plots Owned", color: "#4ade80", bg: "rgba(74, 222, 128, 0.15)" },
+    eb: { label: "Total EB", color: "#2962ff", bg: "rgba(41, 98, 255, 0.15)" },
+    rc: { label: "Total RC", color: "#f7a600", bg: "rgba(247, 166, 0, 0.15)" },
+    rp: { label: "Total RP", color: "#e91e63", bg: "rgba(233, 30, 99, 0.15)" }
+  };
+
+  function renderGrowthChart() {
+    var canvas = $("ppGrowthChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    if (growthChart) { growthChart.destroy(); growthChart = null; }
+    if (!growthSeries) return;
+    var conf = METRICS[growthMetric] || METRICS.plots_history;
+    growthChart = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: growthSeries.dates || [],
+        datasets: [{
+          label: conf.label,
+          data: growthSeries[growthMetric] || [],
+          borderColor: conf.color,
+          backgroundColor: conf.bg,
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+          pointBackgroundColor: conf.color
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#141c2b",
+            titleColor: "#fff",
+            bodyColor: conf.color,
+            borderColor: "#263349",
+            borderWidth: 1
+          }
+        },
+        scales: {
+          x: { grid: { color: "#1d2839" }, ticks: { color: "#6b7a92", maxTicksLimit: 6 } },
+          y: { grid: { color: "#1d2839" }, ticks: { color: "#6b7a92" } }
+        }
+      }
+    });
+  }
+
+  // ---------- receipts ----------
+  function receiptRow(r) {
+    return (
+      "<div class=\"pp-row\">" +
+      "<div class=\"pp-when\">" + esc(r.when) + "</div>" +
+      "<div><span class=\"pp-tag " + esc(r.kind) + "\">" + esc(TAG_LABELS[r.kind] || "Ledger") + "</span></div>" +
+      "<div><div class=\"pp-title\">" + esc(r.title) + "</div>" +
+      (r.sub ? "<div class=\"pp-sub\">" + esc(r.sub) + "</div>" : "") + "</div>" +
+      "<div class=\"pp-amt " + esc(r.cls) + "\">" + esc(r.amount) + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderReceipts() {
+    var box = $("pp-receipts");
+    if (!box) return;
+    var list = receipts.filter(function (r) {
+      return receiptsFilter === "all" || r.kind === receiptsFilter;
+    });
+    if (!list.length) {
+      box.innerHTML = "<div class=\"pp-empty\">No receipts in this category yet.</div>";
+      $("pp-more").style.display = "none";
+      return;
+    }
+    box.innerHTML = list.slice(0, receiptsShown).map(receiptRow).join("");
+    $("pp-more").style.display = list.length > receiptsShown ? "inline-flex" : "none";
+  }
+
+  function ledgerRow(e, seenRequests) {
+    var src = String(e.source || "");
+    var isSpend = e.dir === "spends" || e.dir === "spend";
+    var meta = e.meta || {};
+    // Withdrawal lifecycle rows are rendered from withdrawal_requests instead —
+    // skip the ledger duplicates (unless there is no request doc for them).
+    if (LEDGER_KINDS[src] === "withdrawal" && meta.requestId && seenRequests[String(meta.requestId)]) return null;
+
+    var unit = "EB", cls = isSpend ? "out" : "in", sign = isSpend ? "−" : "+";
+    if (src === "extractor_upgrade") { unit = "RC"; }
+    else if (src === "redemption_lock" || src === "redemption_rejected_refund") { unit = "RP"; }
+    else if (src === "withdrawal_paid") { unit = ""; cls = "in"; sign = "+$"; }
+    else if (e.currency === "diamonds") { unit = "💎"; }
+    else if (e.currency === "plots") { unit = "plots"; }
+
+    var sub = null;
+    if (src === "wheel_spin" && meta.multiplier) sub = "Wheel multiplier ×" + meta.multiplier;
+    else if (src === "land_purchase" && meta.rarity) sub = meta.rarity + " plot" + (meta.tid ? " · " + meta.tid : "");
+    else if (src === "redemption_lock" && meta.usd != null) sub = "$" + Number(meta.usd).toFixed(2) + " PayPal request";
+    else if (src === "redemption_rejected_refund" && meta.reason) sub = "Reason: " + meta.reason;
+    else if (src === "ascend_forge" && meta.from) sub = "Forged " + meta.from + " → " + meta.to;
+
+    return {
+      ts: Number(e.ts) || 0,
+      when: when(e.ts),
+      kind: LEDGER_KINDS[src] || "other",
+      title: e.note || SOURCE_LABELS[src] || src || "Economy event",
+      sub: sub,
+      amount: sign + fmt(e.amount, 2) + (unit ? " " + unit : ""),
+      cls: cls
+    };
+  }
+
+  function conversionRow(c) {
+    return {
+      ts: Number(c.timestamp) || 0,
+      when: when(c.timestamp),
+      kind: "conversion",
+      title: "RC → EB conversion",
+      sub: "Converted " + fmt(c.amount, 0) + " RC",
+      amount: "+" + fmt(c.ebReward, 0) + " EB · +" + fmt(c.diamondReward, 0) + " 💎",
+      cls: "neutral"
+    };
+  }
+
+  function withdrawalRow(w, id) {
+    var status = String(w.status || "pending");
+    var sub = "PayPal: " + (w.paypalEmail || "—") + " · " + (status === "paid" ? "Paid " + when(w.paidAt) :
+      status === "rejected" ? "Rejected" + (w.rejectReason ? " — " + w.rejectReason : "") :
+      "Requested " + when(w.requestedAt));
+    return {
+      ts: ms(w.paidAt) || ms(w.rejectedAt) || ms(w.requestedAt),
+      when: when(w.requestedAt),
+      kind: "withdrawal",
+      title: "Withdrawal request · $" + Number(w.amount || 0).toFixed(2) + " PayPal",
+      sub: sub,
+      amount: "−" + fmt(w.rpCost, 0) + " RP locked" + (status === "paid" ? " · +$" + Number(w.amount || 0).toFixed(2) : ""),
+      cls: status === "paid" ? "in" : status === "rejected" ? "neutral" : "out"
+    };
+  }
+
+  // ---------- events ----------
+  function rankIn(path, field, uid) {
+    return firebase.firestore().collection(path)
+      .orderBy(field, "desc").limit(500).get()
+      .then(function (snap) {
+        var rank = null;
+        snap.docs.forEach(function (d, i) { if (d.id === uid) rank = i + 1; });
+        return rank;
+      })
+      .catch(function () { return null; });
+  }
+
+  function loadEvents(uid) {
+    var fdb = firebase.firestore();
+    // Global Challenge
+    fdb.collection("events").doc("global_challenge").get().then(function (d) {
+      if (!d.exists) return;
+      var ev = d.data() || {};
+      if (ev.totalEB != null && ev.goal) {
+        $("pp-gc-progress").textContent = fmt(ev.totalEB, 0) + " / " + fmt(ev.goal, 0) + " EB";
+      }
+    }).catch(function () {});
+    fdb.collection("events").doc("global_challenge").collection("contributions").doc(uid).get().then(function (d) {
+      if (!d.exists) return;
+      var c = d.data() || {};
+      $("pp-gc-contrib").textContent = fmt(c.amount, 0) + " EB";
+      $("pp-gc-prize").textContent = c.claimed
+        ? "Claimed " + fmt(c.prize, 0) + " EB"
+        : (c.prize ? "Pending · " + fmt(c.prize, 0) + " EB" : "No prize yet");
+    }).catch(function () {});
+    rankIn("events/global_challenge/contributions", "amount", uid).then(function (r) {
+      $("pp-gc-rank").textContent = r ? "#" + r : "Unranked";
+    });
+
+    // Plot Rush
+    fdb.collection("events").doc("plot_challenge").get().then(function (d) {
+      if (!d.exists) return;
+      var ev = d.data() || {};
+      if (ev.totalPlots != null && ev.goal) {
+        $("pp-pr-progress").textContent = fmt(ev.totalPlots, 0) + " / " + fmt(ev.goal, 0) + " plots";
+      }
+      $("pp-pr-round").textContent = ev.roundKey || "—";
+    }).catch(function () {});
+    fdb.collection("events").doc("plot_challenge").collection("contributions").doc(uid).get().then(function (d) {
+      if (!d.exists) return;
+      $("pp-pr-points").textContent = fmt((d.data() || {}).points, 0);
+    }).catch(function () {});
+    rankIn("events/plot_challenge/contributions", "points", uid).then(function (r) {
+      $("pp-pr-rank").textContent = r ? "#" + r : "Unranked";
+    });
+
+    // Event payout history
+    fdb.collection("event_payouts").where("userId", "==", uid).limit(50).get().then(function (snap) {
+      var names = {
+        global_challenge: "Global Challenge",
+        plot_challenge: "Plot Rush",
+        pvp_arena: "PvP Arena"
+      };
+      var rows = snap.docs.map(function (d) { return d.data() || {}; });
+      rows.sort(function (a, b) { return String(b.weekKey || b.roundKey || "").localeCompare(String(a.weekKey || a.roundKey || "")); });
+      var html = rows.map(function (p) {
+        var prizeBits = [];
+        if (p.ebPrize) prizeBits.push(fmt(p.ebPrize, 0) + " EB");
+        if (p.prize && !p.ebPrize) prizeBits.push(fmt(p.prize, 0) + " EB");
+        if (p.eb && p.eventId === "plot_challenge") prizeBits.push(fmt(p.eb, 0) + " EB");
+        if (p.rp) prizeBits.push(fmt(p.rp, 0) + " RP");
+        if (p.diamonds) prizeBits.push(fmt(p.diamonds, 0) + " 💎");
+        if (p.seeds) prizeBits.push(fmt(p.seeds, 0) + " seeds");
+        if (!prizeBits.length) prizeBits.push("—");
+        var status = p.claimed ? "Claimed" : (p.granted ? "Ready to claim" : (p.staged ? "Staged" : "Processing"));
+        return "<tr><td>" + esc(names[p.eventId] || p.eventId || "Event") + "</td>" +
+          "<td>" + esc(p.weekKey || p.roundKey || "—") + "</td>" +
+          "<td>#" + esc(p.rank != null ? p.rank : "—") + "</td>" +
+          "<td>" + esc(prizeBits.join(" · ")) + "</td>" +
+          "<td>" + esc(status) + "</td></tr>";
+      }).join("");
+      $("pp-payouts").querySelector("tbody").innerHTML =
+        html || "<tr><td colspan=\"5\" style=\"color:var(--faint)\">No event payouts yet — join a Global Challenge or Plot Rush to get on the board.</td></tr>";
+    }).catch(function () {
+      $("pp-payouts").querySelector("tbody").innerHTML =
+        "<tr><td colspan=\"5\" style=\"color:var(--faint)\">Event payouts unavailable right now.</td></tr>";
+    });
+  }
+
+  // ---------- main load ----------
+  function loadProfile(user) {
+    var uid = user.uid;
+    var fdb = firebase.firestore();
+
+    var saveP = fdb.collection("saves").doc(uid).get().then(function (d) { return d.exists ? d.data() || {} : {}; }).catch(function () { return {}; });
+    var privP = fdb.collection("saves_private").doc(uid).get().then(function (d) { return d.exists ? d.data() || {} : {}; }).catch(function () { return {}; });
+    var regP = fdb.collection("players").doc(uid).get().then(function (d) { return d.exists ? d.data() || {} : {}; }).catch(function () { return {}; });
+
+    var ledgerP = fdb.collection("economy_ledger").where("uid", "==", uid)
+      .orderBy("ts", "desc").limit(250).get()
+      .then(function (snap) { return snap.docs.map(function (d) { return d.data() || {}; }); })
+      .catch(function () {
+        // Missing composite index → fetch unordered and sort locally.
+        return fdb.collection("economy_ledger").where("uid", "==", uid).limit(400).get()
+          .then(function (snap) {
+            return snap.docs.map(function (d) { return d.data() || {}; })
+              .sort(function (a, b) { return (Number(b.ts) || 0) - (Number(a.ts) || 0); });
+          })
+          .catch(function () { return []; });
+      });
+
+    var convP = fdb.collection("cashout_conversions").where("uid", "==", uid).limit(100).get()
+      .then(function (snap) {
+        return snap.docs.map(function (d) { return d.data() || {}; })
+          .sort(function (a, b) { return (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0); });
+      })
+      .catch(function () { return null; }); // null = rules not deployed yet
+
+    var wdP = fdb.collection("withdrawal_requests").where("userId", "==", uid).limit(50).get()
+      .then(function (snap) {
+        return snap.docs.map(function (d) {
+          var w = d.data() || {};
+          w.__id = d.id;
+          return w;
+        }).sort(function (a, b) { return ms(b.requestedAt) - ms(a.requestedAt); });
+      })
+      .catch(function () { return []; });
+
+    Promise.all([saveP, privP, regP, ledgerP, convP, wdP]).then(function (res) {
+      var save = res[0], priv = res[1], reg = res[2], ledger = res[3], convs = res[4], withdrawals = res[5];
+
+      // ---- identity ----
+      var name = reg.name || (save.player && save.player.name) || user.displayName || "Traveler";
+      var av = reg.avatar || (save.player && save.player.avatar) || "";
+      var photo = user.photoURL || "";
+      var avBox = $("pp-avatar");
+      if (av && String(av).indexOf("img:") === 0) {
+        avBox.innerHTML = "<img src=\"" + esc(String(av).slice(4)) + "\" alt=\"\">";
+      } else if (av) {
+        avBox.innerHTML = esc(av);
+      } else if (photo) {
+        avBox.innerHTML = "<img src=\"" + esc(photo) + "\" alt=\"\">";
+      }
+      $("pp-name").textContent = name;
+
+      var bits = [];
+      if (save.createdAt) bits.push("Playing since " + new Date(ms(save.createdAt)).toLocaleDateString(undefined, { month: "long", year: "numeric" }));
+      if (save.lastSavedAt) bits.push("Last active " + when(save.lastSavedAt));
+      if (save.countryCode) bits.push("🌍 " + save.countryCode + (save.usStateCode ? " · " + save.usStateCode : ""));
+      $("pp-meta").textContent = bits.join(" · ") || "\u00a0";
+
+      var badges = [];
+      if (reg.betaFounder) badges.push("<span class=\"badge-pill\">⭐ Beta Founder</span>");
+      var level = save.playerXP && save.playerXP.level || 1;
+      badges.push("<span class=\"badge-pill\">Level " + esc(level) + "</span>");
+      if (save.arena && save.arena.seasonScore > 0) badges.push("<span class=\"badge-pill\">⚔️ Arena contender</span>");
+      $("pp-badges").innerHTML = badges.join("");
+
+      if (save.playerXP) {
+        var xp = Number(save.playerXP.xp) || 0;
+        var totalXp = Number(save.playerXP.totalXp) || 0;
+        var pct = Math.max(0, Math.min(100, (xp / 1000) * 100));
+        $("pp-xp-bar").style.width = pct.toFixed(1) + "%";
+        $("pp-xp-label").textContent = fmt(xp, 0) + " XP this level · " + fmt(totalXp, 0) + " XP lifetime";
+      } else {
+        $("pp-xp-label").innerHTML = "&nbsp;";
+      }
+
+      // ---- balances ----
+      var plots = save.plots ? Object.keys(save.plots).length : 0;
+      $("pp-plots").textContent = fmt(plots, 0);
+      $("pp-eb").textContent = fmt(save.eb, 2);
+      $("pp-rc").textContent = fmt(save.cash, 4);
+      $("pp-rp").textContent = fmt(priv.rewardPoints, 0);
+      $("pp-diamonds").textContent = fmt(save.diamonds, 0);
+      $("pp-rent").textContent = fmt(save.lifetimeRent, 2);
+      $("pp-dividends").textContent = fmt(save.totalDividends, 2);
+      $("pp-extractor").textContent = save.extractor && save.extractor.level ? "L" + save.extractor.level : "—";
+
+      // ---- PvP arena standing ----
+      var arena = save.arena || {};
+      $("pp-ar-score").textContent = fmt(arena.seasonScore, 0);
+      $("pp-ar-record").textContent = fmt(arena.wins, 0) + "W · " + fmt(arena.losses, 0) + "L";
+      $("pp-ar-points").textContent = fmt(arena.points, 0);
+      $("pp-ar-season").textContent = arena.weekKey || "—";
+
+      // ---- receipts ----
+      var seenRequests = {};
+      withdrawals.forEach(function (w) { if (w.__id) seenRequests[String(w.__id)] = true; });
+
+      var rows = [];
+      ledger.forEach(function (e) {
+        var r = ledgerRow(e, seenRequests);
+        if (r) rows.push(r);
+      });
+      if (convs) {
+        convs.forEach(function (c) { rows.push(conversionRow(c)); });
+      }
+      withdrawals.forEach(function (w) { rows.push(withdrawalRow(w)); });
+      rows.sort(function (a, b) { return b.ts - a.ts; });
+      receipts = rows;
+      receiptsShown = PAGE_SIZE;
+      renderReceipts();
+
+      if (!convs) {
+        var note = document.createElement("div");
+        note.className = "pp-sub";
+        note.style.padding = "12px 18px";
+        note.textContent = "EB conversion receipts will appear here once the latest site rules are deployed.";
+        $("pp-receipts").insertBefore(note, $("pp-receipts").firstChild);
+      }
+
+      // ---- events ----
+      loadEvents(uid);
+
+      // ---- growth chart (daily history from growth.html) ----
+      fetchGrowthSeries(name).then(function (series) {
+        growthSeries = series;
+        if (series) {
+          renderGrowthChart();
+        } else {
+          $("pp-growth-note").innerHTML =
+            "Your daily growth history will appear here after the next growth sync. " +
+            "<a href=\"growth.html\">See all players →</a>";
+        }
+      });
+    });
+  }
+
+  // ---------- boot ----------
+  function init() {
+    var wall = $("pp-wall");
+    var main = $("pp-main");
+
+    $("pp-signin").addEventListener("click", function () {
+      var siteBtn = document.getElementById("site-signin");
+      if (siteBtn) { siteBtn.click(); return; }
+      if (typeof firebase !== "undefined" && firebase.auth) {
+        firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function () {});
+      }
+    });
+
+    // Growth metric tabs
+    $("pp-growth-tabs").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-metric]");
+      if (!btn) return;
+      growthMetric = btn.getAttribute("data-metric");
+      Array.prototype.forEach.call(this.querySelectorAll(".chip-btn"), function (b) { b.classList.remove("liked"); });
+      btn.classList.add("liked");
+      renderGrowthChart();
+    });
+
+    // Receipt filter tabs
+    $("pp-filter-tabs").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-filter]");
+      if (!btn) return;
+      receiptsFilter = btn.getAttribute("data-filter");
+      receiptsShown = PAGE_SIZE;
+      Array.prototype.forEach.call(this.querySelectorAll(".chip-btn"), function (b) { b.classList.remove("liked"); });
+      btn.classList.add("liked");
+      renderReceipts();
+    });
+
+    $("pp-more").addEventListener("click", function () {
+      receiptsShown += PAGE_SIZE;
+      renderReceipts();
+    });
+
+    if (typeof firebase === "undefined") {
+      console.warn("[PlayerPage] firebase SDK not loaded");
+      return;
+    }
+    if (!firebase.apps.length) {
+      firebase.initializeApp({
+        apiKey: "AIzaSyAf8u0qUQJaajJp4352-SrY7lIh8rNFPWY",
+        authDomain: "elden-earth.firebaseapp.com",
+        projectId: "elden-earth",
+        storageBucket: "elden-earth.firebasestorage.app",
+        messagingSenderId: "231253239262",
+        appId: "1:231253239262:web:3fa1ca28575fcade15e94f",
+      });
+    }
+
+    firebase.auth().onAuthStateChanged(function (user) {
+      if (!user) {
+        wall.style.display = "block";
+        main.style.display = "none";
+        return;
+      }
+      wall.style.display = "none";
+      main.style.display = "block";
+      loadProfile(user);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

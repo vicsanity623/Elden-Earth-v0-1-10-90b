@@ -134,7 +134,9 @@ p { margin: 0 0 1.1em; color: var(--text); }
   padding: 7px 14px 7px 8px; border-radius: 999px;
   background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line);
   color: var(--text); font-weight: 700; font-size: 0.85rem; cursor: pointer;
+  text-decoration: none;
 }
+.auth-chip:hover { border-color: var(--gold); color: #fff; }
 .auth-chip img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
 .chip-avatar {
   width: 30px; height: 30px; border-radius: 50%; overflow: hidden;

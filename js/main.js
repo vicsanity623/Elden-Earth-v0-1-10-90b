@@ -1882,13 +1882,17 @@
     }
     if (typeof EldenStops !== "undefined") {
       EldenStops.init(map, { 
-        onRewards: () => {
+        onRewards: (result) => {
           updateTopbar();
-          // Award berries when spinning Elden Stops
-          if (typeof CompanionPet !== "undefined") {
-            const berryCount = Math.floor(Math.random() * 3) + 1; // 1-3 berries per spin
-            CompanionPet.addBerries(berryCount);
-            showToast(`🍓 +${berryCount} Berries from Elden Stop!`);
+          // 🍓 Berries are granted SERVER-SIDE by spinEldenStop and already
+          // land in state via result.nextBerries (see celebrateRewards). This
+          // used to add ANOTHER random 1-3 client-side — a phantom
+          // double-credit that the cloud sync's berry ceiling stripped right
+          // back off, so the "+N Berries" toast promised berries that never
+          // stuck ("berries from Elden Stops get lost"). Celebrate the real
+          // server drop instead.
+          if (typeof CompanionPet !== "undefined" && result && Number(result.berries) > 0) {
+            showToast(`🍓 +${result.berries} Berries from Elden Stop!`);
           }
         }
       });

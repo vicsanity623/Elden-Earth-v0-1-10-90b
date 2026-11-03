@@ -383,6 +383,11 @@ const Store = (() => {
     }
 
     const syncSafeState = firebase.functions().httpsCallable("syncSafeState");
+    // 🍓 STALE-MIRROR GUARD: the response mirror is a snapshot of THIS
+    // request's payload. Remember the berry count it was built with so a
+    // late-arriving response cannot roll back a grant/spend that happened
+    // while the sync was in flight (see the authoritative block below).
+    const berriesAtRequest = Number(state.berries) || 0;
     return syncSafeState({ state })
       .then((result) => {
         if (result.data?.reset) {
@@ -423,7 +428,18 @@ const Store = (() => {
             // of cash/berries/etc. forever — the bug that made the same account
             // show different RC and pet-food counts on Android vs iPhone.
             const localBuddy = (state.buddy && typeof state.buddy === "object") ? state.buddy : null;
+            // 🍓 STALE-MIRROR GUARD (berries): if berries moved while this sync
+            // was in flight (a spin's nextBerries grant or a feed/heal/tame
+            // spend), the mirror is older than what we already know. Adopting
+            // it would clobber the fresh value AND the next echo would replay
+            // the difference as a fake spend server-side ("Elden Stop berries
+            // get lost"). Keep the newer local count in that case.
+            const berriesBefore = Number(state.berries) || 0;
+            const berriesMovedMidFlight = berriesBefore !== berriesAtRequest;
             Object.assign(state, result.data.authoritative);
+            if (berriesMovedMidFlight && result.data.authoritative.berries !== undefined) {
+              state.berries = berriesBefore;
+            }
             // 🛡️ Buddy is merged, NOT assigned — see mergeBuddyMirror. The
             // mirror is a snapshot of the request payload and must never erase
             // spawns/tames/renames that happened while the sync was in flight.

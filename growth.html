@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Player Economy Terminal</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg-dark: #131722;
+    --card-bg: #1e222d;
+    --border: #2a2e39;
+    --accent: #2962ff;
+    --text-main: #d1d4dc;
+    --text-muted: #787b86;
+    --green: #089981;
+    --gold: #f7a600;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 12px; background: var(--bg-dark);
+    color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .title { font-size: 1.15rem; font-weight: 700; color: #fff; }
+  .sync-badge {
+    font-size: 0.72rem; color: var(--text-muted); background: var(--card-bg);
+    padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  select {
+    width: 100%; background: var(--card-bg); color: #fff; border: 1px solid var(--border);
+    padding: 12px; font-size: 1rem; border-radius: 8px; outline: none; margin-bottom: 10px;
+  }
+  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat-card { background: var(--card-bg); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); }
+  .stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; }
+  .stat-val { font-size: 1.1rem; font-weight: 700; margin-top: 3px; color: #fff; }
+  .controls { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+  .tab-btn {
+    flex: 1; padding: 10px 6px; background: var(--card-bg); border: 1px solid var(--border);
+    color: var(--text-muted); border-radius: 6px; font-size: 0.82rem; font-weight: 600; text-align: center;
+  }
+  .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chart-box {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; height: 330px; position: relative; margin-bottom: 24px;
+  }
+  .divider { height: 1px; background: var(--border); margin: 24px 0 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="title">📈 Player Economy Terminal</div>
+  <div class="sync-badge" onclick="window.location.reload(true)">🔄 Nov 02, 2026 - 10:46 PM</div>
+</div>
+
+<select id="playerSelect" onchange="updatePlayer()"></select>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Plots Owned</div>
+    <div class="stat-val" id="statPlots" style="color: var(--green);">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total EB</div>
+    <div class="stat-val" id="statEB">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total RC</div>
+    <div class="stat-val" id="statRC" style="color: var(--gold);">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total RP</div>
+    <div class="stat-val" id="statRP">0</div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="tab-btn active player-btn" onclick="setMetric('eb', this)">Total EB</button>
+  <button class="tab-btn player-btn" onclick="setMetric('rc', this)">Total RC</button>
+  <button class="tab-btn player-btn" onclick="setMetric('plots_history', this)">Plots</button>
+  <button class="tab-btn player-btn" onclick="setMetric('rp', this)">Total RP</button>
+</div>
+
+<div class="chart-box">
+  <canvas id="tradingChart"></canvas>
+</div>
+
+<div class="divider"></div>
+
+<div class="header">
+  <div class="title">🌐 Global Real Player Growth</div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Real Players</div>
+    <div class="stat-val" style="color: var(--green);" id="globalTotal">23</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">New Real Players (Latest Day)</div>
+    <div class="stat-val" style="color: var(--accent);" id="globalNew">+1</div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="tab-btn active global-btn" onclick="setGlobalMetric('total', this)">Total Players</button>
+  <button class="tab-btn global-btn" onclick="setGlobalMetric('new', this)">New Players Joined</button>
+</div>
+
+<div class="chart-box">
+  <canvas id="globalChart"></canvas>
+</div>
+
+<script>
+const players = {"Davinci Machen": {"name": "Davinci Machen", "plots": 654, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [3541.85, 4679.95, 4447.03, 268.08, 896.23, 1032.42, 400.63, 1148.74, 1618.85, 4337.95], "rc": [2.3652, 2.4116, 2.4336, 2.4564, 0.7453, 0.7518, 0.805, 1.015, 1.0755, 1.1886], "rp": [797.0, 820.0, 820.0, 833.0, 860.0, 872.0, 899.0, 913.0, 932.0, 947.0], "plots_history": [532, 546, 549, 604, 620, 631, 650, 656, 654, 654]}, "imacatmeow": {"name": "imacatmeow", "plots": 665, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [223.82, 26.0, 60.08, 1041.17, 2310.35, 2818.52, 3094.6, 3280.72, 3579.81, 60.91], "rc": [2.6482, 2.7884, 2.8728, 3.1546, 3.2502, 3.3958, 3.4839, 3.6159, 3.7484, 3.844], "rp": [403.0, 424.0, 444.0, 455.0, 468.0, 476.0, 499.0, 513.0, 534.0, 554.0], "plots_history": [511, 517, 561, 564, 565, 566, 569, 569, 569, 665]}, "Jess": {"name": "Jess", "plots": 432, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [1873.64, 1971.68, 3095.75, 3562.81, 4709.88, 5116.95, 5156.97, 5590.11, 4114.18, 520.24], "rc": [3.747, 3.749, 3.761, 3.8151, 3.8172, 3.8186, 3.8194, 3.8253, 3.8422, 3.8535], "rp": [451.0, 454.0, 454.0, 476.0, 501.0, 501.0, 501.0, 510.0, 527.0, 556.0], "plots_history": [340, 339, 339, 361, 361, 361, 360, 361, 382, 432]}, "November Storm": {"name": "November Storm", "plots": 314, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [6077.1, 6417.18, 6674.22, 6879.26, 7097.3, 3442.34, 3549.37, 3583.42, 3820.48, 5134.51], "rc": [5.9774, 5.9807, 5.9848, 5.9884, 5.9888, 5.9975, 5.9981, 5.9982, 5.9988, 6.0059], "rp": [653.0, 671.0, 687.0, 695.0, 705.0, 716.0, 729.0, 729.0, 739.0, 744.0], "plots_history": [273, 273, 273, 273, 273, 313, 313, 313, 313, 314]}, "Zandermaul": {"name": "Zandermaul", "plots": 249, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [164.66, 246.7, 286.75, 359.79, 389.84, 427.88, 560.93, 600.98, 600.98, 742.02], "rc": [1.6146, 1.6147, 1.6183, 1.6184, 1.6184, 1.6186, 1.6189, 1.619, 1.619, 1.6227], "rp": [353.0, 357.0, 362.0, 365.0, 368.0, 371.0, 376.0, 379.0, 379.0, 379.0], "plots_history": [249, 249, 249, 249, 249, 249, 249, 249, 249, 249]}, "Cory Dillmann": {"name": "Cory Dillmann", "plots": 255, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [21.55, 1.58, 8.61, 8.61, 44.64, 44.64, 19.71, 19.71, 32.74, 48.77], "rc": [0.9813, 0.9816, 0.9865, 0.9865, 0.9883, 0.9883, 0.9921, 0.9921, 0.9937, 0.9982], "rp": [188.0, 200.0, 203.0, 203.0, 209.0, 209.0, 232.0, 232.0, 239.0, 259.0], "plots_history": [203, 214, 216, 216, 218, 218, 244, 244, 248, 255]}, "MASCOTTE OFFICIAL": {"name": "MASCOTTE OFFICIAL", "plots": 175, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [176.09, 200.11, 163.13, 1204.15, 1556.18, 1556.18, 1556.18, 1556.18, 1556.18, 1556.18], "rc": [0.1089, 0.1122, 0.1176, 0.119, 0.1198, 0.1198, 0.1198, 0.1198, 0.1198, 0.1234], "rp": [148.0, 153.0, 159.0, 176.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0], "plots_history": [148, 149, 151, 175, 175, 175, 175, 175, 175, 175]}, "Test": {"name": "Test", "plots": 143, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [805.48, 841.51, 841.51, 1064.55, 1064.57, 1064.57, 1190.61, 1190.61, 1190.61, 1728.66], "rc": [0.641, 0.6417, 0.6452, 0.6893, 0.6894, 0.6894, 0.7105, 0.7105, 0.7105, 0.7184], "rp": [331.0, 335.0, 335.0, 348.0, 348.0, 348.0, 359.0, 359.0, 359.0, 383.0], "plots_history": [143, 143, 143, 143, 143, 143, 143, 143, 143, 143]}, "SlumLord": {"name": "SlumLord", "plots": 143, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [748.24, 748.24, 748.24, 748.24, 748.24, 653.27, 663.29, 663.29, 663.29, 663.29], "rc": [0.6465, 0.6465, 0.6501, 0.6501, 0.6501, 0.6502, 0.6505, 0.6505, 0.6505, 0.654], "rp": [123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0], "plots_history": [141, 141, 141, 141, 141, 143, 143, 143, 143, 143]}, "Jbreezy": {"name": "Jbreezy", "plots": 249, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [7006.15, 6558.18, 6641.21, 336.24, 1434.27, 1567.31, 1929.34, 2578.38, 2430.41, 2063.45], "rc": [0.954, 0.9576, 0.9684, 0.9822, 0.9836, 0.985, 0.9851, 0.9856, 0.2357, 0.2405], "rp": [168.0, 182.0, 192.0, 207.0, 213.0, 218.0, 218.0, 247.0, 255.0, 271.0], "plots_history": [126, 132, 132, 238, 238, 238, 238, 238, 238, 249]}, "kevlar": {"name": "kevlar", "plots": 99, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08], "rc": [2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984], "rp": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "plots_history": [99, 99, 99, 99, 99, 99, 99, 99, 99, 99]}, "Kolton": {"name": "Kolton", "plots": 43, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [60.0, 60.0, 60.0, 74.01, 74.01, 74.01, 74.01, 74.01, 74.01, 74.01], "rc": [0.0012, 0.0012, 0.0012, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015], "rp": [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0], "plots_history": [43, 43, 43, 43, 43, 43, 43, 43, 43, 43]}, "YoAxe12": {"name": "YoAxe12", "plots": 142, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [7.02, 7.02, 7.02, 113.03, 667.04, 287.06, 248.08, 346.1, 18.14, 162.17], "rc": [0.3169, 0.3169, 0.3169, 0.3231, 0.3271, 0.3288, 0.0789, 0.0887, 0.0895, 0.0949], "rp": [0.0, 0.0, 0.0, 62.0, 89.0, 100.0, 111.0, 136.0, 150.0, 192.0], "plots_history": [43, 43, 43, 68, 86, 98, 106, 120, 130, 142]}, "VicAdmin": {"name": "VicAdmin", "plots": 292, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [143.0, 42.01, 18.03, 37.04, 421.1, 1909.15, 4592.18, 5975.25, 29.37, 27.52], "rc": [0.0126, 0.0268, 0.0336, 0.1054, 0.235, 0.0086, 0.0752, 0.1477, 0.2624, 0.3498], "rp": [73.0, 177.0, 199.0, 277.0, 330.0, 371.0, 413.0, 447.0, 493.0, 559.0], "plots_history": [21, 54, 72, 139, 163, 177, 179, 180, 266, 292]}, "Mancunian": {"name": "Mancunian", "plots": 9, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [8622.0, 8622.0, 4310.0, 4310.0, 4310.0, 4310.0, 4310.0, 4310.0, 4310.0, 4310.0], "rc": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "rp": [16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0], "plots_history": [9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}, "Android Test": {"name": "Android Test", "plots": 6, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [3757.02, 3757.02, 3757.02, 3757.02, 3757.02, 3757.02, 3780.03, 3780.03, 3780.03, 3746.03], "rc": [0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1421], "rp": [53.0, 53.0, 53.0, 53.0, 53.0, 53.0, 57.0, 57.0, 57.0, 63.0], "plots_history": [5, 5, 5, 5, 5, 5, 5, 5, 5, 6]}, "EldenEarth1": {"name": "EldenEarth1", "plots": 4, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0], "rc": [0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068], "rp": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "plots_history": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4]}, "Kyjin92": {"name": "Kyjin92", "plots": 120, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [80.0, 41.02, 134.03, 232.04, 756.06], "rc": [0.0259, 0.1168, 0.1451, 0.1505, 0.1568], "rp": [55.0, 80.0, 85.0, 99.0, 127.0], "plots_history": [83, 94, 95, 96, 120]}, "CRM4lyfe": {"name": "CRM4lyfe", "plots": 110, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [488.0, 738.02, 3173.04, 3465.05, 4742.07], "rc": [0.0078, 0.0282, 0.0666, 0.0804, 0.089], "rp": [44.0, 100.0, 129.0, 159.0, 159.0], "plots_history": [72, 98, 100, 109, 110]}, "MortuusTemplum": {"name": "MortuusTemplum", "plots": 41, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [3082.0, 3082.0, 282.0, 282.0, 282.0], "rc": [0.0001, 0.0001, 0.0003, 0.0003, 0.0003], "rp": [0.0, 0.0, 3.0, 3.0, 3.0], "plots_history": [11, 11, 41, 41, 41]}, "Frisky Jackal": {"name": "Frisky Jackal", "plots": 27, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "eb": [4352.0, 3157.0, 3323.0, 2950.01, 3785.01], "rc": [0.0001, 0.0001, 0.0001, 0.0001, 0.0001], "rp": [4.0, 10.0, 14.0, 21.0, 58.0], "plots_history": [9, 22, 22, 26, 27]}, "MexicanSavage": {"name": "MexicanSavage", "plots": 47, "dates": ["2026-10-31", "2026-11-01", "2026-11-02"], "eb": [1678.0, 2189.0, 93.0], "rc": [0.0, 0.0005, 0.0006], "rp": [0.0, 27.0, 27.0], "plots_history": [25, 25, 47]}, "CHAO": {"name": "CHAO", "plots": 20, "dates": ["2026-11-02"], "eb": [80.0], "rc": [0.0002], "rp": [21.0], "plots_history": [20]}};
+const sortedNames = ["imacatmeow", "Davinci Machen", "Jess", "November Storm", "VicAdmin", "Cory Dillmann", "Zandermaul", "Jbreezy", "MASCOTTE OFFICIAL", "Test", "SlumLord", "YoAxe12", "Kyjin92", "CRM4lyfe", "kevlar", "MexicanSavage", "Kolton", "MortuusTemplum", "Frisky Jackal", "CHAO", "Mancunian", "Android Test", "EldenEarth1"];
+const globalData = {"dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"], "total": [17, 17, 17, 17, 17, 21, 21, 22, 22, 23], "new": [17, 0, 0, 0, 0, 4, 0, 1, 0, 1], "latest_total": 23, "latest_new": 1};
+
+let currentMetric = 'eb';
+let chartInstance = null;
+let globalChartInstance = null;
+let currentGlobalMetric = 'total';
+
+const select = document.getElementById('playerSelect');
+sortedNames.forEach(name => {
+  const opt = document.createElement('option');
+  opt.value = name;
+  opt.innerText = `${name} (${players[name].plots} plots)`;
+  select.appendChild(opt);
+});
+
+function getMetricConfig(metric) {
+  const configs = {
+    'eb': { label: 'Total EB', color: '#2962ff', bg: 'rgba(41, 98, 255, 0.15)' },
+    'rc': { label: 'Total RC', color: '#f7a600', bg: 'rgba(247, 166, 0, 0.15)' },
+    'plots_history': { label: 'Plots Owned', color: '#089981', bg: 'rgba(8, 153, 129, 0.15)' },
+    'rp': { label: 'Total RP', color: '#e91e63', bg: 'rgba(233, 30, 99, 0.15)' }
+  };
+  return configs[metric];
+}
+
+function renderChart() {
+  const name = select.value;
+  const p = players[name];
+  const conf = getMetricConfig(currentMetric);
+
+  const lastIdx = p.dates.length - 1;
+  document.getElementById('statPlots').innerText = p.plots_history[lastIdx];
+  document.getElementById('statEB').innerText = Number(p.eb[lastIdx]).toLocaleString();
+  document.getElementById('statRC').innerText = Number(p.rc[lastIdx]).toLocaleString();
+  document.getElementById('statRP').innerText = Number(p.rp[lastIdx]).toLocaleString();
+
+  const ctx = document.getElementById('tradingChart').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: p.dates,
+      datasets: [{
+        label: conf.label,
+        data: p[currentMetric],
+        borderColor: conf.color,
+        backgroundColor: conf.bg,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+        pointBackgroundColor: conf.color
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e222d',
+          titleColor: '#fff',
+          bodyColor: conf.color,
+          borderColor: '#2a2e39',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#2a2e39' },
+          ticks: { color: '#787b86', maxTicksLimit: 6 }
+        },
+        y: {
+          grid: { color: '#2a2e39' },
+          ticks: { color: '#787b86' }
+        }
+      }
+    }
+  });
+}
+
+function setMetric(metric, btn) {
+  currentMetric = metric;
+  document.querySelectorAll('.player-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderChart();
+}
+
+function updatePlayer() {
+  renderChart();
+}
+
+function renderGlobalChart() {
+  const ctx = document.getElementById('globalChart').getContext('2d');
+  if (globalChartInstance) globalChartInstance.destroy();
+
+  const isBar = currentGlobalMetric === 'new';
+  const label = isBar ? 'New Real Players Joined' : 'Total Real Players';
+  const color = isBar ? '#089981' : '#2962ff';
+  const bg = isBar ? 'rgba(8, 153, 129, 0.4)' : 'rgba(41, 98, 255, 0.15)';
+
+  globalChartInstance = new Chart(ctx, {
+    type: isBar ? 'bar' : 'line',
+    data: {
+      labels: globalData.dates,
+      datasets: [{
+        label: label,
+        data: isBar ? globalData.new : globalData.total,
+        borderColor: color,
+        backgroundColor: bg,
+        borderWidth: isBar ? 1.5 : 2.5,
+        fill: true,
+        tension: 0.2,
+        borderRadius: isBar ? 4 : 0,
+        pointRadius: isBar ? 0 : 3,
+        pointBackgroundColor: color
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e222d',
+          titleColor: '#fff',
+          bodyColor: color,
+          borderColor: '#2a2e39',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#2a2e39' },
+          ticks: { color: '#787b86', maxTicksLimit: 6 }
+        },
+        y: {
+          beginAtZero: isBar,
+          grid: { color: '#2a2e39' },
+          ticks: { color: '#787b86', precision: 0 }
+        }
+      }
+    }
+  });
+}
+
+function setGlobalMetric(metric, btn) {
+  currentGlobalMetric = metric;
+  document.querySelectorAll('.global-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGlobalChart();
+}
+
+renderChart();
+renderGlobalChart();
+</script>
+</body>
+</html>

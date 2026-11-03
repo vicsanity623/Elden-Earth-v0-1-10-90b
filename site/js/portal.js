@@ -27,6 +27,7 @@
     { href: "community.html", label: "Community" },
     { href: "trade.html", label: "Trading" },
     { href: "rewards.html", label: "Rewards" },
+    { href: "growth.html", label: "Growth" },
     { href: "roadmap.html", label: "Roadmap" },
     { href: "downloads.html", label: "Downloads" },
     { href: "about.html", label: "About" },
@@ -87,9 +88,9 @@
       "</a>" +
       "<nav class=\"site-nav\">" + links + "</nav>" +
       "<div class=\"header-cta\">" +
-      "<div class=\"auth-chip\" id=\"site-auth-chip\" title=\"Signed in — your Reward Points\">" +
+      "<a class=\"auth-chip\" id=\"site-auth-chip\" href=\"" + url("player.html") + "\" title=\"Your player profile — plots, events, receipts &amp; growth\">" +
       "<span id=\"site-auth-avatar\" class=\"chip-avatar\"></span><span id=\"site-auth-name\">Traveler</span>" +
-      "<span class=\"rp\" id=\"site-auth-rp\">0 RP</span></div>" +
+      "<span class=\"rp\" id=\"site-auth-rp\">0 RP</span></a>" +
       "<button class=\"btn btn-primary btn-sm\" id=\"site-signin\">Sign in with Google</button>" +
       "<a class=\"btn btn-danger btn-sm\" href=\"" + url("game.html") + "\">▶ Play Now</a>" +
       "</div></div></header>"
@@ -104,6 +105,7 @@
       "<li><a href=\"" + url("game.html") + "\">Play in browser</a></li>" +
       "<li><a href=\"" + url("downloads.html") + "\">Downloads</a></li>" +
       "<li><a href=\"" + url("roadmap.html") + "\">Roadmap</a></li>" +
+      "<li><a href=\"" + url("growth.html") + "\">Player growth</a></li>" +
       "<li><a href=\"" + url("faq.html") + "\">FAQ</a></li></ul></div>" +
       "<div><h4>Learn</h4><ul>" +
       "<li><a href=\"" + url("guides/getting-started.html") + "\">Getting started</a></li>" +
