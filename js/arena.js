@@ -20,12 +20,9 @@ const Arena = (() => {
   // derived from this locally so it ticks once a second without a round trip
   // per tick.
   let lastStateAt = 0;
-  // Guards the countdown-completion re-fetch from firing once per render tick
-  // while the request is still in flight.
-  let regenRefetchPending = false;
-  // ...and from firing once per tick when the server clock lags and still
-  // reports the countdown as already elapsed.
-  let lastRegenRefetchAt = 0;
+  // (The old regen-completion re-fetch guards lived here — tickLive now lands
+  // free entries locally, so there is no per-tick network refresh left to
+  // guard. See tickLive.)
   let countdownTimer = null;
 
   /* ---------------------------------------------------------- formatting */
@@ -287,12 +284,93 @@ const Arena = (() => {
       // this the countdown would sit frozen until the next round trip.
       lastStateAt = Date.now();
       renderLobby();
+      // Arm the 30-minute refresh cycle + the week-end final-standings refresh.
+      scheduleGlobalRefresh();
       // 🏁 End-of-week results land as a staged payout — surface them the
       // moment they exist (once per lobby session; the banner + the Rewards
       // button cover re-opening).
       maybeAutoOpenResults(d);
     }
     return d;
+  }
+
+  // mmss/format helper shared by renderLobby and the 1s live tick.
+  function mmss(ms) {
+    const s = Math.ceil(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  /**
+   * 🏁 SECOND-TICK WITHOUT RE-RENDERING (2026-11-03 polish). The lobby used
+   * to be rebuilt every second just to move the countdowns — which threw the
+   * player's scroll back to the top of the 500-row ranks list. Only the
+   * countdown SPANS move here; the lobby itself is rebuilt solely by
+   * fetchState and the player's own actions.
+   */
+  function tickLive() {
+    const m = el(MODAL_ID);
+    if (!m || m.classList.contains("hidden")) {
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+      return;
+    }
+    const d = lastState || {};
+    const me = d.me || {};
+    const rules = d.rules || {};
+    const season = d.season || {};
+    const remain = Math.max(0, (Number(season.end) || Date.now()) - Date.now());
+
+    const cd = el("ar-countdown");
+    if (cd) cd.textContent = fmtCountdown(remain);
+
+    // Live free-entry regen countdown (server snapshot + local drift).
+    const sentNextIn = (me.freeNextInMs === null || me.freeNextInMs === undefined)
+      ? null : Number(me.freeNextInMs);
+    const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
+    const nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
+    const freeLeft = Number(me.freeLeft) || 0;
+    const freeBankMax = Number(me.freeBankMax) || 5;
+
+    if (nextIn !== null && nextIn > 0 && freeLeft < freeBankMax) {
+      const t = mmss(nextIn);
+      const regenEl = el("ar-regen");
+      if (regenEl) regenEl.textContent = t;
+      const btnTimerEl = el("ar-btn-timer");
+      if (btnTimerEl) btnTimerEl.textContent = t;
+      return;
+    }
+
+    // The regen countdown reached zero: a real free entry has landed. Adopt it
+    // LOCALLY (the server granted it at that moment — this is just the view)
+    // and re-render once so the Battle button unlocks. No network refresh:
+    // the lobby follows the 30-minute cadence below.
+    if (nextIn !== null && nextIn <= 0 && freeLeft < freeBankMax) {
+      me.freeLeft = Math.min(freeBankMax, freeLeft + 1);
+      me.freeNextInMs = Number(rules.freeRegenMs) || 120000;
+      lastStateAt = Date.now();
+      renderLobby();
+    }
+  }
+
+  // 🏁 REFRESH CADENCE: global refreshes happen on open, every 30 minutes,
+  // once 30s before the week ends (to land the final ranking positions before
+  // the snapshot freezes the board), and right after the player's own actions.
+  // Nothing else touches the network — and nothing rebuilds the lobby.
+  const GLOBAL_REFRESH_MS = 30 * 60 * 1000;
+  let globalTimer = null;
+  let weekEndTimer = null;
+
+  function scheduleGlobalRefresh() {
+    if (globalTimer) clearTimeout(globalTimer);
+    if (weekEndTimer) clearTimeout(weekEndTimer);
+    globalTimer = setTimeout(async () => {
+      await fetchState();
+      scheduleGlobalRefresh();
+    }, GLOBAL_REFRESH_MS);
+    // Final-standings refresh 30s before the week ends.
+    const end = Number((lastState && lastState.season && lastState.season.end) || 0);
+    if (end > Date.now()) {
+      weekEndTimer = setTimeout(() => { fetchState(); }, Math.max(2000, end - Date.now() - 30000));
+    }
   }
 
   // 🏁 One auto-open per lobby session: a returning player is greeted with
@@ -349,6 +427,11 @@ const Arena = (() => {
   function renderLobby() {
     const box = el("ar-lobby-body");
     if (!box) return;
+    // 🏁 Preserve the player's scroll in the 500-row ranks list across
+    // re-renders. (Before this, the 1-second ticker rebuilt the whole lobby
+    // and threw the scroll back to the top — you could never read past #5.)
+    const prevScroll = box.querySelector(".ar-ranks-scroll");
+    const keepScroll = prevScroll ? prevScroll.scrollTop : 0;
     const d = lastState || {};
     const season = d.season || {};
     const me = d.me || {};
@@ -373,29 +456,17 @@ const Arena = (() => {
     const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
     let nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
 
-    // When the locally-ticked countdown reaches zero a real entry has landed,
-    // but the server still holds the old snapshot. Re-fetch so the Battle
-    // button unlocks instead of sitting stale until the player taps it.
-    //
-    // Cooldown-guarded: if the server clock lags the client's, the response
-    // can still read <= 0, and without this the guard would reset and fire
-    // another fetch on every 1s tick — one request per second, forever.
-    if (nextIn !== null && nextIn <= 0 && freeLeft < freeBankMax
-        && !regenRefetchPending && Date.now() - lastRegenRefetchAt > 5000) {
-      lastRegenRefetchAt = Date.now();
-      regenRefetchPending = true;
-      fetchState().then(() => { regenRefetchPending = false; });
-    }
+    // (The old code re-fetched the whole state the moment the locally-ticked
+    // regen countdown reached zero — a network refresh + full re-render every
+    // 2 minutes that also threw the ranks scroll around. tickLive() now lands
+    // that free entry LOCALLY; real refreshes follow the 30-minute cadence.)
 
-    const mmss = (ms) => {
-      const s = Math.ceil(ms / 1000);
-      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-    };
+    // (mmss lives at module scope now — shared with the 1s live tick.)
 
     // Footer button state. Order matters: the daily cap outranks everything,
     // then a banked free entry, then an affordable paid bypass, then either
     // "wait for the timer" or "you are out" — never the old flat dead-end.
-    let btnLabel, btnSub = "", btnDisabled = false;
+    let btnLabel, btnSub = "", btnDisabled = false, btnTimer = "";
     if (usedToday >= maxDay) {
       btnLabel = "Daily limit reached";
       btnSub = `${usedToday}/${maxDay} battles used — resets at midnight`;
@@ -407,8 +478,10 @@ const Arena = (() => {
       btnLabel = `Battle (${paidCost} AP)`;
       btnSub = `Paid left ${paidLeft} · ${usedToday}/${maxDay} today`;
     } else if (nextIn !== null && nextIn > 0) {
-      // The fix for the old lockout: waiting, not out.
-      btnLabel = `Free entry in ${mmss(nextIn)}`;
+      // The fix for the old lockout: waiting, not out. The countdown lives in
+      // its own span so the 1s tick can update it WITHOUT re-rendering.
+      btnLabel = "Free entry in";
+      btnTimer = mmss(nextIn);
       btnSub = paidLeft > 0 ? `or ${paidCost} AP to skip the wait` : "Next free entry incoming";
       btnDisabled = true;
     } else if (paidLeft > 0) {
@@ -492,7 +565,7 @@ const Arena = (() => {
         </div>
         ${nextIn !== null && nextIn > 0 ? `
           <div class="ar-regen-line">
-            ⏳ Next free entry in <b>${mmss(nextIn)}</b> · fills to ${freeBankMax}
+            ⏳ Next free entry in <b id="ar-regen">${mmss(nextIn)}</b> · fills to ${freeBankMax}
           </div>` : (freeLeft >= freeBankMax ? `
           <div class="ar-regen-line full">✅ Free entry bank is full</div>` : "")}
       </div>
@@ -504,7 +577,7 @@ const Arena = (() => {
 
       <div class="ar-season-line">
         Week of ${escapeHtml(season.label || "")} —
-        <b>ENDS in ${fmtCountdown(remain)}</b>
+        <b>ENDS in <span id="ar-countdown">${fmtCountdown(remain)}</span></b>
       </div>
 
       ${me.defenderSet ? "" : `
@@ -516,7 +589,7 @@ const Arena = (() => {
       <div class="ar-actions">
         <button class="btn" id="ar-cancel-btn">Cancel</button>
         <button class="btn ar-battle-btn" id="ar-battle-btn" ${btnDisabled ? "disabled" : ""}>
-          ${escapeHtml(btnLabel)}<small>${escapeHtml(btnSub)}</small>
+          ${escapeHtml(btnLabel)}${btnTimer ? ` <span id="ar-btn-timer">${btnTimer}</span>` : ""}<small>${escapeHtml(btnSub)}</small>
         </button>
       </div>
 
@@ -525,6 +598,10 @@ const Arena = (() => {
         &nbsp;·&nbsp; You have <b style="color:#fff">${fmtNum(ap)} AP</b>
       </div>
     `;
+
+    // Restore the ranks-list scroll (see the note at the top of renderLobby).
+    const sc = box.querySelector(".ar-ranks-scroll");
+    if (sc && keepScroll) sc.scrollTop = keepScroll;
 
     const info = el("ar-info-btn");
     if (info) info.addEventListener("click", openRewards);
@@ -565,7 +642,9 @@ const Arena = (() => {
       if (!m || m.classList.contains("hidden")) {
         clearInterval(countdownTimer); countdownTimer = null; return;
       }
-      renderLobby();
+      // 🏁 Targeted ticks only — the 500-row ranks list is NEVER rebuilt on
+      // the second-tick (that is what reset the player's scroll to the top).
+      tickLive();
     }, 1000);
   }
 
@@ -658,6 +737,8 @@ const Arena = (() => {
     const m = el(MODAL_ID);
     if (m) m.classList.add("hidden");
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    if (globalTimer) { clearTimeout(globalTimer); globalTimer = null; }
+    if (weekEndTimer) { clearTimeout(weekEndTimer); weekEndTimer = null; }
   }
 
   /* ------------------------------------------------------- defender */

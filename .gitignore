@@ -28,6 +28,7 @@ post-changelogzen.sh
 /tools/make-invite.js
 /tools/verify-discord-invite.js
 /tools/discord-invite-setup.js
+/tools/clean-purged-players.js
 
 # Peer
 SCPR.md
