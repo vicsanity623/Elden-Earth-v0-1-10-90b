@@ -4803,6 +4803,15 @@
       return Math.max(0, AD_SPIN_DAILY_CAP - used);
     }
 
+    // Keep in sync with `paid_spin_refill.cap` in functions/index.js — the
+    // bot-valve ceiling on daily Watch-Ad refills (+5 paid spins each).
+    const PAID_REFILL_ADS_DAILY_CAP = 20;
+    function adRefillsLeft() {
+      const st = Store.get();
+      const used = Number(st && st.player && st.player.adRewardCounts && st.player.adRewardCounts.paid_spin_refill) || 0;
+      return Math.max(0, PAID_REFILL_ADS_DAILY_CAP - used);
+    }
+
     function updateSpinButtonState() {
       const is10x = toggle10x && toggle10x.checked;
       const mult = is10x ? 10 : 1;
@@ -4823,12 +4832,14 @@
 
       // 2. Daily free-spin status line
       const spinsLeftEl = el("wheel-spins-left");
+      // 💰 Paid spins are capped per day (economy rebalance) — Watch-Ad
+      // refills lift TODAY's cap by 5 each (player.paidSpinBonus).
+      const paidBonus = Number(st && st.player && st.player.paidSpinBonus) || 0;
+      const paidCap = ((typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10) + paidBonus;
+      const paidUsed = Number(st && st.player && st.player.paidSpinsToday) || 0;
+      const paidLeft = Math.max(0, paidCap - paidUsed);
       if (spinsLeftEl) {
         const freeLabel = freeSpinsLeft > freeCap ? `${freeSpinsLeft}` : `${freeSpinsLeft}/${freeCap}`;
-        // 💰 Paid spins are capped per day (economy rebalance) — show the count.
-        const paidCap = (typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10;
-        const paidUsed = Number(st && st.player && st.player.paidSpinsToday) || 0;
-        const paidLeft = Math.max(0, paidCap - paidUsed);
         spinsLeftEl.innerHTML = `Spins remaining today: ${freeLabel}`
           + (adLeft > 0 ? ` &middot; ${adLeft} ad spin${adLeft === 1 ? "" : "s"} left` : "")
           + ` &middot; ${paidLeft}/${paidCap} paid`;
@@ -4865,6 +4876,19 @@
           if (payBtn) payBtn.classList.add("hidden");
         }
       }
+
+      // 5. 🎬 Watch-Ad refill: when EVERY daily spin is spent (free, ad and
+      //    paid), offer +5 more paid spins per ad. The grant is server-side
+      //    (claimAdReward "paid_spin_refill") — spins still cost 2◆ each.
+      const refillBtn = el("spin-ad-refill-btn");
+      if (refillBtn) {
+        const refillLeft = adRefillsLeft();
+        const noSpinsLeft = paidLeft <= 0 && !hasFree && adLeft <= 0;
+        const show = noSpinsLeft && adsReady && refillLeft > 0
+          && !el("wheel-result")?.textContent?.includes("Spinning");
+        refillBtn.classList.toggle("hidden", !show);
+        if (show) refillBtn.innerHTML = `🎬 Watch Ad · +5 Spins (${refillLeft} left)`;
+      }
     }
 
     if (toggle10x) {
@@ -4879,6 +4903,55 @@
         spinBtn.dataset.mode = "pay"; // skip the ad branch in the shared flow
         spinBtn.click();
       }
+    });
+
+    // 🎬 Watch Ad → +5 paid spins. Appears when every daily spin is spent and
+    // lifts TODAY's paid cap by 5 per ad. Same rule as every ad reward: the
+    // ad promise alone grants nothing — claimAdReward does it server-side.
+    el("spin-ad-refill-btn")?.addEventListener("click", async () => {
+      const btn = el("spin-ad-refill-btn");
+      if (!btn || btn.disabled) return;
+      if (typeof Store !== "undefined" && !Store.isSessionActive()) {
+        showToast("🔒 Account active on another tab. Close the other tab first.", 4000);
+        return;
+      }
+      if (typeof ServerAntiCheat === "undefined" || !ServerAntiCheat.isReady()) {
+        showToast("⚠️ Server connection required.", 3500);
+        return;
+      }
+      btn.disabled = true;
+      const label = btn.innerHTML;
+      btn.innerHTML = "Loading ad…";
+      const earned = await Ads.showRewarded("paid_spin_refill");
+      if (!earned) {
+        showToast("Ad not completed — no spins granted.", 3500);
+        btn.disabled = false;
+        btn.innerHTML = label;
+        return;
+      }
+      const claim = await ServerAntiCheat.claimAdReward("paid_spin_refill");
+      if (!claim || !claim.ok) {
+        showToast(claim && claim.reason === "daily_cap"
+          ? "🎬 All ad spin refills used today — resets at midnight UTC."
+          : claim && claim.reason === "too_soon"
+            ? "⏳ Wait a moment before the next ad."
+            : "⚠️ Spin refill could not be granted.", 4000);
+        btn.disabled = false;
+        btn.innerHTML = label;
+        updateSpinButtonState();
+        return;
+      }
+      const st0 = Store.get();
+      if (st0 && st0.player) {
+        st0.player.paidSpinBonus = Number(claim.paidSpinBonus) || 0;
+        st0.player.paidSpinsToday = Number(claim.paidSpinsToday) || 0;
+        if (claim.adRewardCounts) st0.player.adRewardCounts = claim.adRewardCounts;
+        Store.save(true);
+      }
+      showToast(`🎬 +5 paid spins for today — ${claim.paidSpinsLeft} paid spins ready!`, 4000);
+      btn.disabled = false;
+      btn.innerHTML = label;
+      updateSpinButtonState();
     });
 
     // --- Spin Button Execution ---
@@ -4977,9 +5050,11 @@
         state.eb = spinResult.nextEb;
         state.player.freeSpins = spinResult.nextFreeSpins;
         state.player.freeSpinsNoDiamondCost = spinResult.nextFreeSpins > 0;
-        // 💰 Paid-spin counter for the daily cap (server is the authority).
+        // 💰 Paid-spin counter for the daily cap (server is the authority,
+        // including any Watch-Ad refill bonus on today's cap).
         if (typeof spinResult.paidSpinsLeft === "number") {
-          const paidCap = (typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10;
+          const paidBonus = Number(state.player.paidSpinBonus) || 0;
+          const paidCap = ((typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10) + paidBonus;
           state.player.paidSpinsToday = Math.max(0, paidCap - spinResult.paidSpinsLeft);
         }
         Store.save(true);

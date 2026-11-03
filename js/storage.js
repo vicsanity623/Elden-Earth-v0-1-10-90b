@@ -545,6 +545,14 @@ const Store = (() => {
             state.player.adRecallCredits = Number(adState.adRecallCredits) || 0;
             state.player.adExtractDoubles = Number(adState.adExtractDoubles) || 0;
             state.player.adRewardCounts = adState.adRewardCounts || {};
+            // Paid-spin counters (incl. Watch-Ad refill bonus) so the wheel
+            // shows the true "x/y paid" on a fresh device instead of 0/10.
+            if (adState.paidSpinsToday !== undefined) {
+              state.player.paidSpinsToday = Number(adState.paidSpinsToday) || 0;
+            }
+            if (adState.paidSpinBonus !== undefined) {
+              state.player.paidSpinBonus = Number(adState.paidSpinBonus) || 0;
+            }
             mirrorDirty = true;
           }
           if (mirrorDirty) localStorage.setItem(KEY, JSON.stringify(state));

@@ -459,6 +459,113 @@
     };
   }
 
+  // ---------- receipts: live listeners ----------
+  var receiptSources = { ledger: [], conversions: [], withdrawals: [] };
+  var conversionsAvailable = true;
+  var receiptUnsubs = [];
+
+  /**
+   * Realtime subscription to the NEWEST `limitN` docs for one player.
+   *
+   * Primary query: where(uid==) + orderBy(field desc) — needs a composite
+   * index (see firestore.indexes.json).
+   *
+   * Fallback: orderBy(documentId desc) — needs NO composite index, and the
+   * ledger's time-prefixed IDs (el_<base36 ms>_…) make descending ID order
+   * ~newest-first. This replaces the old unordered fallback, which returned
+   * the OLDEST documents first (Firestore returns unordered results in
+   * doc-ID order) — the bug that froze receipts at October.
+   */
+  function listenLatest(col, uidField, uid, orderField, limitN, onRows, onFail) {
+    var fdb = firebase.firestore();
+    var base = fdb.collection(col).where(uidField, "==", uid);
+    var unsub = null;
+    var startFallback = function () {
+      var fid = (firebase.firestore.FieldPath && firebase.firestore.FieldPath.documentId)
+        ? firebase.firestore.FieldPath.documentId() : "__name__";
+      unsub = base.orderBy(fid, "desc").limit(limitN).onSnapshot(
+        function (snap) {
+          onRows(snap.docs.map(function (d) {
+            var x = d.data() || {};
+            x.__id = d.id;
+            return x;
+          }));
+        },
+        function () { onRows([]); if (onFail) onFail(); }
+      );
+    };
+    try {
+      unsub = base.orderBy(orderField, "desc").limit(limitN).onSnapshot(
+        function (snap) {
+          onRows(snap.docs.map(function (d) {
+            var x = d.data() || {};
+            x.__id = d.id;
+            return x;
+          }));
+        },
+        function () {
+          try { if (unsub) unsub(); } catch (e) {}
+          startFallback();
+        }
+      );
+    } catch (e) {
+      startFallback();
+    }
+    return function () { try { if (unsub) unsub(); } catch (e) {} };
+  }
+
+  function startReceiptListeners(uid) {
+    stopReceiptListeners();
+    receiptUnsubs.push(listenLatest("economy_ledger", "uid", uid, "ts", 250, function (rows) {
+      receiptSources.ledger = rows;
+      rebuildReceipts();
+    }));
+    receiptUnsubs.push(listenLatest("cashout_conversions", "uid", uid, "timestamp", 100, function (rows) {
+      receiptSources.conversions = rows;
+      rebuildReceipts();
+    }, function () {
+      conversionsAvailable = false;
+      rebuildReceipts();
+    }));
+    receiptUnsubs.push(listenLatest("withdrawal_requests", "userId", uid, "requestedAt", 50, function (rows) {
+      receiptSources.withdrawals = rows;
+      rebuildReceipts();
+    }));
+  }
+
+  function stopReceiptListeners() {
+    receiptUnsubs.forEach(function (u) { try { u(); } catch (e) {} });
+    receiptUnsubs = [];
+  }
+
+  function rebuildReceipts() {
+    var seenRequests = {};
+    (receiptSources.withdrawals || []).forEach(function (w) {
+      if (w.__id) seenRequests[String(w.__id)] = true;
+    });
+    var rows = [];
+    (receiptSources.ledger || []).forEach(function (e) {
+      var r = ledgerRow(e, seenRequests);
+      if (r) rows.push(r);
+    });
+    (receiptSources.conversions || []).forEach(function (c) { rows.push(conversionRow(c)); });
+    (receiptSources.withdrawals || []).forEach(function (w) { rows.push(withdrawalRow(w)); });
+    rows.sort(function (a, b) { return b.ts - a.ts; });
+    receipts = rows;
+    renderReceipts();
+    // Conversion receipts need the owner-read rule on cashout_conversions —
+    // tell the player if that deploy has not landed yet.
+    var box = $("pp-receipts");
+    if (box && !conversionsAvailable && !document.getElementById("pp-conv-note")) {
+      var note = document.createElement("div");
+      note.id = "pp-conv-note";
+      note.className = "pp-sub";
+      note.style.padding = "12px 18px";
+      note.textContent = "EB conversion receipts will appear here once the latest site rules are deployed.";
+      box.insertBefore(note, box.firstChild);
+    }
+  }
+
   // ---------- events ----------
   function rankIn(path, field, uid) {
     return firebase.firestore().collection(path)
@@ -552,38 +659,12 @@
     var privP = fdb.collection("saves_private").doc(uid).get().then(function (d) { return d.exists ? d.data() || {} : {}; }).catch(function () { return {}; });
     var regP = fdb.collection("players").doc(uid).get().then(function (d) { return d.exists ? d.data() || {} : {}; }).catch(function () { return {}; });
 
-    var ledgerP = fdb.collection("economy_ledger").where("uid", "==", uid)
-      .orderBy("ts", "desc").limit(250).get()
-      .then(function (snap) { return snap.docs.map(function (d) { return d.data() || {}; }); })
-      .catch(function () {
-        // Missing composite index → fetch unordered and sort locally.
-        return fdb.collection("economy_ledger").where("uid", "==", uid).limit(400).get()
-          .then(function (snap) {
-            return snap.docs.map(function (d) { return d.data() || {}; })
-              .sort(function (a, b) { return (Number(b.ts) || 0) - (Number(a.ts) || 0); });
-          })
-          .catch(function () { return []; });
-      });
+    // ---- receipts stream in LIVE (onSnapshot) — see startReceiptListeners
+    // below. New transactions appear the moment they land in Firestore.
+    startReceiptListeners(uid);
 
-    var convP = fdb.collection("cashout_conversions").where("uid", "==", uid).limit(100).get()
-      .then(function (snap) {
-        return snap.docs.map(function (d) { return d.data() || {}; })
-          .sort(function (a, b) { return (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0); });
-      })
-      .catch(function () { return null; }); // null = rules not deployed yet
-
-    var wdP = fdb.collection("withdrawal_requests").where("userId", "==", uid).limit(50).get()
-      .then(function (snap) {
-        return snap.docs.map(function (d) {
-          var w = d.data() || {};
-          w.__id = d.id;
-          return w;
-        }).sort(function (a, b) { return ms(b.requestedAt) - ms(a.requestedAt); });
-      })
-      .catch(function () { return []; });
-
-    Promise.all([saveP, privP, regP, ledgerP, convP, wdP]).then(function (res) {
-      var save = res[0], priv = res[1], reg = res[2], ledger = res[3], convs = res[4], withdrawals = res[5];
+    Promise.all([saveP, privP, regP]).then(function (res) {
+      var save = res[0], priv = res[1], reg = res[2];
 
       // ---- identity ----
       var name = reg.name || (save.player && save.player.name) || user.displayName || "Traveler";
@@ -640,31 +721,7 @@
       $("pp-ar-points").textContent = fmt(arena.points, 0);
       $("pp-ar-season").textContent = arena.weekKey || "—";
 
-      // ---- receipts ----
-      var seenRequests = {};
-      withdrawals.forEach(function (w) { if (w.__id) seenRequests[String(w.__id)] = true; });
-
-      var rows = [];
-      ledger.forEach(function (e) {
-        var r = ledgerRow(e, seenRequests);
-        if (r) rows.push(r);
-      });
-      if (convs) {
-        convs.forEach(function (c) { rows.push(conversionRow(c)); });
-      }
-      withdrawals.forEach(function (w) { rows.push(withdrawalRow(w)); });
-      rows.sort(function (a, b) { return b.ts - a.ts; });
-      receipts = rows;
-      receiptsShown = PAGE_SIZE;
-      renderReceipts();
-
-      if (!convs) {
-        var note = document.createElement("div");
-        note.className = "pp-sub";
-        note.style.padding = "12px 18px";
-        note.textContent = "EB conversion receipts will appear here once the latest site rules are deployed.";
-        $("pp-receipts").insertBefore(note, $("pp-receipts").firstChild);
-      }
+      // ---- receipts: streamed live by startReceiptListeners() ----
 
       // ---- events ----
       loadEvents(uid);
@@ -739,6 +796,7 @@
 
     firebase.auth().onAuthStateChanged(function (user) {
       if (!user) {
+        stopReceiptListeners();
         wall.style.display = "block";
         main.style.display = "none";
         return;
