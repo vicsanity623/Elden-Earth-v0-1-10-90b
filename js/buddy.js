@@ -1677,8 +1677,10 @@ const BuddySystem = (() => {
           buddy_in_training: "A parent is away training — wait for the session to end",
           bag_full: "Your Buddy Bag is full (30/30) — feast someone first",
           parent_cooldown: `A parent bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}` +
-            ((typeof Ads !== "undefined" && Ads.isRewardedAvailable()) ? " — or 🎬 Watch Ad to clear the rest." : ""),
+            ((typeof Ads !== "undefined" && Ads.isRewardedAvailable()) ? " — or 🎬 Watch Ad for a free breed." : ""),
           pair_cooldown: `This pair bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
+          insufficient_funds: `💰 Not enough to breed — costs ${d.needEb || 0} EB + ${d.needDiamonds || 0} 💎` +
+            ((typeof Ads !== "undefined" && Ads.isRewardedAvailable()) ? " (or 🎬 Watch Ad for a free breed)" : ""),
           too_soon: "Hold on a moment…",
         }[d.reason] || "Breeding failed — try again";
         toast(why);
@@ -1712,6 +1714,8 @@ const BuddySystem = (() => {
     const now = Date.now();
     const candidates = b.bag.filter(x => x && x.uid !== parentAUid);
     const adsReady = typeof Ads !== "undefined" && Ads.isRewardedAvailable();
+    const breedCost = (typeof CONFIG !== "undefined" && CONFIG.BREED_COST) || { eb: 250, diamonds: 8 };
+    const adBreedLabel = `🎬 Watch Ad — FREE Breed (save ${breedCost.eb} EB + ${breedCost.diamonds} 💎)`;
 
     buildModal(BREED_ID, `
       <button class="bd-close">✕</button>
@@ -1720,6 +1724,7 @@ const BuddySystem = (() => {
         Pick a partner for <b>${parentA.nickname}</b>. The baby is born fully
         grown at Level 5 with inherited IVs, stat mutations and a chance at a
         rarity upgrade. Parents rest <b>7 days</b>; this pair rests <b>30 days</b>.
+        Cost: <b>💰 ${breedCost.eb} EB + ${breedCost.diamonds} 💎</b> per baby.
       </p>
       <div class="bd-breed-list" id="bd-breed-list"></div>
       <div class="bd-empty" style="display:${candidates.length ? "none" : "block"}">
@@ -1727,7 +1732,7 @@ const BuddySystem = (() => {
       </div>
       ${adsReady ? `
       <div class="bd-row" style="margin-top:10px">
-        <button class="bd-btn gold" id="bd-breed-ad">🎬 Watch Ad — Clear Parent Rest</button>
+        <button class="bd-btn gold" id="bd-breed-ad">${adBreedLabel}</button>
       </div>` : ""}
       <div class="bd-row" style="margin-top:10px">
         <button class="bd-btn danger" id="bd-breed-confirm" disabled>Select a partner</button>
@@ -1736,9 +1741,9 @@ const BuddySystem = (() => {
     `);
     wireClose(BREED_ID);
 
-    // 🎬 Rewarded placement (breed_refresh): mints a server-held parent-rest
-    // credit. breedBuddy consumes it ONLY if a parent is actually resting —
-    // a credit minted for a ready pair simply stays banked (cap 2/day).
+    // 🎬 Rewarded placement (breed_refresh): mints a server-held FREE BREED
+    // credit — breedBuddy consumes it to waive the EB/Diamonds cost AND the
+    // parent rest. An unused credit stays banked (cap 2/day).
     const adBtn = document.getElementById("bd-breed-ad");
     if (adBtn) adBtn.addEventListener("click", async () => {
       adBtn.disabled = true;
@@ -1746,23 +1751,23 @@ const BuddySystem = (() => {
       const earned = await Ads.showRewarded("breed_refresh");
       if (!earned) {
         adBtn.disabled = false;
-        adBtn.textContent = "🎬 Watch Ad — Clear Parent Rest";
-        toast("Ad not completed — no rest cleared.");
+        adBtn.textContent = adBreedLabel;
+        toast("Ad not completed — no free breed granted.");
         return;
       }
       const claim = await ServerAntiCheat.claimAdReward("breed_refresh");
       if (!claim || !claim.ok) {
         adBtn.disabled = false;
-        adBtn.textContent = "🎬 Watch Ad — Clear Parent Rest";
+        adBtn.textContent = adBreedLabel;
         toast(claim && claim.reason === "daily_cap"
-          ? "🎬 No ad refreshes left today — the rest finishes on its own."
-          : "⚠️ Could not clear the rest.", 4000);
+          ? "🎬 No free breeds left today."
+          : "⚠️ Could not grant the free breed.", 4000);
         return;
       }
       breedAdCredit = true;
-      adBtn.textContent = "✅ Rest cleared — pick a pair and breed";
+      adBtn.textContent = "✅ Free breed ready — pick a pair and breed";
       adBtn.disabled = true;
-      toast("🎬 Parent rest cleared! (The 30-day pair lock still applies.)");
+      toast("🎬 Free breed unlocked! (Cost + parent rest waived once. The 30-day pair lock still applies.)");
     });
 
     let selected = null;
@@ -1845,6 +1850,7 @@ const BuddySystem = (() => {
           already_training: "Another buddy is already training — wait for it to finish",
           claim_first: "Claim your finished training rewards first",
           buddy_not_found: "That buddy is no longer in your bag",
+          insufficient_funds: `💰 Not enough — this session costs ${d.needEb || 0} EB${d.needDiamonds ? " + " + d.needDiamonds + " 💎" : ""}`,
           too_soon: "Hold on a moment…",
         }[d.reason] || "Could not start training";
         toast(why);
@@ -1852,6 +1858,9 @@ const BuddySystem = (() => {
       }
       const b = buddyState();
       if (d.training) b.training = d.training;
+      if (d.cost && (d.cost.eb || d.cost.diamonds)) {
+        toast(`🏋️ Training started — paid ${d.cost.eb} EB${d.cost.diamonds ? " + " + d.cost.diamonds + " 💎" : ""}`);
+      }
       persist();
       renderHudBadge();
       return d;
@@ -1940,12 +1949,15 @@ const BuddySystem = (() => {
       const hours = dur.ms / 3600000;
       const estXp = Math.max(1, Math.floor(hours * (18 + inst.level * 6) * mul));
       const odds = TRAIN_ODDS[hours] || TRAIN_ODDS[1];
+      const cost = (typeof CONFIG !== "undefined" && CONFIG.TRAIN_COSTS && CONFIG.TRAIN_COSTS[hours]) || { eb: 0, diamonds: 0 };
+      const costLabel = `💰 ${cost.eb} EB${cost.diamonds ? " + " + cost.diamonds + " 💎" : ""}`;
       const card = document.createElement("div");
       card.className = "bd-train-card";
       card.innerHTML = `
         <div class="tc-dur">${dur.label}</div>
         <div class="tc-xp">≈ ${estXp} XP</div>
         <div class="tc-loot">
+          ${costLabel}<br/>
           🪙 EB ${odds.eb}% · 💎 ${odds.dia}%<br/>🗺️ Plot ${odds.plot ? odds.plot + "%" : "—"}
         </div>
       `;

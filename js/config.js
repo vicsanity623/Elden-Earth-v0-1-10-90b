@@ -117,6 +117,18 @@ const CONFIG = {
     { type: "eb",              amount: 50, label: "50 EB", color: "#d4af61", weight: 5   },
   ],
   SPIN_COST_DIAMONDS: 2,
+  // 💰 Buddy/wheel economy (2026-11-03) — MUST stay identical to
+  // TRAIN_COSTS/BREED_COST in functions/buddy.js and PAID_SPINS_DAILY_CAP in
+  // functions/index.js. The SERVER is the authority; these mirrors exist only
+  // to render prices and spin counts in the UI.
+  TRAIN_COSTS: {
+    1:  { eb: 15,  diamonds: 0 },
+    4:  { eb: 50,  diamonds: 2 },
+    12: { eb: 150, diamonds: 5 },
+    24: { eb: 300, diamonds: 12 },
+  },
+  BREED_COST: { eb: 250, diamonds: 8 },
+  PAID_SPINS_DAILY_CAP: 10,
   
   // --- Realm Citadels & Dyson Sphere Holds ---
   CITADEL_UNLOCK_BALANCE: 0.01,        // $0.01 threshold to unlock the Capsule

@@ -4811,8 +4811,13 @@
       const spinsLeftEl = el("wheel-spins-left");
       if (spinsLeftEl) {
         const freeLabel = freeSpinsLeft > freeCap ? `${freeSpinsLeft}` : `${freeSpinsLeft}/${freeCap}`;
+        // 💰 Paid spins are capped per day (economy rebalance) — show the count.
+        const paidCap = (typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10;
+        const paidUsed = Number(st && st.player && st.player.paidSpinsToday) || 0;
+        const paidLeft = Math.max(0, paidCap - paidUsed);
         spinsLeftEl.innerHTML = `Spins remaining today: ${freeLabel}`
-          + (adLeft > 0 ? ` &middot; ${adLeft} ad spin${adLeft === 1 ? "" : "s"} left` : "");
+          + (adLeft > 0 ? ` &middot; ${adLeft} ad spin${adLeft === 1 ? "" : "s"} left` : "")
+          + ` &middot; ${paidLeft}/${paidCap} paid`;
       }
 
       // 3. Top subtitle text
@@ -4930,6 +4935,7 @@
 
       const spinMsgs = {
         insufficient_diamonds: `Not enough diamonds — you need ${spinCost} diamonds!`,
+        paid_spin_cap: "🎬 All paid spins used today — free and ad spins still work. Resets at midnight UTC.",
         no_save_found: "⚠️ Account not found. Please restart the game.",
         functions_not_initialized: "⚠️ Server connection required to spin the wheel.",
         server_error: "⚠️ Wheel spin could not be verified.",
@@ -4957,6 +4963,11 @@
         state.eb = spinResult.nextEb;
         state.player.freeSpins = spinResult.nextFreeSpins;
         state.player.freeSpinsNoDiamondCost = spinResult.nextFreeSpins > 0;
+        // 💰 Paid-spin counter for the daily cap (server is the authority).
+        if (typeof spinResult.paidSpinsLeft === "number") {
+          const paidCap = (typeof CONFIG !== "undefined" && CONFIG.PAID_SPINS_DAILY_CAP) || 10;
+          state.player.paidSpinsToday = Math.max(0, paidCap - spinResult.paidSpinsLeft);
+        }
         Store.save(true);
         updateTopbar();
 
