@@ -26,6 +26,8 @@ post-changelogzen.sh
 /tools/verify-signup-block.js
 /tools/live-test-signup-block.js
 /tools/make-invite.js
+/tools/verify-discord-invite.js
+/tools/discord-invite-setup.js
 
 # Peer
 SCPR.md

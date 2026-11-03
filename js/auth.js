@@ -707,6 +707,12 @@ const Auth = (() => {
             } catch (err) {
               console.error("[Auth] Google sign-in error:", err);
               setSignInLoading(false);
+              // The beforeCreate gate rejected this signup (invite-only). Put
+              // the invite card + explanation on screen instead of a dead end.
+              if (typeof InviteGate !== "undefined" && InviteGate.show &&
+                  /invite-only|invite code/i.test(String((err && err.message) || ""))) {
+                InviteGate.show();
+              }
             }
           },
         });

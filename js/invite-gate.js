@@ -12,8 +12,14 @@
 // signup identity. Everything here exists to guide real humans through that
 // door and to tell them where to get a code.
 //
-// Returning players never need a code (codes gate ACCOUNT CREATION only) —
-// the "Already have an account?" link skips the card for them.
+// FAIL-VISIBLE (2026-11-02 fix): the card is shown by default and only taken
+// down when config explicitly says `required: false` (or the player already
+// redeemed/skipped). The first version tried to read Firebase config before
+// firebase.initializeApp() had run in this app's boot order — the thrown
+// "No Firebase App '[DEFAULT]'" killed the whole gate silently and new
+// players were dumped at a sign-in button whose server rejection they could
+// not act on. Waiting for Firebase init + defaulting to visible means a
+// config hiccup can never hide the door again.
 // ============================================================
 const InviteGate = (() => {
   const CONFIG_DOC = "invites";      // app_config/invites { required: true }
@@ -22,6 +28,7 @@ const InviteGate = (() => {
 
   let gateOn = false;
   let passed = false;
+  let wired = false;
 
   function el(id) { return document.getElementById(id); }
 
@@ -31,15 +38,27 @@ const InviteGate = (() => {
   }
 
   function card() { return el("invite-gate"); }
+  function hideCard() { const c = card(); if (c) c.classList.add("hidden"); }
+  function showCard() { const c = card(); if (c) c.classList.remove("hidden"); }
 
-  function hideCard() {
-    const c = card();
-    if (c) c.classList.add("hidden");
+  // Firebase initializes AFTER DOMContentLoaded in this app (auth.js owns
+  // initializeApp). Anything touching firebase.* before that throws
+  // "No Firebase App '[DEFAULT]'" — poll until it exists.
+  function firebaseReady() {
+    try {
+      return typeof firebase !== "undefined" && Array.isArray(firebase.apps) && firebase.apps.length > 0;
+    } catch (e) { return false; }
   }
 
-  function showCard() {
-    const c = card();
-    if (c) c.classList.remove("hidden");
+  function whenFirebaseReady(timeoutMs) {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      (function poll() {
+        if (firebaseReady()) return resolve(true);
+        if (Date.now() - started > (timeoutMs || 10000)) return resolve(false);
+        setTimeout(poll, 250);
+      })();
+    });
   }
 
   const REASON_MSG = {
@@ -77,7 +96,6 @@ const InviteGate = (() => {
         toast(REASON_MSG[d.reason] || REASON_MSG.invalid);
       }
     } catch (e) {
-      // Fail toward usability: network trouble must not brick the screen.
       toast(REASON_MSG.error);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Redeem invite code"; }
@@ -89,6 +107,16 @@ const InviteGate = (() => {
     try { localStorage.setItem(SKIP_KEY, "1"); } catch (e) {}
     hideCard();
     toast("Sign in with your existing account.");
+  }
+
+  function wireButtons() {
+    if (wired) return;
+    wired = true;
+    el("invite-verify-btn")?.addEventListener("click", verify);
+    el("invite-skip-link")?.addEventListener("click", (e) => { e.preventDefault(); skip(); });
+    [el("invite-code-input"), el("invite-email-input")].forEach((input) => {
+      input?.addEventListener("keydown", (e) => { if (e.key === "Enter") verify(); });
+    });
   }
 
   // Intercept sign-in taps while the gate is up — same capture-phase approach
@@ -108,41 +136,50 @@ const InviteGate = (() => {
   }
 
   async function attach() {
+    // Never-nag cases first (no Firebase needed).
     try {
-      // Returning player already signed in, or this device already redeemed
-      // a code / chose "I already play" — never nag again.
-      if (typeof firebase !== "undefined" && firebase.auth && firebase.auth().currentUser) {
-        passed = true;
-        return;
-      }
-      let stored = null;
-      try { stored = localStorage.getItem(PASS_KEY) || localStorage.getItem(SKIP_KEY); } catch (e) {}
+      const stored = localStorage.getItem(PASS_KEY) || localStorage.getItem(SKIP_KEY);
       if (stored) { passed = true; return; }
+    } catch (e) {}
 
-      const firestore = (typeof Store !== "undefined" && Store.getDb && Store.getDb())
-        || (typeof firebase !== "undefined" && firebase.firestore ? firebase.firestore() : null);
-      if (!firestore) return; // no config readable -> server still enforces
-      const snap = await firestore.collection("app_config").doc(CONFIG_DOC).get();
+    const ready = await whenFirebaseReady(10000);
+
+    // Signed-in returning player? Keep quiet.
+    try {
+      if (ready && firebase.auth && firebase.auth().currentUser) { passed = true; return; }
+    } catch (e) {}
+
+    // FAIL-VISIBLE: put the door up FIRST, then ask config whether to keep it.
+    // A missing/unreadable config keeps the card (the server-side gate is the
+    // real lock; the skip link keeps returning players moving).
+    gateOn = true;
+    showCard();
+    wireButtons();
+    attachObstructions();
+
+    if (!ready) {
+      console.warn("[InviteGate] Firebase never became ready — showing the door anyway.");
+      return;
+    }
+    try {
+      const snap = await firebase.firestore().collection("app_config").doc(CONFIG_DOC).get();
       const cfg = snap.exists ? snap.data() || {} : {};
-      if (cfg.required === false) return; // doors open — nothing to gate
-
-      gateOn = true;
-      showCard();
-      attachObstructions();
-
-      el("invite-verify-btn")?.addEventListener("click", verify);
-      el("invite-skip-link")?.addEventListener("click", (e) => { e.preventDefault(); skip(); });
-      [el("invite-code-input"), el("invite-email-input")].forEach((input) => {
-        input?.addEventListener("keydown", (e) => { if (e.key === "Enter") verify(); });
-      });
+      if (cfg.required === false) {
+        gateOn = false;
+        hideCard();
+      }
     } catch (e) {
-      // Config error: leave the card visible but never hard-lock the screen —
-      // the server-side gate is what actually protects the game.
-      console.warn("[InviteGate] attach failed:", e && e.message);
+      console.warn("[InviteGate] config read failed — keeping the door visible:", e && e.message);
     }
   }
 
-  return { attach, isPassed: () => passed || !gateOn };
+  return {
+    attach,
+    isPassed: () => passed || !gateOn,
+    // Called by auth.js when the server rejects a signup: make sure the door
+    // (and its explanation) is on screen at that exact moment.
+    show: () => { gateOn = true; showCard(); wireButtons(); },
+  };
 })();
 
 window.InviteGate = InviteGate;

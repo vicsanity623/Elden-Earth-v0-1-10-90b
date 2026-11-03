@@ -119,10 +119,31 @@ const HumanGate = (() => {
     placeContainer();
   }
 
+  // Firebase initializes AFTER DOMContentLoaded in this app (auth.js owns
+  // initializeApp) — touching firebase.* earlier throws "No Firebase App
+  // '[DEFAULT]'", which silently lifted this gate (caught 2026-11-02, same
+  // bug killed InviteGate's card). Poll until it exists.
+  function whenFirebaseReady(timeoutMs) {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      (function poll() {
+        let ready = false;
+        try {
+          ready = typeof firebase !== "undefined" && Array.isArray(firebase.apps) && firebase.apps.length > 0;
+        } catch (e) { ready = false; }
+        if (ready) return resolve(true);
+        if (Date.now() - started > (timeoutMs || 10000)) return resolve(false);
+        setTimeout(poll, 250);
+      })();
+    });
+  }
+
   async function attach() {
     try {
-      const firestore = (typeof Store !== "undefined" && Store.getDb && Store.getDb())
-        || (typeof firebase !== "undefined" && firebase.firestore ? firebase.firestore() : null);
+      const ready = await whenFirebaseReady(10000);
+      const firestore = ready
+        ? firebase.firestore()
+        : ((typeof Store !== "undefined" && Store.getDb && Store.getDb()) || null);
       if (!firestore) return; // fail open
       const snap = await firestore.collection("app_config").doc(SITEKEY_DOC).get();
       const cfg = snap.exists ? snap.data() || {} : {};
