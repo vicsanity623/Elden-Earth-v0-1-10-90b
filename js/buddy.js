@@ -2687,6 +2687,35 @@ const BuddySystem = (() => {
   }
 
   /**
+   * Award battle XP to a buddy by uid and persist it.
+   *
+   * The arena used to mutate the instance reference captured when the battle
+   * STARTED — but sync responses rebuild state.buddy mid-fight (see
+   * mergeBuddyMirror in storage.js), so that reference pointed at a detached
+   * copy and the XP was written into garbage ("won 15 arena battles, buddy
+   * got 0 XP"). The wild-battle path avoids this by re-resolving the LIVE bag
+   * entry at award time — this helper does the same for any caller, and
+   * persists right away so a later stale mirror cannot eat the award either.
+   */
+  function awardBattleXp(uid, amount) {
+    const b = buddyState();
+    const target = (uid && b.bag.find((x) => x && x.uid === uid)) || activeBuddy();
+    if (!target || !amount || amount <= 0) return null;
+    const r = BuddyEngine.addXp(target, amount);
+    if (r.leveled > 0) {
+      toast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
+      syncDefenderSnapshot();
+      if (typeof PlayerXP !== "undefined") {
+        PlayerXP.addXP(PlayerXP.XP.buddyLevelUp * r.leveled, "buddy_level");
+      }
+    }
+    persist();
+    renderHudBadge();
+    syncCompanion();
+    return r;
+  }
+
+  /**
    * Re-publish the Defense Buddy snapshot whenever it changes (level up,
    * rename, new cosmetic). Without this the arena kept fighting the exact
    * stats/level/cosmetics the buddy had the moment "Set as Defense Buddy" was
@@ -2915,6 +2944,7 @@ const BuddySystem = (() => {
     openCustomizeModal,
     openEncounter,
     activeBuddy,
+    awardBattleXp,
     healBuddy,
     buddyHp,
     tickRegen,

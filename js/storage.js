@@ -334,7 +334,28 @@ const Store = (() => {
    *   · everything else (stats, cooldowns, training, counters): the server
    *     mirror wins, as before.
    */
-  function mergeBuddyMirror(remote, local) {
+  /**
+   * Fingerprint of each bagged buddy's PROGRESS (level/XP/HP/happiness/wins),
+   * snapshotted when a sync is SENT. The response merge compares against it to
+   * find buddies that earned XP or took damage while the sync was in flight —
+   * those keep their LOCAL entry instead of the stale remote echo (see
+   * mergeBuddyMirror).
+   */
+  function snapshotBuddyProgress(buddy) {
+    const map = {};
+    try {
+      const bag = (buddy && Array.isArray(buddy.bag)) ? buddy.bag : [];
+      for (let i = 0; i < bag.length; i++) {
+        const b = bag[i];
+        if (b && b.uid) {
+          map[String(b.uid)] = [b.level || 0, b.xp || 0, b.currentHp || 0, b.happiness || 0, b.battlesWon || 0].join("|");
+        }
+      }
+    } catch (e) {}
+    return map;
+  }
+
+  function mergeBuddyMirror(remote, local, changedUids) {
     const out = { ...remote };
     try {
       const consumed = new Set(Array.isArray(remote.consumedUids) ? remote.consumedUids : []);
@@ -348,6 +369,12 @@ const Store = (() => {
         const key = String(x.uid);
         const winner = byUid.get(key);
         if (!winner) { byUid.set(key, x); return; }
+        // 🛡️ STALE-MIRROR GUARD (progress): this buddy earned XP / took
+        // damage locally while the sync was in flight, so the remote entry is
+        // a stale echo of the pre-battle payload. Keep the local entry
+        // wholesale — otherwise arena/wild XP vanishes on every merge (the
+        // "won 15 arena battles, buddy got 0 XP" bug).
+        if (changedUids && changedUids.has(key)) { byUid.set(key, x); return; }
         if ((Number(x.cosmeticAt) || 0) > (Number(winner.cosmeticAt) || 0)) {
           byUid.set(key, {
             ...winner,
@@ -388,6 +415,9 @@ const Store = (() => {
     // late-arriving response cannot roll back a grant/spend that happened
     // while the sync was in flight (see the authoritative block below).
     const berriesAtRequest = Number(state.berries) || 0;
+    // 🛡️ Same idea for buddy progress: which buddies earn XP / take damage
+    // while this sync is in flight (see mergeBuddyMirror).
+    const buddyProgressAtRequest = snapshotBuddyProgress(state.buddy);
     return syncSafeState({ state })
       .then((result) => {
         if (result.data?.reset) {
@@ -428,6 +458,14 @@ const Store = (() => {
             // of cash/berries/etc. forever — the bug that made the same account
             // show different RC and pet-food counts on Android vs iPhone.
             const localBuddy = (state.buddy && typeof state.buddy === "object") ? state.buddy : null;
+            // 🛡️ Which buddies progressed locally since this request was
+            // built (XP/level/HP moved by a battle) — mergeBuddyMirror keeps
+            // the LOCAL entry for those instead of the stale remote echo.
+            const buddyProgressNow = snapshotBuddyProgress(localBuddy);
+            const buddyChangedUids = new Set();
+            Object.keys(buddyProgressNow).forEach(function (uid) {
+              if (buddyProgressNow[uid] !== buddyProgressAtRequest[uid]) buddyChangedUids.add(uid);
+            });
             // 🍓 STALE-MIRROR GUARD (berries): if berries moved while this sync
             // was in flight (a spin's nextBerries grant or a feed/heal/tame
             // spend), the mirror is older than what we already know. Adopting
@@ -444,7 +482,7 @@ const Store = (() => {
             // mirror is a snapshot of the request payload and must never erase
             // spawns/tames/renames that happened while the sync was in flight.
             if (localBuddy && state.buddy && typeof state.buddy === "object") {
-              state.buddy = mergeBuddyMirror(state.buddy, localBuddy);
+              state.buddy = mergeBuddyMirror(state.buddy, localBuddy, buddyChangedUids);
             }
             mirrorDirty = true;
           }

@@ -312,7 +312,21 @@ const Achievements = (() => {
         });
         state.eb = Math.max(0, Number(res.nextEb) || Number(state.eb) || 0);
         state.rewardPoints = Math.max(0, Number(res.nextRewardPoints) || Number(state.rewardPoints) || 0);
+        // Badge Diamonds + Berries land in the wallet immediately — berries
+        // especially: the pet screen reads state.berries and used to sit at 0
+        // after a claim, so the badge's berries looked "lost".
+        state.diamonds = Number.isFinite(Number(res.nextDiamonds))
+          ? Math.max(0, Number(res.nextDiamonds))
+          : Math.max(0, (Number(state.diamonds) || 0) + (Number(res.diamonds) || 0));
+        state.berries = Number.isFinite(Number(res.nextBerries))
+          ? Math.max(0, Number(res.nextBerries))
+          : Math.max(0, (Number(state.berries) || 0) + (Number(res.berries) || 0));
         Store.save && Store.save(false);
+        if (typeof CompanionPet !== "undefined") {
+          if (CompanionPet.updatePetHUD) CompanionPet.updatePetHUD();
+          if (CompanionPet.updatePetModal) CompanionPet.updatePetModal();
+        }
+        if (typeof updateTopbar === "function") updateTopbar();
       }
 
       toast(`🏅 Achievement unlocked! ${def.title} · ${rewardText(def)}`, 5000);
@@ -567,7 +581,20 @@ const Achievements = (() => {
             });
             state.eb = Math.max(0, Number(res.nextEb) || Number(state.eb) || 0);
             state.rewardPoints = Math.max(0, Number(res.nextRewardPoints) || Number(state.rewardPoints) || 0);
+            // Same as the single-claim path: Diamonds + Berries into the
+            // wallet NOW, not whenever the next sync mirror happens to land.
+            state.diamonds = Number.isFinite(Number(res.nextDiamonds))
+              ? Math.max(0, Number(res.nextDiamonds))
+              : Math.max(0, (Number(state.diamonds) || 0) + (Number(res.diamonds) || 0));
+            state.berries = Number.isFinite(Number(res.nextBerries))
+              ? Math.max(0, Number(res.nextBerries))
+              : Math.max(0, (Number(state.berries) || 0) + (Number(res.berries) || 0));
             Store.save && Store.save(false);
+            if (typeof CompanionPet !== "undefined") {
+              if (CompanionPet.updatePetHUD) CompanionPet.updatePetHUD();
+              if (CompanionPet.updatePetModal) CompanionPet.updatePetModal();
+            }
+            if (typeof updateTopbar === "function") updateTopbar();
           }
 
           // Staggered so the toasts stack up instead of replacing each other.

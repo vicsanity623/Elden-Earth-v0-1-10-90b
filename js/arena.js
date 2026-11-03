@@ -841,12 +841,17 @@ const Arena = (() => {
     // can still level up from arena losses.
     try {
       if (typeof BuddyEngine !== "undefined" && ally) {
-        const target = ally;
         const outcome = won ? "win" : "loss";
         const xp = BuddyEngine.battleXpReward(wildInst, outcome);
-        const r = BuddyEngine.addXp(target, xp);
-        if (r.leveled > 0 && typeof showToast === "function") {
-          showToast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
+        // Award on the LIVE bag entry (re-resolved by uid inside
+        // BuddySystem.awardBattleXp) and persist. Mutating `ally` directly
+        // wrote the XP onto a detached copy — sync responses rebuild
+        // state.buddy mid-fight — so the award vanished ("15 arena wins,
+        // buddy earned 0 XP") even though the victory modal showed it.
+        if (typeof BuddySystem !== "undefined" && BuddySystem.awardBattleXp) {
+          BuddySystem.awardBattleXp(ally.uid, xp);
+        } else {
+          BuddyEngine.addXp(ally, xp);
         }
         if (typeof PlayerXP !== "undefined") {
           PlayerXP.addXP(
