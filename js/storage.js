@@ -602,10 +602,19 @@ const Store = (() => {
     return;
   }
 
-  // Smart 30-Second Cloud Save Throttle (Cuts Firestore writes by ~90%!)
+  // Smart Cloud Save Throttle (Cuts Firestore reads/writes by ~90%!)
+  //
+  // 💰 COST FIX (2026-11-03): this was 1 SECOND ("near-instant"), which made
+  // every active player run a full syncSafeState transaction (≈5 Firestore
+  // reads + writes) every second — ~4M reads/day at current concurrency, the
+  // dominant slice of the database bill. Critical actions (buying land, wheel
+  // spins, citadels, badge claims, feeds) still sync INSTANTLY via
+  // Store.save(true) below — only the routine background heartbeat is
+  // throttled, and pagehide/visibilitychange flush directly, so nothing is
+  // lost on close or tab switch.
   let cloudSyncTimeout = null;
   let lastCloudSyncTime = 0;
-  const CLOUD_SYNC_THROTTLE_MS = 1000; // 1-second window — near-instant cloud sync
+  const CLOUD_SYNC_THROTTLE_MS = 20000; // 20-second heartbeat window
 
   function syncToCloudDebounced(immediateCloud = false) {
     const now = Date.now();
@@ -619,7 +628,7 @@ const Store = (() => {
       return;
     }
 
-    // If 30 seconds have passed, write to cloud now
+    // If the throttle window has passed, write to cloud now
     if (now - lastCloudSyncTime >= CLOUD_SYNC_THROTTLE_MS) {
       clearTimeout(cloudSyncTimeout);
       cloudSyncTimeout = null;
@@ -628,7 +637,7 @@ const Store = (() => {
       return;
     }
 
-    // Otherwise, buffer the write to fire when the 30-second window finishes
+    // Otherwise, buffer the write to fire when the current window finishes
     if (!cloudSyncTimeout) {
       cloudSyncTimeout = setTimeout(() => {
         cloudSyncTimeout = null;
