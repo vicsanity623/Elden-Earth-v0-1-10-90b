@@ -211,6 +211,34 @@ const AdminPanel = (() => {
         <div class="adm-meta" id="adm-arena-out" style="margin-top:8px;">Press 📊 Status to review the standings.</div>
       </div>
 
+      <div class="adm-sec-title">📮 Global Mail — dev gifts &amp; announcements</div>
+      <div class="adm-card" style="display:block;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+          <select id="adm-mail-type" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+            <option value="gift">🎁 Gift (claimable)</option>
+            <option value="alert">🚨 Alert (announcement)</option>
+          </select>
+          <input id="adm-mail-title" type="text" placeholder="Title (required)"
+            style="flex:1 1 160px;min-width:140px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+        </div>
+        <textarea id="adm-mail-body" rows="3" placeholder="Message players will read…"
+          style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;resize:vertical;"></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+          <input id="adm-mail-eb" type="number" min="0" placeholder="EB" title="Elden Bucks"
+            style="width:74px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <input id="adm-mail-diamonds" type="number" min="0" placeholder="💎" title="Diamonds"
+            style="width:64px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <input id="adm-mail-berries" type="number" min="0" placeholder="🍓" title="Berries"
+            style="width:64px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <input id="adm-mail-seeds" type="number" min="0" placeholder="🌱" title="Elden Stop Seeds"
+            style="width:64px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <input id="adm-mail-rp" type="number" min="0" placeholder="⭐ RP" title="Reward Points"
+            style="width:78px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <button class="adm-btn ok" id="adm-mail-send">📮 Send to everyone</button>
+        </div>
+        <div class="adm-meta" id="adm-mail-out" style="margin-top:8px;">Gifts are claimable once per player (server receipt). Alerts are read-only news.</div>
+      </div>
+
       <div class="adm-sec-title">📷 Custom Avatar Requests (${avatars.length})</div>
       ${avatars.length ? avatars.map((r) => `
         <div class="adm-card" data-uid="${escapeHtml(r.userId || r.id)}">
@@ -296,6 +324,54 @@ const AdminPanel = (() => {
 
     const arenaStatusBtn = box.querySelector("#adm-arena-status");
     if (arenaStatusBtn) arenaStatusBtn.addEventListener("click", () => { arenaStatus(); });
+
+    // 📮 Global Mail — dev gifts & announcements (sendGlobalMail callable)
+    box.querySelector("#adm-mail-send")?.addEventListener("click", async () => {
+      const out = box.querySelector("#adm-mail-out");
+      const btn = box.querySelector("#adm-mail-send");
+      const title = box.querySelector("#adm-mail-title").value.trim();
+      const body = box.querySelector("#adm-mail-body").value.trim();
+      const type = box.querySelector("#adm-mail-type").value === "alert" ? "alert" : "gift";
+      const rewards = {
+        eb: Number(box.querySelector("#adm-mail-eb").value) || 0,
+        diamonds: Number(box.querySelector("#adm-mail-diamonds").value) || 0,
+        berries: Number(box.querySelector("#adm-mail-berries").value) || 0,
+        eldenStopSeeds: Number(box.querySelector("#adm-mail-seeds").value) || 0,
+        rp: Number(box.querySelector("#adm-mail-rp").value) || 0,
+      };
+      if (!title) { out.textContent = "⚠️ Title is required."; return; }
+      if (type === "gift" && !Object.values(rewards).some((v) => v > 0)) {
+        out.textContent = "⚠️ A gift needs at least one reward above zero.";
+        return;
+      }
+      // Never destroy a gift on a mis-click — confirm first.
+      const rewardLine = Object.entries(rewards).filter(([, v]) => v > 0)
+        .map(([k, v]) => `${v} ${k}`).join(" · ") || "no rewards (announcement)";
+      const q = `Send this ${type} to EVERY player?\n\n"${title}"\n${rewardLine}`;
+      const ok = (typeof window.gameConfirm === "function")
+        ? await window.gameConfirm(q, { okText: "Send to Everyone" })
+        : window.confirm(q);
+      if (!ok) return;
+      btn.disabled = true;
+      out.textContent = "Sending…";
+      try {
+        const res = await call("sendGlobalMail", { type, title, body, rewards });
+        if (res && res.ok) {
+          out.textContent = `✅ Sent "${res.title}" (${rewardLine}) — id ${res.id}`;
+          box.querySelector("#adm-mail-title").value = "";
+          box.querySelector("#adm-mail-body").value = "";
+          ["eb", "diamonds", "berries", "seeds", "rp"].forEach((k) => {
+            const input = box.querySelector("#adm-mail-" + k);
+            if (input) input.value = "";
+          });
+        } else {
+          out.textContent = "⚠️ Send failed.";
+        }
+      } catch (e) {
+        out.textContent = "⚠️ " + (e && e.message ? e.message : "Send failed.");
+      }
+      btn.disabled = false;
+    });
 
     const arenaStageBtn = box.querySelector("#adm-arena-stage");
     if (arenaStageBtn) arenaStageBtn.addEventListener("click", async () => {

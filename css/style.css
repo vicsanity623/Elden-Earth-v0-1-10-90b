@@ -10868,3 +10868,102 @@ body.birds-eye-mode .top-hud-row {
   font-size: 24px; font-weight: 900; letter-spacing: 1.6px;
   color: #e8eefc;
 }
+
+/* ===================== GAME MENU (tabs) ===================== */
+.menu-hub { width: min(560px, 96vw); }
+.menu-hub-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 2px 0 14px;
+}
+.menu-hub-title {
+  font-family: "Cinzel","Times New Roman",serif;
+  font-size: 19px; font-weight: 900; letter-spacing: 0.8px; color: #fff;
+  white-space: nowrap;
+}
+.menu-utc {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px; letter-spacing: 0.05em; color: var(--gold, #e8c56a);
+  background: rgba(232, 197, 106, 0.1); border: 1px solid rgba(232, 197, 106, 0.3);
+  padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.menu-tabs {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px;
+  margin-bottom: 12px; border-bottom: 1px solid var(--line-subtle, #263349);
+  scrollbar-width: none;
+}
+.menu-tabs::-webkit-scrollbar { display: none; }
+.menu-tab {
+  position: relative; flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.04); color: var(--muted, #9aa7bd);
+  border: 1px solid var(--line-subtle, #263349); border-radius: 999px;
+  padding: 9px 15px; font-size: 13px; font-weight: 800; cursor: pointer;
+  font-family: inherit; white-space: nowrap;
+}
+.menu-tab.active {
+  background: rgba(232, 197, 106, 0.16); color: #fff;
+  border-color: rgba(232, 197, 106, 0.55);
+}
+.menu-tab .nav-tab-dot { position: absolute; top: 2px; right: 6px; }
+.menu-panel { display: none; animation: menuFade 0.18s ease; }
+.menu-panel.active { display: block; }
+@keyframes menuFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.menu-panel-sub { color: var(--muted, #9aa7bd); font-size: 13px; margin: 2px 0 12px; }
+
+/* Home action cards */
+.menu-actions { display: grid; gap: 10px; }
+.menu-action-card {
+  display: flex; align-items: center; gap: 13px; width: 100%;
+  background: rgba(255, 255, 255, 0.045); border: 1px solid var(--line-subtle, #263349);
+  border-radius: 14px; padding: 13px 15px; cursor: pointer; text-align: left;
+  color: var(--text, #e9edf5); font-family: inherit;
+}
+.menu-action-card:hover { border-color: rgba(232, 197, 106, 0.5); }
+.menu-action-icon { font-size: 22px; flex: 0 0 auto; }
+.menu-action-text { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+.menu-action-text strong { font-size: 14.5px; }
+.menu-action-text small { color: var(--muted, #9aa7bd); font-size: 11.5px; line-height: 1.35; }
+.menu-action-arrow { color: var(--gold, #e8c56a); font-size: 17px; flex: 0 0 auto; }
+
+/* Mail + alerts cards */
+.mail-list { display: grid; gap: 10px; }
+.mail-empty {
+  padding: 26px 14px; text-align: center; color: var(--faint, #6b7a92);
+  border: 1px dashed var(--line-subtle, #263349); border-radius: 14px; font-size: 13px;
+}
+.mail-card {
+  background: rgba(255, 255, 255, 0.045); border: 1px solid var(--line-subtle, #263349);
+  border-radius: 14px; padding: 14px 15px;
+}
+.mail-card.unclaimed { border-color: rgba(232, 197, 106, 0.55); background: rgba(232, 197, 106, 0.07); }
+.mail-card.alert-new { border-color: rgba(226, 33, 28, 0.55); background: rgba(226, 33, 28, 0.07); }
+.mail-card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+.mail-card-icon { font-size: 18px; }
+.mail-card-title { font-weight: 900; font-size: 14.5px; color: #fff; flex: 1 1 auto; }
+.mail-card-date { color: var(--faint, #6b7a92); font-size: 10.5px; white-space: nowrap; }
+.mail-card-body { color: var(--muted, #9aa7bd); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.mail-rewards { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 4px; }
+.mail-reward-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(232, 197, 106, 0.12); border: 1px solid rgba(232, 197, 106, 0.35);
+  color: var(--gold, #e8c56a); border-radius: 999px; padding: 4px 11px;
+  font-size: 11.5px; font-weight: 800;
+}
+.mail-claim-btn {
+  margin-top: 10px; width: 100%; padding: 12px; border-radius: 12px; cursor: pointer;
+  font-family: "Cinzel","Times New Roman",serif; font-size: 15px; font-weight: 900;
+  letter-spacing: 1px; color: #241a05; border: none;
+  background: linear-gradient(135deg, var(--gold, #e8c56a), #c9962e);
+}
+.mail-claim-btn:disabled { opacity: 0.55; cursor: default; }
+.mail-claim-btn.claimed { background: rgba(74, 222, 128, 0.18); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.4); }
+
+/* How to Play document */
+.menu-doc { max-height: 58vh; overflow-y: auto; padding-right: 6px; }
+.menu-doc h3 {
+  font-family: "Cinzel","Times New Roman",serif; font-size: 16px; color: #fff;
+  margin: 20px 0 7px; letter-spacing: 0.4px;
+}
+.menu-doc h3:first-child { margin-top: 2px; }
+.menu-doc p { color: var(--muted, #9aa7bd); font-size: 13px; line-height: 1.65; margin: 0 0 4px; }
+.menu-doc p b { color: var(--text, #e9edf5); }

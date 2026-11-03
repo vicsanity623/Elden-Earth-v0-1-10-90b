@@ -1015,9 +1015,20 @@
         }
       },
       (err) => console.warn("watchPosition error", err),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      // ⚙️ GPS Mode (Settings → GPS Mode): High Accuracy vs Normal (battery).
+      // Normal trades a little precision for meaningfully less radio drain.
+      (localStorage.getItem("eldenEarth.gpsMode") === "normal")
+        ? { enableHighAccuracy: false, maximumAge: 15000, timeout: 30000 }
+        : { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
     );
   }
+
+  // Settings → GPS Mode calls this so the new accuracy applies immediately
+  // (js/game-menu.js).
+  window.restartGpsWatch = function () {
+    if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    beginWatch();
+  };
 
   // Turn off GPS satellite radio when screen is locked in pocket
   document.addEventListener("visibilitychange", () => {
@@ -4700,9 +4711,11 @@
     });
 
     el("menu-btn").addEventListener("click", () => {
-      // Mark viewed & remove alert dot
+      // Mark viewed & refresh the aggregated alert dot (tutorial + mail +
+      // alerts — js/game-menu.js owns the re-computation)
       localStorage.setItem(TUTORIAL_KEY, "true");
-      if (menuDot) menuDot.classList.add("hidden");
+      if (window.GameMenu && GameMenu.refreshMenuDot) GameMenu.refreshMenuDot();
+      else if (menuDot) menuDot.classList.add("hidden");
       openModal("menu-modal");
       // Update phone verification button state when menu opens
       updatePhoneButtonState();
