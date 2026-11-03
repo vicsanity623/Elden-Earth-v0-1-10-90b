@@ -449,6 +449,7 @@ const Arena = (() => {
         <div class="bd-card">
           <button class="bd-close">✕</button>
           <div id="ar-lobby-body"></div>
+          <div class="ee-ad-slot" aria-label="Advertisement"></div>
         </div>`;
       modal.addEventListener("click", (e) => { if (e.target === modal) closeLobby(); });
       document.body.appendChild(modal);

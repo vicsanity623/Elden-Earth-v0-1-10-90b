@@ -267,11 +267,13 @@ const ServerAntiCheat = (() => {
     }
   }
 
-  async function conquerCitadel(citadelId, lat, lon, name, avatar) {
+  async function conquerCitadel(citadelId, lat, lon, name, avatar, adCredit) {
     if (!functions) return { conquered: false, reason: "functions_not_initialized" };
     try {
       const fn = functions.httpsCallable("conquerCitadel");
-      return (await fn({ citadelId, lat, lon, name, avatar })).data;
+      return (await fn(adCredit
+        ? { citadelId, lat, lon, name, avatar, adCredit: true }
+        : { citadelId, lat, lon, name, avatar })).data;
     } catch (e) {
       console.warn("[ServerAntiCheat] Citadel conquest failed:", e.message);
       return { conquered: false, reason: "server_error" };

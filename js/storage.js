@@ -315,6 +315,68 @@ const Store = (() => {
 
   // Cloud Save to Firestore (Guaranteed Sync)
   // BLOCKED for guest accounts - prevents cross-device conflicts
+  /**
+   * 🛡️ BUDDY MIRROR MERGE (2026-11-02).
+   *
+   * `authoritative.buddy` in a sync response is the server's snapshot of the
+   * payload that was SENT — anything created while the sync was in flight is
+   * missing from it. The old `Object.assign(state, authoritative)` replaced
+   * `state.buddy` wholesale, so a wild spawn (or a tamed buddy, or a rename)
+   * created in that window vanished within seconds:
+   *   · "wild buddy shows up and disappears hella fast" (spawns)
+   *   · renames silently reverting (cosmetics)
+   * Union the local-only bits back in instead of losing them:
+   *   · bag:    union by uid (tamed-mid-flight survives); consumedUids
+   *             tombstones are respected so a feasted buddy never resurrects
+   *   · spawns: union by id (mid-flight spawns survive), expired dropped
+   *   · cosmetics (nickname/paint/customization): newest cosmeticAt wins —
+   *     player-owned fields, the server never edits them
+   *   · everything else (stats, cooldowns, training, counters): the server
+   *     mirror wins, as before.
+   */
+  function mergeBuddyMirror(remote, local) {
+    const out = { ...remote };
+    try {
+      const consumed = new Set(Array.isArray(remote.consumedUids) ? remote.consumedUids : []);
+      // --- bag ---
+      const byUid = new Map();
+      (Array.isArray(remote.bag) ? remote.bag : []).forEach((x) => {
+        if (x && x.uid && !consumed.has(x.uid)) byUid.set(String(x.uid), x);
+      });
+      (Array.isArray(local.bag) ? local.bag : []).forEach((x) => {
+        if (!x || !x.uid || consumed.has(x.uid)) return;
+        const key = String(x.uid);
+        const winner = byUid.get(key);
+        if (!winner) { byUid.set(key, x); return; }
+        if ((Number(x.cosmeticAt) || 0) > (Number(winner.cosmeticAt) || 0)) {
+          byUid.set(key, {
+            ...winner,
+            nickname: x.nickname,
+            hue: x.hue,
+            colorway: x.colorway,
+            colorHsl: x.colorHsl,
+            customization: x.customization,
+            cosmeticAt: Number(x.cosmeticAt) || 0,
+          });
+        }
+      });
+      out.bag = Array.from(byUid.values()).slice(0, 30);
+      // --- wild spawns (the "appears and disappears" bug) ---
+      const now = Date.now();
+      const sById = new Map();
+      (Array.isArray(remote.spawns) ? remote.spawns : []).forEach((s) => {
+        if (s && s.id && Number(s.expiresAt) > now) sById.set(String(s.id), s);
+      });
+      (Array.isArray(local.spawns) ? local.spawns : []).forEach((s) => {
+        if (s && s.id && Number(s.expiresAt) > now && !sById.has(String(s.id))) sById.set(String(s.id), s);
+      });
+      out.spawns = Array.from(sById.values()).slice(0, 10);
+    } catch (e) {
+      console.warn("[Cloud] buddy mirror merge failed — keeping server copy:", e && e.message);
+    }
+    return out;
+  }
+
   function syncSafeStateToCloud() {
     if (typeof firebase === "undefined" || !firebase.functions || !state?.player?.id) {
       return Promise.resolve(false);
@@ -350,7 +412,14 @@ const Store = (() => {
             // response. Without this each device kept ticking its own local copy
             // of cash/berries/etc. forever — the bug that made the same account
             // show different RC and pet-food counts on Android vs iPhone.
+            const localBuddy = (state.buddy && typeof state.buddy === "object") ? state.buddy : null;
             Object.assign(state, result.data.authoritative);
+            // 🛡️ Buddy is merged, NOT assigned — see mergeBuddyMirror. The
+            // mirror is a snapshot of the request payload and must never erase
+            // spawns/tames/renames that happened while the sync was in flight.
+            if (localBuddy && state.buddy && typeof state.buddy === "object") {
+              state.buddy = mergeBuddyMirror(state.buddy, localBuddy);
+            }
             mirrorDirty = true;
           }
           // 🛡️ Server-stamped LWW counter (syncSafeState stamps it with the

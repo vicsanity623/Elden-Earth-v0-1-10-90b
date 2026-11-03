@@ -628,6 +628,18 @@ const Citadels = (() => {
       siegeBtn.disabled = !isNearby;
       siegeBtn.addEventListener("click", () => startSiege(cid));
       actionsWrap.appendChild(siegeBtn);
+
+      // 🎬 Rewarded placement (siege_free): an ad + server-held credit waives
+      // the 1💎 siege cost. BOTH buttons stay visible — ads accelerate the
+      // economy, they never gate the action (same as recall/defend).
+      const siegeAdsReady = typeof Ads !== "undefined" && Ads.isRewardedAvailable();
+      if (isNearby && siegeAdsReady) {
+        const freeBtn = document.createElement("button");
+        freeBtn.className = "btn btn-primary";
+        freeBtn.textContent = "🎬 Free Siege (Watch Ad)";
+        freeBtn.addEventListener("click", () => startSiege(cid, true));
+        actionsWrap.appendChild(freeBtn);
+      }
     }
 
     // Relocate button for creator (always visible for the owner)
@@ -965,7 +977,11 @@ const Citadels = (() => {
   }
 
   // --- 4. Reflex Meter Siege Battle ---
-  function startSiege(cid) {
+  // 🎬 Rewarded placement (siege_free): set while a minted free-siege credit is
+  // waiting to be consumed by the next completed conquest.
+  let siegeAdCredit = false;
+
+  async function startSiege(cid, useAdCredit = false) {
     const state = Store.get();
     const targetCit = globalCitadels[cid];
 
@@ -990,14 +1006,38 @@ const Citadels = (() => {
       (window.showToast || alert)("🛡️ You already hold this Citadel! You cannot siege yourself.");
       return;
     }
-    
-    if ((Number(state.diamonds) || 0) < CONFIG.CITADEL_SIEGE_COST_DIAMONDS) {
+
+    // 🎬 Rewarded placement: an ad + server-held siege credit waives the 1💎.
+    // claimAdReward mints the credit server-side; conquerCitadel consumes it.
+    // The ad callback alone grants nothing (IMPLEMENTATIONADMOB.md §4).
+    let adSiege = false;
+    if (useAdCredit) {
+      if (typeof Ads === "undefined" || !Ads.isRewardedAvailable()) return;
+      const earned = await Ads.showRewarded("siege_free");
+      if (!earned) {
+        (window.showToast || alert)("Ad not completed — a Siege still costs 1 💎.");
+        return;
+      }
+      const claim = await ServerAntiCheat.claimAdReward("siege_free");
+      if (!claim || !claim.ok) {
+        (window.showToast || alert)(claim && claim.reason === "daily_cap"
+          ? "🎬 No free sieges left today."
+          : "⚠️ Free siege could not be granted.", 4000);
+        return;
+      }
+      adSiege = true;
+    }
+
+    if (!adSiege && (Number(state.diamonds) || 0) < CONFIG.CITADEL_SIEGE_COST_DIAMONDS) {
       (window.showToast || alert)("You need at least 1 Diamond to initiate a Siege!");
       return;
     }
 
-    state.diamonds = Math.max(0, (Number(state.diamonds) || 0) - CONFIG.CITADEL_SIEGE_COST_DIAMONDS);
-    Store.save(true);
+    if (!adSiege) {
+      state.diamonds = Math.max(0, (Number(state.diamonds) || 0) - CONFIG.CITADEL_SIEGE_COST_DIAMONDS);
+      Store.save(true);
+    }
+    siegeAdCredit = adSiege;
 
     document.getElementById("citadel-modal")?.classList.add("hidden");
     combatTarget = globalCitadels[cid];
@@ -1077,8 +1117,11 @@ const Citadels = (() => {
       playerCoords.lat,
       playerCoords.lon,
       state.player?.name || "Traveler",
-      state.player?.avatar || "🙂"
+      state.player?.avatar || "🙂",
+      siegeAdCredit
     );
+    // One conquest per credit at most — the server consumes its own copy too.
+    siegeAdCredit = false;
     if (!result.conquered) {
       if (result.reason === "recall_cooldown") {
         const mins = Math.ceil((Number(result.waitMs) || 0) / 60000);

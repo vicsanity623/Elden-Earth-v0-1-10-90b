@@ -91,6 +91,7 @@ const BuddySystem = (() => {
   const ENCOUNTER_ID = "buddy-encounter-modal";
   const TRAINER_ID = "buddy-trainer-modal";
   const CUSTOMIZE_ID = "buddy-customize-modal";
+  const RENAME_ID = "buddy-rename-modal";
 
   let mapInstance = null;
   let markers = {};        // spawnId -> mapboxgl.Marker
@@ -1104,6 +1105,7 @@ const BuddySystem = (() => {
         ${b.bag.length} / 30 buddies collected &middot; ${b.totalTamed} tamed &middot;
         ${b.totalFeasted} feasted &middot; ${b.totalSpawns} wild spawns seen
       </p>
+      <div class="ee-ad-slot" aria-label="Advertisement"></div>
       <div class="bd-sortbar">
         <select id="bd-sort" class="bd-sort" aria-label="Sort buddies">
           <option value="default">Sort: Caught order</option>
@@ -1355,15 +1357,11 @@ const BuddySystem = (() => {
     });
 
     document.getElementById("bd-detail-rename").addEventListener("click", () => {
-      const name = window.prompt("New nickname (max 16 characters):", inst.nickname);
-      if (name == null) return;
-      const clean = String(name).trim().slice(0, 16);
-      if (!clean) return;
-      inst.nickname = clean;
-      persist();
-      syncCompanion();
-      syncDefenderSnapshot();
-      openDetail(uid);
+      // 🛡️ In-game dialog, NOT window.prompt: Android WebViews ship a
+      // WebChromeClient that does not implement onJsPrompt, so prompt() returns
+      // null instantly and the rename silently did nothing on the app —
+      // "buddy bag rename buddy doesn't work". This dialog works everywhere.
+      openRenameModal(inst, uid);
     });
 
     document.getElementById("bd-detail-cos").addEventListener("click", () => {
@@ -1417,6 +1415,60 @@ const BuddySystem = (() => {
     });
 
     openModal(DETAIL_ID);
+  }
+
+  /**
+   * In-game rename dialog — replaces window.prompt (which is a silent no-op in
+   * the Android WebView). The new name is stamped with `cosmeticAt`, the
+   * timestamp the sync merge uses to keep player-owned cosmetics from being
+   * reverted by a stale cloud copy (see PROTECT BUDDY in functions/index.js and
+   * mergeBuddyMirror in js/storage.js).
+   */
+  function openRenameModal(inst, uid) {
+    if (!inst) return;
+    injectStyle();
+    buildModal(RENAME_ID, `
+      <button class="bd-close">✕</button>
+      <h2>✏️ Rename Buddy</h2>
+      <p class="bd-sub">Give <b>${inst.nickname}</b> a nickname (max 16 characters).</p>
+      <input id="bd-rename-input" type="text" maxlength="16" autocomplete="off"
+        style="width:100%;box-sizing:border-box;padding:11px 12px;margin-top:8px;border-radius:11px;border:1px solid rgba(139,92,246,.4);background:rgba(10,14,26,.75);color:#eaf1ff;font-size:15px;font-family:inherit;">
+      <div class="bd-row" style="margin-top:12px">
+        <button class="bd-btn" id="bd-rename-cancel">Cancel</button>
+        <button class="bd-btn gold" id="bd-rename-save">💾 Save</button>
+      </div>
+    `);
+    wireClose(RENAME_ID);
+
+    const input = document.getElementById("bd-rename-input");
+    if (input) {
+      input.value = inst.nickname || "";
+      setTimeout(() => { try { input.focus(); input.select(); } catch (e) {} }, 60);
+    }
+
+    const commit = () => {
+      const clean = String((input && input.value) || "").trim().slice(0, 16);
+      if (!clean) { toast("A nickname can't be empty"); return; }
+      inst.nickname = clean;
+      // Player-owned cosmetic: newest stamp wins the sync merge.
+      inst.cosmeticAt = Date.now();
+      persist();
+      syncCompanion();
+      syncDefenderSnapshot();
+      closeModal(RENAME_ID);
+      toast(`✏️ Renamed to ${clean}`);
+      openDetail(uid);
+    };
+
+    const saveBtn = document.getElementById("bd-rename-save");
+    if (saveBtn) saveBtn.addEventListener("click", commit);
+    const cancelBtn = document.getElementById("bd-rename-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", () => closeModal(RENAME_ID));
+    if (input) input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") commit();
+    });
+
+    openModal(RENAME_ID);
   }
 
   /* ------------------------------------------------------------ Feast */
@@ -1603,14 +1655,20 @@ const BuddySystem = (() => {
     return { ready: true, label: "Ready to breed · 7d parent / 30d pair cooldown" };
   }
 
-  async function doBreed(parentAUid, parentBUid) {
+  // 🎬 Rewarded placement (breed_refresh): set when an ad mints a parent-rest
+  // credit. Passed to breedBuddy on the next attempt; the SERVER only consumes
+  // it when a parent cooldown actually applies, so a credit minted for a pair
+  // that turns out to be ready simply stays banked (cap 2/day).
+  let breedAdCredit = false;
+
+  async function doBreed(parentAUid, parentBUid, adCredit) {
     try {
       if (typeof firebase === "undefined" || !firebase.functions) {
         toast("⚠️ Offline — breeding needs a connection");
         return null;
       }
       const fn = firebase.functions().httpsCallable("breedBuddy");
-      const res = await fn({ parentAUid, parentBUid });
+      const res = await fn(adCredit ? { parentAUid, parentBUid, adCredit: true } : { parentAUid, parentBUid });
       const d = (res && res.data) || {};
       if (!d.ok) {
         const why = {
@@ -1618,7 +1676,8 @@ const BuddySystem = (() => {
           buddy_not_found: "That buddy is no longer in your bag — refresh and try again",
           buddy_in_training: "A parent is away training — wait for the session to end",
           bag_full: "Your Buddy Bag is full (30/30) — feast someone first",
-          parent_cooldown: `A parent bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
+          parent_cooldown: `A parent bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}` +
+            ((typeof Ads !== "undefined" && Ads.isRewardedAvailable()) ? " — or 🎬 Watch Ad to clear the rest." : ""),
           pair_cooldown: `This pair bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
           too_soon: "Hold on a moment…",
         }[d.reason] || "Breeding failed — try again";
@@ -1631,6 +1690,9 @@ const BuddySystem = (() => {
       if (d.breedLastAt && typeof d.breedLastAt === "object") b.breedLastAt = d.breedLastAt;
       if (d.breedPairs && typeof d.breedPairs === "object") b.breedPairs = d.breedPairs;
       if (Number.isFinite(d.totalBred)) b.totalBred = d.totalBred;
+      // The credit is only spent when a parent was actually resting — a mint
+      // that went unused stays banked for the next attempt.
+      if (d.usedAdRefresh) breedAdCredit = false;
       persist();
       renderHudBadge();
       syncCompanion();
@@ -1649,6 +1711,7 @@ const BuddySystem = (() => {
 
     const now = Date.now();
     const candidates = b.bag.filter(x => x && x.uid !== parentAUid);
+    const adsReady = typeof Ads !== "undefined" && Ads.isRewardedAvailable();
 
     buildModal(BREED_ID, `
       <button class="bd-close">✕</button>
@@ -1662,11 +1725,45 @@ const BuddySystem = (() => {
       <div class="bd-empty" style="display:${candidates.length ? "none" : "block"}">
         You need at least one other buddy in the bag to breed.
       </div>
+      ${adsReady ? `
+      <div class="bd-row" style="margin-top:10px">
+        <button class="bd-btn gold" id="bd-breed-ad">🎬 Watch Ad — Clear Parent Rest</button>
+      </div>` : ""}
       <div class="bd-row" style="margin-top:10px">
         <button class="bd-btn danger" id="bd-breed-confirm" disabled>Select a partner</button>
       </div>
+      <div class="ee-ad-slot" aria-label="Advertisement"></div>
     `);
     wireClose(BREED_ID);
+
+    // 🎬 Rewarded placement (breed_refresh): mints a server-held parent-rest
+    // credit. breedBuddy consumes it ONLY if a parent is actually resting —
+    // a credit minted for a ready pair simply stays banked (cap 2/day).
+    const adBtn = document.getElementById("bd-breed-ad");
+    if (adBtn) adBtn.addEventListener("click", async () => {
+      adBtn.disabled = true;
+      adBtn.textContent = "Loading ad…";
+      const earned = await Ads.showRewarded("breed_refresh");
+      if (!earned) {
+        adBtn.disabled = false;
+        adBtn.textContent = "🎬 Watch Ad — Clear Parent Rest";
+        toast("Ad not completed — no rest cleared.");
+        return;
+      }
+      const claim = await ServerAntiCheat.claimAdReward("breed_refresh");
+      if (!claim || !claim.ok) {
+        adBtn.disabled = false;
+        adBtn.textContent = "🎬 Watch Ad — Clear Parent Rest";
+        toast(claim && claim.reason === "daily_cap"
+          ? "🎬 No ad refreshes left today — the rest finishes on its own."
+          : "⚠️ Could not clear the rest.", 4000);
+        return;
+      }
+      breedAdCredit = true;
+      adBtn.textContent = "✅ Rest cleared — pick a pair and breed";
+      adBtn.disabled = true;
+      toast("🎬 Parent rest cleared! (The 30-day pair lock still applies.)");
+    });
 
     let selected = null;
     const listEl = document.getElementById("bd-breed-list");
@@ -1711,7 +1808,7 @@ const BuddySystem = (() => {
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Breeding…";
       const partner = selected;
-      const d = await doBreed(parentAUid, partner.uid);
+      const d = await doBreed(parentAUid, partner.uid, breedAdCredit);
       if (!d) {
         confirmBtn.disabled = false;
         confirmBtn.textContent = `🍼 Breed ${parentA.nickname} × ${partner.nickname}`;
@@ -1764,14 +1861,14 @@ const BuddySystem = (() => {
     }
   }
 
-  async function doClaimTraining(reward) {
+  async function doClaimTraining(reward, adCredit) {
     try {
       if (typeof firebase === "undefined" || !firebase.functions) {
         toast("⚠️ Offline — claiming needs a connection");
         return null;
       }
       const fn = firebase.functions().httpsCallable("buddyClaimTraining");
-      const res = await fn({ reward });
+      const res = await fn(adCredit ? { reward, adCredit: true } : { reward });
       const d = (res && res.data) || {};
       if (!d.ok) {
         const why = {
@@ -1918,17 +2015,53 @@ const BuddySystem = (() => {
         Rewards
       </div>
       <div id="td-rewards"></div>
+      <div class="ee-ad-slot" aria-label="Advertisement"></div>
     `);
     wireClose(TRAINING_ID);
 
     const rewardsEl = document.getElementById("td-rewards");
+    // 🎬 Rewarded placement (train_instant): one ad unlocks early claiming for
+    // this whole session. claimAdReward mints + holds the credit server-side
+    // and buddyClaimTraining consumes it — the ad callback grants nothing.
+    let adUnlocked = false;
+    async function onAdClaimNow() {
+      const btn = document.getElementById("td-ad-claim");
+      if (btn) { btn.disabled = true; btn.textContent = "Loading ad…"; }
+      const earned = await Ads.showRewarded("train_instant");
+      if (!earned) {
+        if (btn) { btn.disabled = false; btn.textContent = "Watch Ad ▶"; }
+        toast("Ad not completed — rewards stay locked until the session ends.");
+        return;
+      }
+      const claim = await ServerAntiCheat.claimAdReward("train_instant");
+      if (!claim || !claim.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = "Watch Ad ▶"; }
+        toast(claim && claim.reason === "daily_cap"
+          ? "🎬 No ad skips left today — the session finishes on its own."
+          : "⚠️ Could not unlock early claiming.", 4000);
+        return;
+      }
+      adUnlocked = true;
+      paintRewards(true);
+      toast("🎬 Rewards unlocked — claim them now!");
+    }
     function paintRewards(done) {
       if (!rewardsEl) return;
-      rewardsEl.innerHTML = claimables.map(c => {
+      const claimable = done || adUnlocked;
+      const adsReady = typeof Ads !== "undefined" && Ads.isRewardedAvailable();
+      const adRow = (!claimable && adsReady) ? `
+          <div class="bd-train-reward">
+            <div class="tr-body">
+              <div class="tr-k">🎬 Short on time?</div>
+              <div class="tr-v">Watch an ad to claim these rewards right now</div>
+            </div>
+            <button class="tr-btn" id="td-ad-claim">Watch Ad ▶</button>
+          </div>` : "";
+      rewardsEl.innerHTML = adRow + claimables.map(c => {
         const isClaimed = claimed[c.k] === true;
         const btn = isClaimed
           ? `<button class="tr-btn" disabled>✓ Claimed</button>`
-          : `<button class="tr-btn" data-reward="${c.k}" ${done ? "" : "disabled"}>${done ? "CLAIM" : "…"}</button>`;
+          : `<button class="tr-btn" data-reward="${c.k}" ${claimable ? "" : "disabled"}>${claimable ? "CLAIM" : "…"}</button>`;
         return `
           <div class="bd-train-reward">
             <div class="tr-body">
@@ -1938,12 +2071,14 @@ const BuddySystem = (() => {
             ${btn}
           </div>`;
       }).join("");
+      const adBtn = document.getElementById("td-ad-claim");
+      if (adBtn) adBtn.addEventListener("click", onAdClaimNow);
       rewardsEl.querySelectorAll(".tr-btn[data-reward]").forEach(btn => {
         btn.addEventListener("click", async () => {
           const reward = btn.dataset.reward;
           btn.disabled = true;
           btn.textContent = "…";
-          const d = await doClaimTraining(reward);
+          const d = await doClaimTraining(reward, adUnlocked);
           if (!d) { paintRewards(Date.now() >= Number(training.endsAt)); return; }
 
           if (d.sessionCleared) {
@@ -2060,6 +2195,8 @@ const BuddySystem = (() => {
         item.querySelector(".ci-btn").addEventListener("click", () => {
           if (!inst.customization) inst.customization = {};
           inst.customization[tier.slot] = equipped ? null : tier.id;
+          // Player-owned cosmetic: newest stamp wins the sync merge.
+          inst.cosmeticAt = Date.now();
           persist();
           syncCompanion();
           syncDefenderSnapshot();
