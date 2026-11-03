@@ -179,6 +179,28 @@ const Arena = (() => {
 }
 .ar-empty{ padding:22px 12px; text-align:center; color:#8aa0bd; font-size:12px; line-height:1.7; }
 
+/* ---- 🏁 full leaderboard + end-of-week results (2026-11-03 polish) ---- */
+.ar-ranks-scroll{ max-height:340px; overflow-y:auto; overscroll-behavior:contain; }
+.ar-medal.mx{ background:rgba(255,255,255,.10); color:#cfe0ff; }
+.ar-row-stats{ flex:0 0 auto; text-align:right; }
+.ar-score{ font-size:12.5px; font-weight:900; color:#fde68a; }
+.ar-wl{ font-size:10px; color:#a9bede; margin-top:2px; white-space:nowrap; }
+.ar-claim-banner{
+  margin:8px 0 2px; padding:9px 12px; border-radius:11px; cursor:pointer;
+  background:rgba(253,224,71,.12); border:1px solid rgba(253,224,71,.45);
+  color:#fde68a; font-size:11.5px; text-align:center;
+}
+.ar-result-box{
+  margin:0 0 14px; padding:13px; border-radius:13px; text-align:center;
+  background:linear-gradient(150deg, rgba(253,224,71,.14), rgba(239,68,68,.12));
+  border:1px solid rgba(253,224,71,.4);
+}
+.ar-result-title{ font-size:13px; font-weight:900; color:#fff; }
+.ar-result-pos{ font-size:17px; font-weight:900; color:#fde68a; margin:7px 0 2px; }
+.ar-result-line{ font-size:11px; color:#a9bede; }
+.ar-result-rewards{ font-size:11.5px; color:#fff; margin:8px 0 10px; line-height:1.7; }
+.ar-result-claimed{ font-size:12px; color:#4ade80; font-weight:800; }
+
 /* ---- ⓘ Rewards tooltip ---- */
 .ar-info-btn{
   position:absolute; left:12px; top:12px;
@@ -265,8 +287,62 @@ const Arena = (() => {
       // this the countdown would sit frozen until the next round trip.
       lastStateAt = Date.now();
       renderLobby();
+      // 🏁 End-of-week results land as a staged payout — surface them the
+      // moment they exist (once per lobby session; the banner + the Rewards
+      // button cover re-opening).
+      maybeAutoOpenResults(d);
     }
     return d;
+  }
+
+  // 🏁 One auto-open per lobby session: a returning player is greeted with
+  // their results exactly once, not on every refetch.
+  let resultsShown = false;
+
+  function maybeAutoOpenResults(d) {
+    try {
+      const p = d && d.payout;
+      if (!p || p.claimed || resultsShown) return;
+      resultsShown = true;
+      openRewards();
+    } catch (e) {}
+  }
+
+  /**
+   * 🏁 CLAIM LAST WEEK'S REWARDS. Server-verified and PAID ONLY ONCE
+   * (arenaClaimReward burns the payout doc inside a transaction). On success
+   * the lobby refreshes into the new week and the player is nudged to join by
+   * setting a Defense Buddy.
+   */
+  async function claimPayout() {
+    const p = (lastState && lastState.payout) || null;
+    if (!p || p.claimed) return;
+    const btn = el("ar-claim-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Claiming…"; }
+    const d = await call("arenaClaimReward", { weekKey: p.weekKey });
+    if (!d || !d.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = "🎁 Claim Rewards"; }
+      const why = {
+        no_payout: "No payout found for that week",
+        already_claimed: "These rewards were already claimed",
+      }[d && d.reason] || "Claim failed — try again";
+      (window.showToast || alert)("⚠️ " + why);
+      return;
+    }
+    const bits = [];
+    if (d.diamonds) bits.push(`+${d.diamonds} 💎`);
+    if (d.rp) bits.push(`+${d.rp} RP`);
+    if (d.seeds) bits.push(`+${d.seeds} seeds`);
+    if (d.plots && d.plots.length) bits.push(`${d.plots.length}× plot`);
+    (window.showToast || alert)(`🏁 Rewards claimed — ${bits.join(" · ") || "delivered"}!`, 5000);
+    closeRewards();
+    // 🏁 Refresh into the new week: standings + entries re-read from the
+    // server so the player can immediately join the fresh season.
+    await fetchState();
+    const me2 = (lastState && lastState.me) || {};
+    if (!me2.defenderSet) {
+      (window.showToast || alert)("🛡️ New week is live — set a Defense Buddy in the Buddy Bag to join!", 5000);
+    }
   }
 
   /* -------------------------------------------------------- lobby render */
@@ -278,6 +354,7 @@ const Arena = (() => {
     const me = d.me || {};
     const rules = d.rules || {};
     const top = Array.isArray(d.top) ? d.top : [];
+    const payout = d.payout || null; // 🏁 end-of-week results (claimable when staged)
 
     const remain = Math.max(0, (Number(season.end) || Date.now()) - Date.now());
     const freeLeft = Number(me.freeLeft) || 0;
@@ -344,16 +421,30 @@ const Arena = (() => {
       btnDisabled = true;
     }
 
-    const rows = top.map((r, i) => `
+    // 🏁 FULL LEADERBOARD (2026-11-03 polish): every ranked player (up to 500),
+    // with season points + W-L + win ratio — not just the top 3 and wins.
+    const fmtRatio = (w, l) => {
+      const tot = (Number(w) || 0) + (Number(l) || 0);
+      return tot > 0 ? Math.round(((Number(w) || 0) / tot) * 100) + "%" : "—";
+    };
+    const rows = top.map((r, i) => {
+      const rank = i + 1;
+      const w = Number(r.wins) || 0;
+      const l = Number(r.losses) || 0;
+      return `
       <div class="ar-row">
-        <div class="ar-medal m${i + 1}">${i + 1}</div>
+        <div class="ar-medal ${rank <= 3 ? "m" + rank : "mx"}">${rank}</div>
         ${avatarHtml(r.avatar)}
         <div class="ar-name">
           <b>${escapeHtml(r.name)}</b>
           <span>${escapeHtml(r.title || "Citizen of the Realm")}</span>
         </div>
-        <div class="ar-wins">${fmtNum(r.wins)} wins</div>
-      </div>`).join("");
+        <div class="ar-row-stats">
+          <div class="ar-score">${fmtNum(r.score)} pts</div>
+          <div class="ar-wl">${w}W-${l}L · ${fmtRatio(w, l)}</div>
+        </div>
+      </div>`;
+    }).join("");
 
     box.innerHTML = `
       <div class="ar-banner">
@@ -367,10 +458,10 @@ const Arena = (() => {
       </div>
 
       <div class="ar-ribbon">
-        <div class="ar-ribbon-title"><span class="t">🏆</span> Ranks</div>
+        <div class="ar-ribbon-title"><span class="t">🏆</span> Ranks <span style="font-size:10px;opacity:.7">· top 500</span></div>
       </div>
       <div class="ar-dots"></div>
-      ${rows || '<div class="ar-empty">No ranked players yet this week.<br>Set a Defense Buddy and be the first!</div>'}
+      ${rows ? `<div class="ar-ranks-scroll">${rows}</div>` : '<div class="ar-empty">No ranked players yet this week.<br>Set a Defense Buddy and be the first!</div>'}
 
       <div class="ar-ribbon">
         <div class="ar-ribbon-title">Your Weekly Stats</div>
@@ -382,6 +473,8 @@ const Arena = (() => {
           <div class="ar-pill alt">${fmtNum(me.losses)} Losses</div>
         </div>
         <div class="ar-pill alt" style="display:inline-block">Rank : ${me.rank ? me.rank : "—"}</div>
+        <div class="ar-pill" style="display:inline-block">⭐ ${fmtNum(me.score)} pts</div>
+        <div class="ar-pill alt" style="display:inline-block">W/L ${fmtRatio(me.wins, me.losses)}</div>
 
         <div class="ar-entry-strip">
           <div class="ar-entry-cell">
@@ -403,6 +496,11 @@ const Arena = (() => {
           </div>` : (freeLeft >= freeBankMax ? `
           <div class="ar-regen-line full">✅ Free entry bank is full</div>` : "")}
       </div>
+
+      ${payout && !payout.claimed ? `
+        <div class="ar-claim-banner" id="ar-claim-banner">
+          🏁 Last week's results are ready — <b>View &amp; Claim your rewards</b>
+        </div>` : ""}
 
       <div class="ar-season-line">
         Week of ${escapeHtml(season.label || "")} —
@@ -430,6 +528,8 @@ const Arena = (() => {
 
     const info = el("ar-info-btn");
     if (info) info.addEventListener("click", openRewards);
+    const banner = el("ar-claim-banner");
+    if (banner) banner.addEventListener("click", openRewards);
 
     const cancel = el("ar-cancel-btn");
     if (cancel) cancel.addEventListener("click", closeLobby);
@@ -491,17 +591,43 @@ const Arena = (() => {
       overlay = document.createElement("div");
       overlay.id = "ar-rewards-modal";
       overlay.className = "modal hidden";
-      overlay.innerHTML = `
-        <div class="ar-rewards-card">
-          <button class="bd-close">✕</button>
-          <div class="ar-rewards-head">
-            <div class="ar-rewards-icon">🏆</div>
-            <h3>Season Rewards</h3>
-            <p>Delivered at the end of every week (Sunday 23:59 UTC) to the
-               top 500 on the leaderboard.</p>
-          </div>
-          <div class="ar-rewards-list">
-            ${rewardsRows().map(r => `
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRewards(); });
+      document.body.appendChild(overlay);
+    }
+
+    // 🏁 END-OF-WEEK RESULTS: position, rewards and the server-verified
+    // one-time claim. Rebuilt on every open so the claim state is never stale.
+    const p = (lastState && lastState.payout) || null;
+    const rewardBits = p ? [
+      p.rp ? `${p.rp} RP` : "",
+      p.diamonds ? `${p.diamonds} 💎` : "",
+      p.seeds ? `${p.seeds} seeds` : "",
+      ...(Array.isArray(p.plots) ? p.plots.map((g) =>
+        `1× ${g.lucky ? "Lucky " : ""}${String(g.rarity || "rare").toUpperCase()} Plot`) : []),
+    ].filter(Boolean) : [];
+    const resultBlock = p ? `
+      <div class="ar-result-box">
+        <div class="ar-result-title">🏁 Week ${escapeHtml(p.weekLabel || p.weekKey || "")} — Final Results</div>
+        <div class="ar-result-pos">Your position: <b>#${p.rank || "?"}</b></div>
+        <div class="ar-result-line">⭐ ${fmtNum(p.score)} pts &middot; ${fmtNum(p.wins)}W-${fmtNum(p.losses)}L</div>
+        <div class="ar-result-rewards">${rewardBits.join(" &middot; ") || "Participation"}</div>
+        ${p.claimed
+          ? `<div class="ar-result-claimed">✅ Claimed — enjoy the new week!</div>`
+          : `<button class="bb-btn bb-primary" id="ar-claim-btn">🎁 Claim Rewards</button>`}
+      </div>` : "";
+
+    overlay.innerHTML = `
+      <div class="ar-rewards-card">
+        <button class="bd-close">✕</button>
+        <div class="ar-rewards-head">
+          <div class="ar-rewards-icon">🏆</div>
+          <h3>${p && !p.claimed ? "Your Season Results" : "Season Rewards"}</h3>
+          <p>Delivered at the end of every week (Sunday 23:59 UTC) to the
+             top 500 on the leaderboard.</p>
+        </div>
+        ${resultBlock}
+        <div class="ar-rewards-list">
+          ${rewardsRows().map(r => `
               <div class="ar-rewards-row">
                 <div class="ar-medal ${r.medal}">${r.medal ? r.place.split(" ")[1] : "4+"}</div>
                 <div class="ar-rewards-body">
@@ -509,18 +635,17 @@ const Arena = (() => {
                   <div class="ar-rewards-items">${r.items.join(" &middot; ")}</div>
                 </div>
               </div>`).join("")}
-          </div>
-          <div class="ar-rewards-note">
-            Rewards are claimed from the popup after the season settles.
-            Everyone who battled at least once is eligible.
-          </div>
-          <button class="bb-btn bb-primary" id="ar-rewards-close">Got it</button>
-        </div>`;
-      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRewards(); });
-      document.body.appendChild(overlay);
-      overlay.querySelector(".bd-close").addEventListener("click", closeRewards);
-      overlay.querySelector("#ar-rewards-close").addEventListener("click", closeRewards);
-    }
+        </div>
+        <div class="ar-rewards-note">
+          Rewards are claimed from the popup after the season settles.
+          Everyone who battled at least once is eligible.
+        </div>
+        <button class="bb-btn bb-primary" id="ar-rewards-close">Got it</button>
+      </div>`;
+    overlay.querySelector(".bd-close").addEventListener("click", closeRewards);
+    overlay.querySelector("#ar-rewards-close").addEventListener("click", closeRewards);
+    const claimBtn = overlay.querySelector("#ar-claim-btn");
+    if (claimBtn) claimBtn.addEventListener("click", claimPayout);
     overlay.classList.remove("hidden");
   }
 

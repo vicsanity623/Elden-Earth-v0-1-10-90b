@@ -200,6 +200,17 @@ const AdminPanel = (() => {
         <div class="adm-meta" id="adm-invite-out" style="margin-top:8px;word-break:break-all;"></div>
       </div>
 
+      <div class="adm-sec-title">🏆 PvP Arena Payouts (weekly)</div>
+      <div class="adm-card" style="display:block;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <input id="adm-arena-week" type="text" placeholder="week key (blank = latest settled)"
+            style="flex:1 1 150px;min-width:130px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.25);color:inherit;">
+          <button class="adm-btn" id="adm-arena-status">📊 Status</button>
+          <button class="adm-btn ok" id="adm-arena-stage">✅ Approve &amp; Pay</button>
+        </div>
+        <div class="adm-meta" id="adm-arena-out" style="margin-top:8px;">Press 📊 Status to review the standings.</div>
+      </div>
+
       <div class="adm-sec-title">📷 Custom Avatar Requests (${avatars.length})</div>
       ${avatars.length ? avatars.map((r) => `
         <div class="adm-card" data-uid="${escapeHtml(r.userId || r.id)}">
@@ -250,6 +261,67 @@ const AdminPanel = (() => {
       }
       if (btn) { btn.disabled = false; btn.textContent = "Generate"; }
     });
+
+    // 🏁 PvP Arena payout wire — the admin's "approve and distribute" flow.
+    // arenaPayoutStatus reads the week's staged payouts (who claimed), and
+    // arenaProcessPayouts stages rewards from the frozen end-of-week snapshot
+    // so every ranked player can claim exactly once. Blank week key = the
+    // newest SETTLED week.
+    const arenaOut = box.querySelector("#adm-arena-out");
+    const arenaWeekEl = box.querySelector("#adm-arena-week");
+    const arenaWeek = () => String((arenaWeekEl && arenaWeekEl.value) || "").trim();
+
+    async function arenaStatus() {
+      if (!arenaOut) return null;
+      arenaOut.textContent = "Loading…";
+      const res = await call("arenaPayoutStatus", arenaWeek() ? { weekKey: arenaWeek() } : {});
+      if (!res || !res.ok) {
+        arenaOut.textContent = "⚠️ " + ((res && res.reason) || "could not load status");
+        return null;
+      }
+      if (arenaWeekEl && !arenaWeekEl.value) arenaWeekEl.value = res.weekKey;
+      const rows = (res.players || []).slice(0, 40).map((p) =>
+        `#${p.rank} ${escapeHtml(p.name)} — ${p.diamonds}💎 ${p.rp}RP` +
+        `${p.seeds ? " " + p.seeds + "🌱" : ""}${p.plots ? " " + p.plots + "🗺️" : ""} ${p.claimed ? "✅" : "⏳"}`)
+        .join("<br/>");
+      const more = (res.players || []).length > 40
+        ? `<br/>…and ${res.players.length - 40} more` : "";
+      arenaOut.innerHTML =
+        `<b>${escapeHtml(res.weekLabel || res.weekKey)}</b>${res.live ? " &nbsp;⚠️ week still LIVE" : ""}<br/>` +
+        `Staged: ${res.staged} · Claimed: ${res.claimedCount} · Pool: ${res.totalDiamonds}💎 + ${res.totalRp} RP` +
+        (res.finalizedAt ? `<br/>Finalized ${new Date(res.finalizedAt).toISOString().slice(0, 16).replace("T", " ")}` : "") +
+        `<div style="margin-top:8px;max-height:220px;overflow-y:auto;font-size:11px;line-height:1.8">${rows || "No payouts staged yet."}${more}</div>`;
+      return res;
+    }
+
+    const arenaStatusBtn = box.querySelector("#adm-arena-status");
+    if (arenaStatusBtn) arenaStatusBtn.addEventListener("click", () => { arenaStatus(); });
+
+    const arenaStageBtn = box.querySelector("#adm-arena-stage");
+    if (arenaStageBtn) arenaStageBtn.addEventListener("click", async () => {
+      const wk = arenaWeek();
+      const q = "Approve & stage PvP payouts " + (wk ? "for " + wk : "for the latest settled week") +
+        "? Rewards become claimable by every ranked player immediately.";
+      let go = false;
+      try {
+        go = (typeof window.gameConfirm === "function")
+          ? await window.gameConfirm(q, { okText: "Approve & Pay" })
+          : window.confirm(q);
+      } catch (e) { go = false; }
+      if (!go) return;
+      arenaStageBtn.disabled = true;
+      arenaStageBtn.textContent = "Staging…";
+      const res = await call("arenaProcessPayouts", wk ? { weekKey: wk } : {});
+      arenaStageBtn.disabled = false;
+      arenaStageBtn.textContent = "✅ Approve & Pay";
+      if (!res || !res.ok) {
+        toast("⚠️ Payout failed: " + ((res && res.reason) || "unknown"));
+        return;
+      }
+      toast(`🏁 Payouts staged for ${res.winners} players${res.live ? " (⚠️ week still LIVE)" : ""}`);
+      arenaStatus();
+    });
+    arenaStatus();
     box.querySelectorAll("[data-act]").forEach((b) => {
       b.addEventListener("click", () => act(b.getAttribute("data-act"), b.getAttribute("data-uid"), b));
     });
