@@ -1200,19 +1200,212 @@ const BuddyBattle = (() => {
 
     const cb = ctx ? ctx.onResult : null;
 
-    // Animate out, then tear down and hand the result back to buddy.js.
+    // Hand the result to the owner FIRST — it awards XP and may open the
+    // end-of-battle XP results panel (showXpResults), which keeps the battle
+    // screen alive behind it. Only tear down when no panel took over.
+    if (typeof cb === "function") {
+      try { cb(summary); } catch (e) { console.warn("[BuddyBattle] onResult error:", e); }
+    }
+
+    // Animate out, then tear down — unless the XP panel owns the screen now
+    // (its Continue button tears down instead).
     const root = el(ROOT_ID);
-    if (root) {
+    if (root && !xpPanelOpen) {
       const inner = root.firstElementChild;
       if (inner) inner.classList.add("bb-out");
     }
 
     setTimeout(() => {
+      if (xpPanelOpen) return;
       teardown();
-      if (typeof cb === "function") {
-        try { cb(summary); } catch (e) { console.warn("[BuddyBattle] onResult error:", e); }
-      }
     }, 260);
+  }
+
+  /* ============================================ END-OF-BATTLE XP RESULTS */
+  // After the outcome resolves, the battle screen STAYS and the ally's XP bar
+  // fills with the XP earned during the fight — "Buddy earned XXX XP during
+  // this battle!" — including level-up celebration. Opened synchronously from
+  // the onResult handler (buddy.js / arena.js) so finish() knows to keep the
+  // battle screen alive; Continue tears everything down.
+  let xpPanelOpen = false;
+
+  function countUp(el, from, to, ms) {
+    if (!el) return;
+    const t0 = performance.now();
+    function step(t) {
+      const k = Math.min(1, (t - t0) / ms);
+      const eased = 1 - Math.pow(1 - k, 3);
+      el.textContent = String(Math.round(from + (to - from) * eased));
+      if (k < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function sparkles(host) {
+    for (let i = 0; i < 14; i++) {
+      const s = document.createElement("div");
+      s.className = "bb-spark";
+      const a = (Math.PI * 2 * i) / 14 + Math.random() * 0.5;
+      const d = 70 + Math.random() * 110;
+      s.style.setProperty("--sx", Math.cos(a) * d + "px");
+      s.style.setProperty("--sy", Math.sin(a) * d + "px");
+      s.style.animationDelay = Math.random() * 180 + "ms";
+      host.appendChild(s);
+      setTimeout(() => s.remove(), 1300);
+    }
+  }
+
+  function showXpResults(info) {
+    if (!info || !(Number(info.xpAward) > 0)) return;
+    const root = el(ROOT_ID);
+    if (!root) return;
+    xpPanelOpen = true;
+
+    if (!document.getElementById("bb-xp-style")) {
+      const st = document.createElement("style");
+      st.id = "bb-xp-style";
+      st.textContent = `
+.bb-xp-screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,10,20,0.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  z-index:60;animation:bbXpIn .35s ease;padding:18px;}
+@keyframes bbXpIn{from{opacity:0}to{opacity:1}}
+.bb-xp-card{position:relative;width:min(440px,94vw);border-radius:22px;padding:26px 22px 20px;
+  background:linear-gradient(165deg,#221b3a,#14162b 55%,#101322);
+  border:1px solid rgba(160,120,255,0.35);text-align:center;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,0.6),0 0 60px rgba(140,110,255,0.18);}
+.bb-xp-title{font-family:"Cinzel","Times New Roman",serif;font-size:23px;font-weight:900;color:#fff;letter-spacing:0.6px;}
+.bb-xp-sub{margin:10px 0 20px;color:#c6c9e2;font-size:14.5px;}
+.bb-xp-sub b{color:#ffd977;}
+.bb-xp-levelrow{display:flex;align-items:center;gap:11px;}
+.bb-xp-lv{font-size:12px;font-weight:900;color:#ffd977;white-space:nowrap;}
+.bb-xp-bar{position:relative;flex:1 1 auto;height:22px;border-radius:999px;
+  background:rgba(0,0,0,0.45);border:1px solid rgba(160,120,255,0.35);overflow:hidden;}
+.bb-xp-fill{height:100%;width:0%;border-radius:999px;
+  background:linear-gradient(90deg,#ffb84d,#ffd977 45%,#ffecad);
+  box-shadow:0 0 18px rgba(255,200,90,0.75),0 0 40px rgba(255,180,70,0.35);}
+.bb-xp-shine{position:absolute;top:0;bottom:0;width:70px;
+  background:linear-gradient(105deg,transparent,rgba(255,255,255,0.55),transparent);
+  filter:blur(1px);animation:bbXpShine 1.6s linear infinite;}
+@keyframes bbXpShine{from{transform:translateX(-120px)}to{transform:translateX(460px)}}
+.bb-xp-nums{margin-top:9px;font-size:12.5px;color:#9aa7d8;letter-spacing:0.4px;}
+.bb-xp-levelup{margin:16px auto 4px;font-family:"Cinzel",serif;font-size:20px;font-weight:900;color:#fff;
+  background:linear-gradient(120deg,rgba(255,190,80,0.22),rgba(255,120,180,0.18));
+  border:1px solid rgba(255,200,110,0.55);border-radius:14px;padding:11px 16px;width:max-content;max-width:100%;}
+.bb-xp-levelup.hidden{display:none;}
+.bb-pop{animation:bbPop .55s cubic-bezier(0.2,1.6,0.4,1);}
+@keyframes bbPop{0%{transform:scale(0.55);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+.bb-flash{animation:bbFlash .42s ease;}
+@keyframes bbFlash{0%{box-shadow:0 0 0 rgba(255,220,130,0)}
+  35%{box-shadow:0 0 120px rgba(255,220,130,0.55)}
+  100%{box-shadow:0 30px 80px rgba(0,0,0,0.6),0 0 60px rgba(140,110,255,0.18)}}
+.bb-xp-learned{margin-top:10px;font-size:12.5px;color:#c6c9e2;}
+.bb-xp-continue{margin-top:18px;width:100%;padding:14px;font-size:16px;border-radius:14px;}
+.bb-spark{position:absolute;left:50%;top:45%;width:9px;height:9px;border-radius:50%;
+  background:radial-gradient(circle,#fff,#ffd977 55%,rgba(255,200,90,0));
+  transform:translate(-50%,-50%);pointer-events:none;
+  animation:bbSpark 1.15s cubic-bezier(0.15,0.6,0.3,1) forwards;}
+@keyframes bbSpark{0%{opacity:1;transform:translate(-50%,-50%) scale(0.6)}
+  100%{opacity:0;transform:translate(calc(-50% + var(--sx)),calc(-50% + var(--sy))) scale(0.1)}}
+`;
+      document.head.appendChild(st);
+    }
+
+    const leveled = Math.max(0, Number(info.leveled) || 0);
+    const outcomeTitle = {
+      tame: "🎉 Wild Buddy Tamed!",
+      feast: "🍖 Victory Feast!",
+      released: "🕊️ Wild Buddy Released",
+      lost: "💪 Learned from Defeat",
+      loss: "💪 Learned from Defeat",
+      win: "🏆 Victory!",
+    }[info.outcome] || "🏆 Victory!";
+    const nick = String(info.nickname || "Buddy");
+    const learned = Array.isArray(info.learned) ? info.learned : [];
+    const maxed = info.capped === true;
+
+    const wrap = document.createElement("div");
+    wrap.className = "bb-xp-screen";
+    wrap.innerHTML = `
+      <div class="bb-xp-card">
+        <div class="bb-xp-title">${outcomeTitle}</div>
+        <div class="bb-xp-sub">🎉 <b>${nick}</b> earned <b><span class="bb-xp-amount">0</span> XP</b> during this battle!</div>
+        <div class="bb-xp-levelrow">
+          <span class="bb-xp-lv" id="bb-xp-lv-from">Lv. ${Number(info.fromLevel) || 1}</span>
+          <div class="bb-xp-bar">
+            <div class="bb-xp-fill"></div>
+            <div class="bb-xp-shine"></div>
+          </div>
+          <span class="bb-xp-lv" id="bb-xp-lv-to">Lv. ${Number(info.toLevel) || Number(info.fromLevel) || 1}</span>
+        </div>
+        <div class="bb-xp-nums">${Number(info.fromXp) || 0} / ${Number(info.fromNeed) || 1} XP</div>
+        ${leveled > 0 ? "" : ""}
+        <div class="bb-xp-levelup hidden">⭐ LEVEL UP! &nbsp;Lv.${Number(info.fromLevel) || 1} → Lv.${Number(info.toLevel) || 1}</div>
+        ${learned.length ? `<div class="bb-xp-learned">✨ Learned: ${learned.join(" · ")}</div>` : ""}
+        ${maxed ? `<div class="bb-xp-learned">👑 MAX LEVEL REACHED</div>` : ""}
+        <button class="bb-btn bb-primary bb-xp-continue" id="bb-xp-continue">Continue</button>
+      </div>`;
+    root.appendChild(wrap);
+
+    const fill = wrap.querySelector(".bb-xp-fill");
+    const nums = wrap.querySelector(".bb-xp-nums");
+    const amountEl = wrap.querySelector(".bb-xp-amount");
+    const levelupEl = wrap.querySelector(".bb-xp-levelup");
+    const card = wrap.querySelector(".bb-xp-card");
+
+    const fromNeed = Math.max(1, Number(info.fromNeed) || 1);
+    const toNeed = Math.max(1, Number(info.toNeed) || 1);
+    const fromPct = Math.max(0, Math.min(100, ((Number(info.fromXp) || 0) / fromNeed) * 100));
+    const toPct = maxed ? 100 : Math.max(0, Math.min(100, ((Number(info.toXp) || 0) / toNeed) * 100));
+
+    // The fill: ease the bar to full on a level-up (then roll into the new
+    // level), or straight to the new percentage otherwise. The shine sweep +
+    // glow give it the "premium" feel.
+    fill.style.width = fromPct + "%";
+    countUp(amountEl, 0, Number(info.xpAward) || 0, 1100);
+
+    requestAnimationFrame(() => {
+      fill.style.transition = "width 1.15s cubic-bezier(0.22, 1, 0.36, 1)";
+      fill.style.width = (leveled > 0 ? 100 : toPct) + "%";
+    });
+
+    if (leveled > 0) {
+      setTimeout(() => {
+        // Level-up burst: flash, sparkles, badge bounce — then the bar rolls
+        // into the new level and fills to where the buddy landed.
+        levelupEl.classList.remove("hidden");
+        levelupEl.classList.add("bb-pop");
+        card.classList.add("bb-flash");
+        sparkles(card);
+        setTimeout(() => card.classList.remove("bb-flash"), 420);
+        fill.style.transition = "none";
+        fill.style.width = "0%";
+        nums.textContent = `0 / ${toNeed} XP`;
+        requestAnimationFrame(() => {
+          fill.style.transition = "width 0.9s cubic-bezier(0.22, 1, 0.36, 1)";
+          fill.style.width = toPct + "%";
+        });
+        let shown = 0;
+        const t0 = performance.now();
+        (function roll(t) {
+          const k = Math.min(1, (t - t0) / 900);
+          shown = Math.round((Number(info.toXp) || 0) * (1 - Math.pow(1 - k, 3)));
+          nums.textContent = `${shown} / ${toNeed} XP`;
+          if (k < 1) requestAnimationFrame(roll);
+        })(performance.now());
+      }, 1250);
+    } else {
+      setTimeout(() => {
+        nums.textContent = `${Number(info.toXp) || 0} / ${toNeed} XP`;
+      }, 1150);
+    }
+
+    const cont = wrap.querySelector("#bb-xp-continue");
+    if (cont) {
+      cont.addEventListener("click", () => {
+        xpPanelOpen = false;
+        teardown();
+      });
+    }
   }
 
   function teardown() {
@@ -1230,6 +1423,7 @@ const BuddyBattle = (() => {
 
   return {
     startEncounter,
+    showXpResults,
     FEED_TOTAL,
     FEED_BERRIES,
     FEED_INTERVAL_MS,

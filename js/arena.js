@@ -848,11 +848,20 @@ const Arena = (() => {
         // wrote the XP onto a detached copy — sync responses rebuild
         // state.buddy mid-fight — so the award vanished ("15 arena wins,
         // buddy earned 0 XP") even though the victory modal showed it.
+        let xpInfo = null;
         if (typeof BuddySystem !== "undefined" && BuddySystem.awardBattleXp) {
-          BuddySystem.awardBattleXp(ally.uid, xp);
+          xpInfo = BuddySystem.awardBattleXp(ally.uid, xp);
         } else {
           BuddyEngine.addXp(ally, xp);
         }
+        // 🏆 End-of-battle XP results — the battle screen stays up behind the
+        // panel and the ally's XP bar fills with the XP just earned.
+        try {
+          if (xpInfo && xpInfo.xpAward > 0 &&
+              typeof BuddyBattle !== "undefined" && BuddyBattle.showXpResults) {
+            BuddyBattle.showXpResults(Object.assign({}, xpInfo, { outcome: won ? "win" : "loss" }));
+          }
+        } catch (e) {}
         if (typeof PlayerXP !== "undefined") {
           PlayerXP.addXP(
             won ? PlayerXP.XP.battleWin : PlayerXP.XP.battleLoss,

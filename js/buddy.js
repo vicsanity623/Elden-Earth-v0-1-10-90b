@@ -2410,13 +2410,40 @@ const BuddySystem = (() => {
 
     const playerXpReason = summary.outcome;
 
+    // 🧪 END-OF-BATTLE XP RESULTS — capture the ally's XP before/after every
+    // award so the battle screen can animate the XP bar fill
+    // ("Buddy earned XXX XP during this battle!"). All outcomes earn XP —
+    // tame and release included — the player just never SAW it before.
+    let battleXp = null;
+    const grantXp = (target, amount) => {
+      if (!target || !amount) return { leveled: 0, learned: [] };
+      const before = (typeof BuddyEngine !== "undefined" && BuddyEngine.xpProgress)
+        ? BuddyEngine.xpProgress(target) : { current: Number(target.xp) || 0, need: 1 };
+      const r = BuddyEngine.addXp(target, amount);
+      const after = BuddyEngine.xpProgress(target);
+      battleXp = {
+        nickname: String(target.nickname || "Buddy"),
+        xpAward: (Number(battleXp && battleXp.xpAward) || 0) + Math.floor(amount),
+        fromLevel: battleXp ? battleXp.fromLevel : (r.fromLevel != null ? r.fromLevel : Number(target.level) || 1),
+        toLevel: Number(target.level) || 1,
+        leveled: (Number(battleXp && battleXp.leveled) || 0) + (r.leveled || 0),
+        learned: [].concat((battleXp && battleXp.learned) || [], r.learned || []),
+        fromXp: battleXp ? battleXp.fromXp : before.current,
+        fromNeed: battleXp ? battleXp.fromNeed : before.need,
+        toXp: after.current,
+        toNeed: after.need,
+        capped: r.capped === true,
+      };
+      return r;
+    };
+
     // Buddy XP is awarded for EVERY outcome — winning is how a buddy grows.
     // The tame path used to skip this entirely, so the most common win left
     // the buddy at 0 XP while `battlesWon` still ticked up.
     const awardBuddyXp = (amount, label) => {
       const target = bagAlly || activeInst;
       if (!target || !amount) return null;
-      const r = BuddyEngine.addXp(target, amount);
+      const r = grantXp(target, amount);
       if (r.leveled > 0) {
         toast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
         syncDefenderSnapshot();
@@ -2445,7 +2472,7 @@ const BuddySystem = (() => {
     } else if (summary.outcome === "feast") {
       b.totalFeasted += 1;
       const gained = summary.bonusXp || 0;
-      const result = BuddyEngine.addXp(bagAlly || activeInst, gained + BuddyEngine.battleXpReward(wildInst, "win"));
+      const result = grantXp(bagAlly || activeInst, gained + BuddyEngine.battleXpReward(wildInst, "win"));
       if (result.leveled > 0) syncDefenderSnapshot();
       if (bagAlly) {
         bagAlly.happiness = Math.min(100, (bagAlly.happiness || 50) + (summary.happinessGain || 10));
@@ -2459,7 +2486,7 @@ const BuddySystem = (() => {
       }
       if (typeof PlayerXP !== "undefined") PlayerXP.addXP(PlayerXP.XP.feast, "feast");
     } else if (summary.outcome === "lost") {
-      const result = BuddyEngine.addXp(bagAlly || activeInst, BuddyEngine.battleXpReward(wildInst, "loss"));
+      const result = grantXp(bagAlly || activeInst, BuddyEngine.battleXpReward(wildInst, "loss"));
       if (result.leveled > 0 && bagAlly) {
         toast(`💪 ${activeInst.nickname} learned from defeat and reached Lv.${bagAlly.level}!`);
       }
@@ -2499,6 +2526,17 @@ const BuddySystem = (() => {
         : floor;
       if (bagAlly.currentHp < target) bagAlly.currentHp = target;
     }
+
+    // 🏆 END-OF-BATTLE XP RESULTS — the battle screen stays up behind the
+    // panel, the ally's XP bar fills with the XP just earned (animated), and
+    // Continue closes the battle. This is the payoff moment the battle flow
+    // was missing.
+    try {
+      if (battleXp && battleXp.xpAward > 0 &&
+          typeof BuddyBattle !== "undefined" && BuddyBattle.showXpResults) {
+        BuddyBattle.showXpResults(Object.assign({}, battleXp, { outcome: summary.outcome }));
+      }
+    } catch (e) {}
 
     persist();
     renderHudBadge();
@@ -2723,7 +2761,10 @@ const BuddySystem = (() => {
     const b = buddyState();
     const target = (uid && b.bag.find((x) => x && x.uid === uid)) || activeBuddy();
     if (!target || !amount || amount <= 0) return null;
+    const before = (typeof BuddyEngine !== "undefined" && BuddyEngine.xpProgress)
+      ? BuddyEngine.xpProgress(target) : { current: Number(target.xp) || 0, need: 1 };
     const r = BuddyEngine.addXp(target, amount);
+    const after = BuddyEngine.xpProgress(target);
     if (r.leveled > 0) {
       toast(`⭐ ${target.nickname} reached Lv.${target.level}!`);
       syncDefenderSnapshot();
@@ -2734,7 +2775,17 @@ const BuddySystem = (() => {
     persist();
     renderHudBadge();
     syncCompanion();
-    return r;
+    // Full progress info so callers (arena settle) can animate the
+    // end-of-battle XP bar with the exact numbers applied here.
+    return Object.assign({}, r, {
+      xpAward: Math.floor(amount),
+      nickname: String(target.nickname || "Buddy"),
+      fromXp: before.current,
+      fromNeed: before.need,
+      toXp: after.current,
+      toNeed: after.need,
+      toLevel: Number(target.level) || 1,
+    });
   }
 
   /**
