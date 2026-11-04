@@ -197,12 +197,20 @@
     }).join("");
   }
 
+  function renderMailError() {
+    var box = $("mail-list");
+    if (!box) return;
+    box.innerHTML = '<div class="mail-empty">⚠️ Couldn\'t load the mailbox.<br><button class="mail-claim-btn" data-retry="mail" style="max-width:220px;margin:12px auto 0;display:block;">TRY AGAIN</button></div>';
+  }
+
   function loadMailbox() {
     if (loaded || typeof firebase === "undefined" || !firebase.firestore) return;
-    var user = firebase.auth && firebase.auth().currentUser;
+    var user = null;
+    try { user = firebase.auth && firebase.auth().currentUser; } catch (e) {}
     if (!user) return;
     loaded = true;
-    var db = firebase.firestore();
+    var db;
+    try { db = firebase.firestore(); } catch (e) { loaded = false; renderMailError(); return; }
     db.collection("global_mail").orderBy("createdAt", "desc").limit(50).get().then(function (snap) {
       mailItems = [];
       alertItems = [];
@@ -216,8 +224,10 @@
       renderMail();
       renderAlerts();
       refreshDots();
-    }).catch(function () {
-      loaded = false; // allow retry on next open
+    }).catch(function (e) {
+      console.warn("[GameMenu] mailbox load failed:", e && e.message);
+      loaded = false; // allow retry
+      renderMailError();
     });
     db.collection("global_mail_claims").where("uid", "==", user.uid).limit(200).get().then(function (snap) {
       snap.docs.forEach(function (d) {
@@ -226,7 +236,9 @@
       });
       renderMail();
       refreshDots();
-    }).catch(function () {});
+    }).catch(function (e) {
+      console.warn("[GameMenu] claims load failed:", e && e.message);
+    });
   }
 
   function claimGift(mailId, btn) {
@@ -367,6 +379,13 @@
     var mailBox = $("mail-list");
     if (mailBox) {
       mailBox.addEventListener("click", function (e) {
+        var retry = e.target.closest("[data-retry]");
+        if (retry) {
+          var box = $("mail-list");
+          if (box) box.innerHTML = '<div class="mail-empty">📭 Checking the mailbox…</div>';
+          loadMailbox();
+          return;
+        }
         var btn = e.target.closest("[data-claim]");
         if (btn) claimGift(btn.getAttribute("data-claim"), btn);
       });
