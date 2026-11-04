@@ -297,9 +297,11 @@
   // ---------- Boot ----------
   function boot() {
     // App Check attestation (monitor mode) — shared module with the game.
+    // BASE-relative: an absolute "/js/appcheck.js" 404s on GitHub Pages
+    // project sites, which live under /Elden-Earth-v0-1-10-90b/.
     if (!window.EEAppCheck) {
       var ac = document.createElement("script");
-      ac.src = "/js/appcheck.js";
+      ac.src = url("js/appcheck.js");
       ac.defer = true;
       document.head.appendChild(ac);
     }
