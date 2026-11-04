@@ -8,6 +8,8 @@
 <meta http-equiv="Expires" content="0">
 <title>Player Economy Terminal</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg-dark: #131722;
@@ -50,13 +52,30 @@
     padding: 10px; height: 330px; position: relative; margin-bottom: 24px;
   }
   .divider { height: 1px; background: var(--border); margin: 24px 0 16px 0; }
+
+  /* ---- range picker (cloud history) ---- */
+  .range-row { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+  .range-btn {
+    flex: 0 0 auto; padding: 8px 13px; background: var(--card-bg); border: 1px solid var(--border);
+    color: var(--text-muted); border-radius: 999px; font-size: 0.78rem; font-weight: 700;
+    cursor: pointer; white-space: nowrap;
+  }
+  .range-btn.active { background: rgba(41, 98, 255, 0.18); color: #fff; border-color: var(--accent); }
+  .custom-range { display: none; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .custom-range.show { display: flex; }
+  .custom-range input {
+    background: var(--card-bg); color: #fff; border: 1px solid var(--border);
+    padding: 8px 10px; border-radius: 8px; font-size: 0.82rem; color-scheme: dark;
+  }
+  .range-note { font-size: 0.72rem; color: var(--text-muted); margin: -6px 0 12px 2px; }
+  .band-key { display: inline-block; width: 18px; height: 8px; border-radius: 2px; vertical-align: middle; margin: 0 4px; }
 </style>
 </head>
 <body>
 
 <div class="top-bar">
   <div class="title">📈 Player Economy Terminal</div>
-  <div class="sync-badge" onclick="window.location.reload(true)">🔄 Nov 03, 2026 - 12:41 AM</div>
+  <div class="sync-badge" id="sync-badge">☁️ Cloud · hourly</div>
 </div>
 
 <select id="playerSelect" onchange="updatePlayer()"></select>
@@ -87,6 +106,24 @@
   <button class="tab-btn player-btn" onclick="setMetric('rp', this)">Total RP</button>
 </div>
 
+<div class="range-row" id="range-row">
+  <button class="range-btn active" data-range="24h">🕐 24 Hours</button>
+  <button class="range-btn" data-range="7d">📅 7 Days</button>
+  <button class="range-btn" data-range="30d">📅 30 Days</button>
+  <button class="range-btn" data-range="custom">📆 Previous Weeks</button>
+</div>
+<div class="custom-range" id="custom-range">
+  <input type="date" id="range-from" aria-label="From date">
+  <span style="color:var(--text-muted)">→</span>
+  <input type="date" id="range-to" aria-label="To date">
+  <button class="range-btn active" id="range-apply">Go</button>
+</div>
+<div class="range-note">
+  ☁️ Updated every hour on the cloud ·
+  <span class="band-key" style="background:rgba(41,98,255,0.28)"></span> lighter band = the min/max reached
+  <b>between</b> hourly prints (spikes &amp; dips inside the hour)
+</div>
+
 <div class="chart-box">
   <canvas id="tradingChart"></canvas>
 </div>
@@ -100,11 +137,11 @@
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-label">Total Real Players</div>
-    <div class="stat-val" style="color: var(--green);" id="globalTotal">22</div>
+    <div class="stat-val" style="color: var(--green);" id="globalTotal">—</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">New Real Players (Latest Day)</div>
-    <div class="stat-val" style="color: var(--accent);" id="globalNew">+0</div>
+    <div class="stat-label">New Real Players (Latest Point)</div>
+    <div class="stat-val" style="color: var(--accent);" id="globalNew">—</div>
   </div>
 </div>
 
@@ -118,29 +155,142 @@
 </div>
 
 <script>
-const players = {"CRM4lyfe": {"name": "CRM4lyfe", "plots": 208, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [488.0, 738.02, 3173.04, 3465.05, 4742.07, 904.1], "rc": [0.0078, 0.0282, 0.0666, 0.0804, 0.089, 0.1342], "rp": [44.0, 100.0, 129.0, 159.0, 159.0, 233.0], "plots_history": [72, 98, 100, 109, 110, 208]}, "Test": {"name": "Test", "plots": 143, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [805.48, 841.51, 841.51, 1064.55, 1064.57, 1064.57, 1190.61, 1190.61, 1190.61, 1728.66, 1738.69], "rc": [0.641, 0.6417, 0.6452, 0.6893, 0.6894, 0.6894, 0.7105, 0.7105, 0.7105, 0.7184, 0.7561], "rp": [331.0, 335.0, 335.0, 348.0, 348.0, 348.0, 359.0, 359.0, 359.0, 383.0, 383.0], "plots_history": [143, 143, 143, 143, 143, 143, 143, 143, 143, 143, 143]}, "Kyjin92": {"name": "Kyjin92", "plots": 137, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [80.0, 41.02, 134.03, 232.04, 756.06, 52.08], "rc": [0.0259, 0.1168, 0.1451, 0.1505, 0.1568, 0.211], "rp": [55.0, 80.0, 85.0, 99.0, 127.0, 146.0], "plots_history": [83, 94, 95, 96, 120, 137]}, "Cory Dillmann": {"name": "Cory Dillmann", "plots": 255, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [21.55, 1.58, 8.61, 8.61, 44.64, 44.64, 19.71, 19.71, 32.74, 48.77, 48.77], "rc": [0.9813, 0.9816, 0.9865, 0.9865, 0.9883, 0.9883, 0.9921, 0.9921, 0.9937, 0.9982, 0.9982], "rp": [188.0, 200.0, 203.0, 203.0, 209.0, 209.0, 232.0, 232.0, 239.0, 259.0, 259.0], "plots_history": [203, 214, 216, 216, 218, 218, 244, 244, 248, 255, 255]}, "Kolton": {"name": "Kolton", "plots": 43, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [60.0, 60.0, 60.0, 74.01, 74.01, 74.01, 74.01, 74.01, 74.01, 74.01, 74.01], "rc": [0.0012, 0.0012, 0.0012, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015, 0.0015], "rp": [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0], "plots_history": [43, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43]}, "VicAdmin": {"name": "VicAdmin", "plots": 308, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [143.0, 42.01, 18.03, 37.04, 421.1, 1909.15, 4592.18, 5975.25, 29.37, 27.52, 51.63], "rc": [0.0126, 0.0268, 0.0336, 0.1054, 0.235, 0.0086, 0.0752, 0.1477, 0.2624, 0.3498, 0.4192], "rp": [73.0, 177.0, 199.0, 277.0, 330.0, 371.0, 413.0, 447.0, 493.0, 559.0, 565.0], "plots_history": [21, 54, 72, 139, 163, 177, 179, 180, 266, 292, 308]}, "SlumLord": {"name": "SlumLord", "plots": 143, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [748.24, 748.24, 748.24, 748.24, 748.24, 653.27, 663.29, 663.29, 663.29, 663.29, 663.29], "rc": [0.6465, 0.6465, 0.6501, 0.6501, 0.6501, 0.6502, 0.6505, 0.6505, 0.6505, 0.654, 0.654], "rp": [123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0, 123.0], "plots_history": [141, 141, 141, 141, 141, 143, 143, 143, 143, 143, 143]}, "MexicanSavage": {"name": "MexicanSavage", "plots": 47, "dates": ["2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [1678.0, 2189.0, 93.0, 105.01], "rc": [0.0, 0.0005, 0.0006, 0.0006], "rp": [0.0, 27.0, 27.0, 30.0], "plots_history": [25, 25, 47, 47]}, "kevlar": {"name": "kevlar", "plots": 99, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08, 129.08], "rc": [2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984, 2.0984], "rp": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "plots_history": [99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99]}, "MortuusTemplum": {"name": "MortuusTemplum", "plots": 0, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [3082.0, 3082.0, 282.0, 282.0, 282.0, 0.0], "rc": [0.0001, 0.0001, 0.0003, 0.0003, 0.0003, 0.0], "rp": [0.0, 0.0, 3.0, 3.0, 3.0, 0.0], "plots_history": [11, 11, 41, 41, 41, 0]}, "MASCOTTE OFFICIAL": {"name": "MASCOTTE OFFICIAL", "plots": 175, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [176.09, 200.11, 163.13, 1204.15, 1556.18, 1556.18, 1556.18, 1556.18, 1556.18, 1556.18, 1556.18], "rc": [0.1089, 0.1122, 0.1176, 0.119, 0.1198, 0.1198, 0.1198, 0.1198, 0.1198, 0.1234, 0.1234], "rp": [148.0, 153.0, 159.0, 176.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0], "plots_history": [148, 149, 151, 175, 175, 175, 175, 175, 175, 175, 175]}, "Frisky Jackal": {"name": "Frisky Jackal", "plots": 36, "dates": ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [4352.0, 3157.0, 3323.0, 2950.01, 3785.01, 3164.01], "rc": [0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0002], "rp": [4.0, 10.0, 14.0, 21.0, 58.0, 61.0], "plots_history": [9, 22, 22, 26, 27, 36]}, "YoAxe12": {"name": "YoAxe12", "plots": 149, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [7.02, 7.02, 7.02, 113.03, 667.04, 287.06, 248.08, 346.1, 18.14, 162.17, 12.2], "rc": [0.3169, 0.3169, 0.3169, 0.3231, 0.3271, 0.3288, 0.0789, 0.0887, 0.0895, 0.0949, 0.0972], "rp": [0.0, 0.0, 0.0, 62.0, 89.0, 100.0, 111.0, 136.0, 150.0, 192.0, 197.0], "plots_history": [43, 43, 43, 68, 86, 98, 106, 120, 130, 142, 149]}, "CHAO": {"name": "CHAO", "plots": 54, "dates": ["2026-11-02", "2026-11-03"], "eb": [80.0, 68.01], "rc": [0.0002, 0.004], "rp": [21.0, 83.0], "plots_history": [20, 54]}, "imacatmeow": {"name": "imacatmeow", "plots": 692, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [223.82, 26.0, 60.08, 1041.17, 2310.35, 2818.52, 3094.6, 3280.72, 3579.81, 60.91, 85.12], "rc": [2.6482, 2.7884, 2.8728, 3.1546, 3.2502, 3.3958, 3.4839, 3.6159, 3.7484, 3.844, 4.1002], "rp": [403.0, 424.0, 444.0, 455.0, 468.0, 476.0, 499.0, 513.0, 534.0, 554.0, 579.0], "plots_history": [511, 517, 561, 564, 565, 566, 569, 569, 569, 665, 692]}, "Jbreezy": {"name": "Jbreezy", "plots": 290, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [7006.15, 6558.18, 6641.21, 336.24, 1434.27, 1567.31, 1929.34, 2578.38, 2430.41, 2063.45, 135.49], "rc": [0.954, 0.9576, 0.9684, 0.9822, 0.9836, 0.985, 0.9851, 0.9856, 0.2357, 0.2405, 0.2415], "rp": [168.0, 182.0, 192.0, 207.0, 213.0, 218.0, 218.0, 247.0, 255.0, 271.0, 284.0], "plots_history": [126, 132, 132, 238, 238, 238, 238, 238, 238, 249, 290]}, "Davinci Machen": {"name": "Davinci Machen", "plots": 679, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [3541.85, 4679.95, 4447.03, 268.08, 896.23, 1032.42, 400.63, 1148.74, 1618.85, 4337.95, 3189.03], "rc": [2.3652, 2.4116, 2.4336, 2.4564, 0.7453, 0.7518, 0.805, 1.015, 1.0755, 1.1886, 1.2643], "rp": [797.0, 820.0, 820.0, 833.0, 860.0, 872.0, 899.0, 913.0, 932.0, 947.0, 948.0], "plots_history": [532, 546, 549, 604, 620, 631, 650, 656, 654, 654, 679]}, "Android Test": {"name": "Android Test", "plots": 6, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [3757.02, 3757.02, 3757.02, 3757.02, 3757.02, 3757.02, 3780.03, 3780.03, 3780.03, 3746.03, 3746.03], "rc": [0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1418, 0.1421, 0.1421], "rp": [53.0, 53.0, 53.0, 53.0, 53.0, 53.0, 57.0, 57.0, 57.0, 63.0, 63.0], "plots_history": [5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6]}, "EldenEarth1": {"name": "EldenEarth1", "plots": 4, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0, 115.0], "rc": [0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068, 0.0068], "rp": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "plots_history": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]}, "November Storm": {"name": "November Storm", "plots": 334, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [6077.1, 6417.18, 6674.22, 6879.26, 7097.3, 3442.34, 3549.37, 3583.42, 3820.48, 5134.51, 5481.56], "rc": [5.9774, 5.9807, 5.9848, 5.9884, 5.9888, 5.9975, 5.9981, 5.9982, 5.9988, 6.0059, 6.0099], "rp": [653.0, 671.0, 687.0, 695.0, 705.0, 716.0, 729.0, 729.0, 739.0, 744.0, 783.0], "plots_history": [273, 273, 273, 273, 273, 313, 313, 313, 313, 314, 334]}, "Jess": {"name": "Jess", "plots": 437, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [1873.64, 1971.68, 3095.75, 3562.81, 4709.88, 5116.95, 5156.97, 5590.11, 4114.18, 520.24, 195.31], "rc": [3.747, 3.749, 3.761, 3.8151, 3.8172, 3.8186, 3.8194, 3.8253, 3.8422, 3.8535, 3.8538], "rp": [451.0, 454.0, 454.0, 476.0, 501.0, 501.0, 501.0, 510.0, 527.0, 556.0, 556.0], "plots_history": [340, 339, 339, 361, 361, 361, 360, 361, 382, 432, 437]}, "Zandermaul": {"name": "Zandermaul", "plots": 249, "dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "eb": [164.66, 246.7, 286.75, 359.79, 389.84, 427.88, 560.93, 600.98, 600.98, 742.02, 933.06], "rc": [1.6146, 1.6147, 1.6183, 1.6184, 1.6184, 1.6186, 1.6189, 1.619, 1.619, 1.6227, 1.6229], "rp": [353.0, 357.0, 362.0, 365.0, 368.0, 371.0, 376.0, 379.0, 379.0, 379.0, 382.0], "plots_history": [249, 249, 249, 249, 249, 249, 249, 249, 249, 249, 249]}};
-const sortedNames = ["imacatmeow", "Davinci Machen", "Jess", "November Storm", "VicAdmin", "Jbreezy", "Cory Dillmann", "Zandermaul", "CRM4lyfe", "MASCOTTE OFFICIAL", "YoAxe12", "Test", "SlumLord", "Kyjin92", "kevlar", "CHAO", "MexicanSavage", "Kolton", "Frisky Jackal", "Android Test", "EldenEarth1", "MortuusTemplum"];
-const globalData = {"dates": ["2026-10-23", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03"], "total": [16, 16, 16, 16, 16, 20, 20, 21, 21, 22, 22], "new": [16, 0, 0, 0, 0, 4, 0, 1, 0, 1, 0], "latest_total": 22, "latest_new": 0};
+// ============================================================
+// Cloud-driven growth terminal.
+//
+// Data comes from Firestore now — no home-machine cron:
+//   growth_snapshots/{YYYY-MM-DD_HH} — hourly points (24/day)
+//   growth_daily/{YYYY-MM-DD}        — daily rollups (weekly history)
+// Each point carries min/max envelopes for the time BETWEEN prints, drawn as
+// the lighter band so spikes and dips inside the hour stay visible.
+// ============================================================
+const players = {};        // name -> series (same shape the old page used)
+let sortedNames = [];
+let globalData = { dates: [], total: [], new: [] };
 
-let currentMetric = 'eb';
+let currentMetric = "eb";
 let chartInstance = null;
 let globalChartInstance = null;
-let currentGlobalMetric = 'total';
+let currentGlobalMetric = "total";
+let rangeMode = "24h";
 
-const select = document.getElementById('playerSelect');
-sortedNames.forEach(name => {
-  const opt = document.createElement('option');
-  opt.value = name;
-  opt.innerText = `${name} (${players[name].plots} plots)`;
-  select.appendChild(opt);
-});
+const select = document.getElementById("playerSelect");
 
+function firebaseReady() {
+  return typeof firebase !== "undefined" && firebase.apps && firebase.apps.length > 0;
+}
+
+function initFirebase() {
+  try {
+    if (typeof firebase === "undefined") return false;
+    if (!firebase.apps.length) {
+      firebase.initializeApp({
+        apiKey: "AIzaSyAf8u0qUQJaajJp4352-SrY7lIh8rNFPWY",
+        authDomain: "elden-earth.firebaseapp.com",
+        projectId: "elden-earth",
+        storageBucket: "elden-earth.firebasestorage.app",
+        messagingSenderId: "231253239262",
+        appId: "1:231253239262:web:3fa1ca28575fcade15e94f",
+      });
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+// ---- key helpers (hourKey = "YYYY-MM-DD_HH", dayKey = "YYYY-MM-DD") ----
+function hourKeyOf(ms) { return new Date(ms).toISOString().slice(0, 13).replace("T", "_"); }
+function dayKeyOf(ms) { return new Date(ms).toISOString().slice(0, 10); }
+function labelFor(point) {
+  // hourly: "11-04 13h" — daily: "11-04"
+  return point.length === 13 ? point.slice(5).replace("_", " ") + "h" : point.slice(5);
+}
+
+// ---- fetch + reshape -------------------------------------------------
+async function fetchPoints() {
+  const db = firebase.firestore();
+  const now = Date.now();
+  let docs = [];
+
+  if (rangeMode === "24h") {
+    const startKey = hourKeyOf(now - 24 * 3600 * 1000);
+    const snap = await db.collection("growth_snapshots")
+      .where("hourKey", ">=", startKey).orderBy("hourKey", "asc").get();
+    docs = snap.docs.map((d) => d.data());
+  } else {
+    let fromDay, toDay;
+    if (rangeMode === "7d") {
+      fromDay = dayKeyOf(now - 7 * 86400000);
+      toDay = dayKeyOf(now);
+    } else if (rangeMode === "30d") {
+      fromDay = dayKeyOf(now - 30 * 86400000);
+      toDay = dayKeyOf(now);
+    } else {
+      fromDay = document.getElementById("range-from").value || dayKeyOf(now - 7 * 86400000);
+      toDay = document.getElementById("range-to").value || dayKeyOf(now);
+      if (fromDay > toDay) { const t = fromDay; fromDay = toDay; toDay = t; }
+    }
+    const snap = await db.collection("growth_daily")
+      .where("dayKey", ">=", fromDay).where("dayKey", "<=", toDay).orderBy("dayKey", "asc").get();
+    docs = snap.docs.map((d) => d.data());
+  }
+  return docs;
+}
+
+function reshape(docs) {
+  // players: name -> { dates, eb, rc, rp, plots_history, min{}, max{} }
+  for (const k of Object.keys(players)) delete players[k];
+  const names = {};
+  docs.forEach((p) => {
+    Object.keys(p.players || {}).forEach((uid) => {
+      const s = p.players[uid];
+      const name = s.name || uid;
+      const slot = names[name] || (names[name] = {
+        name, plots: s.plots,
+        dates: [], eb: [], rc: [], rp: [], plots_history: [],
+        min: { eb: [], rc: [], rp: [], plots: [] },
+        max: { eb: [], rc: [], rp: [], plots: [] },
+      });
+      slot.dates.push(labelFor(p.hourKey || p.dayKey));
+      slot.eb.push(s.eb || 0);
+      slot.rc.push(s.cash || 0);
+      slot.rp.push(s.rp || 0);
+      slot.plots_history.push(s.plots || 0);
+      const lo = s.min || { eb: s.eb || 0, cash: s.cash || 0, rp: s.rp || 0, plots: s.plots || 0 };
+      const hi = s.max || { eb: s.eb || 0, cash: s.cash || 0, rp: s.rp || 0, plots: s.plots || 0 };
+      slot.min.eb.push(lo.eb); slot.min.rc.push(lo.cash); slot.min.rp.push(lo.rp); slot.min.plots.push(lo.plots);
+      slot.max.eb.push(hi.eb); slot.max.rc.push(hi.cash); slot.max.rp.push(hi.rp); slot.max.plots.push(hi.plots);
+      slot.plots = s.plots; // latest wins
+    });
+  });
+  Object.values(names).forEach((s) => { players[s.name] = s; });
+  sortedNames = Object.keys(players).sort((a, b) => (players[b].plots || 0) - (players[a].plots || 0));
+
+  globalData = {
+    dates: docs.map((p) => labelFor(p.hourKey || p.dayKey)),
+    total: docs.map((p) => (p.totals && p.totals.players) || 0),
+    new: docs.map((p) => Number(p.newPlayers) || 0),
+  };
+}
+
+function fillSelect() {
+  const keep = select.value;
+  select.innerHTML = "";
+  sortedNames.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.innerText = `${name} (${players[name].plots || 0} plots)`;
+    select.appendChild(opt);
+  });
+  if (keep && players[keep]) select.value = keep;
+}
+
+// ---- rendering (same look as before + the lighter min/max band) -------
 function getMetricConfig(metric) {
   const configs = {
-    'eb': { label: 'Total EB', color: '#2962ff', bg: 'rgba(41, 98, 255, 0.15)' },
-    'rc': { label: 'Total RC', color: '#f7a600', bg: 'rgba(247, 166, 0, 0.15)' },
-    'plots_history': { label: 'Plots Owned', color: '#089981', bg: 'rgba(8, 153, 129, 0.15)' },
-    'rp': { label: 'Total RP', color: '#e91e63', bg: 'rgba(233, 30, 99, 0.15)' }
+    "eb": { label: "Total EB", color: "#2962ff", bg: "rgba(41, 98, 255, 0.15)", key: "eb" },
+    "rc": { label: "Total RC", color: "#f7a600", bg: "rgba(247, 166, 0, 0.15)", key: "rc" },
+    "plots_history": { label: "Plots Owned", color: "#089981", bg: "rgba(8, 153, 129, 0.15)", key: "plots" },
+    "rp": { label: "Total RP", color: "#e91e63", bg: "rgba(233, 30, 99, 0.15)", key: "rp" }
   };
   return configs[metric];
 }
@@ -148,64 +298,90 @@ function getMetricConfig(metric) {
 function renderChart() {
   const name = select.value;
   const p = players[name];
+  const box = document.getElementById("tradingChart");
+  if (!p) {
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    return;
+  }
   const conf = getMetricConfig(currentMetric);
 
   const lastIdx = p.dates.length - 1;
-  document.getElementById('statPlots').innerText = p.plots_history[lastIdx];
-  document.getElementById('statEB').innerText = Number(p.eb[lastIdx]).toLocaleString();
-  document.getElementById('statRC').innerText = Number(p.rc[lastIdx]).toLocaleString();
-  document.getElementById('statRP').innerText = Number(p.rp[lastIdx]).toLocaleString();
+  document.getElementById("statPlots").innerText = fmt(p.plots_history[lastIdx]);
+  document.getElementById("statEB").innerText = fmt(p.eb[lastIdx]);
+  document.getElementById("statRC").innerText = fmt(p.rc[lastIdx], 4);
+  document.getElementById("statRP").innerText = fmt(p.rp[lastIdx]);
 
-  const ctx = document.getElementById('tradingChart').getContext('2d');
+  const ctx = box.getContext("2d");
   if (chartInstance) chartInstance.destroy();
 
+  // Lighter band: min/max reached BETWEEN hourly prints. Only drawn where the
+  // envelope exists (the player was active inside that hour).
+  const datasets = [];
+  const bandColor = conf.color.replace("#", "");
+  const rgb = {
+    "2962ff": "41, 98, 255", "f7a600": "247, 166, 0",
+    "089981": "8, 153, 129", "e91e63": "233, 30, 99"
+  }[bandColor] || "120, 130, 150";
+  datasets.push({
+    label: "Low",
+    data: p.min[currentMetric === "plots_history" ? "plots" : (currentMetric === "rc" ? "rc" : currentMetric)],
+    borderColor: `rgba(${rgb}, 0.22)`,
+    backgroundColor: `rgba(${rgb}, 0.10)`,
+    borderWidth: 1, pointRadius: 0, fill: false, tension: 0.35, order: 2,
+  });
+  datasets.push({
+    label: "High",
+    data: p.max[currentMetric === "plots_history" ? "plots" : (currentMetric === "rc" ? "rc" : currentMetric)],
+    borderColor: `rgba(${rgb}, 0.22)`,
+    backgroundColor: `rgba(${rgb}, 0.10)`,
+    borderWidth: 1, pointRadius: 0, fill: "-1", tension: 0.35, order: 2,
+  });
+  datasets.push({
+    label: conf.label,
+    data: p[currentMetric],
+    borderColor: conf.color,
+    backgroundColor: conf.bg,
+    borderWidth: 2.5,
+    fill: true,
+    tension: 0.35,
+    pointRadius: p.dates.length > 40 ? 0 : 3,
+    pointBackgroundColor: conf.color,
+    order: 1,
+  });
+
   chartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: p.dates,
-      datasets: [{
-        label: conf.label,
-        data: p[currentMetric],
-        borderColor: conf.color,
-        backgroundColor: conf.bg,
-        borderWidth: 2.5,
-        fill: true,
-        tension: 0.25,
-        pointRadius: 3,
-        pointBackgroundColor: conf.color
-      }]
-    },
+    type: "line",
+    data: { labels: p.dates, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1e222d',
-          titleColor: '#fff',
+          backgroundColor: "#1e222d",
+          titleColor: "#fff",
           bodyColor: conf.color,
-          borderColor: '#2a2e39',
-          borderWidth: 1
+          borderColor: "#2a2e39",
+          borderWidth: 1,
+          filter: (item) => item.datasetIndex === 2, // main line only
         }
       },
       scales: {
-        x: {
-          grid: { color: '#2a2e39' },
-          ticks: { color: '#787b86', maxTicksLimit: 6 }
-        },
-        y: {
-          grid: { color: '#2a2e39' },
-          ticks: { color: '#787b86' }
-        }
+        x: { grid: { color: "#2a2e39" }, ticks: { color: "#787b86", maxTicksLimit: 6 } },
+        y: { grid: { color: "#2a2e39" }, ticks: { color: "#787b86" } }
       }
     }
   });
 }
 
+function fmt(n, d) {
+  return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d == null ? 2 : d });
+}
+
 function setMetric(metric, btn) {
   currentMetric = metric;
-  document.querySelectorAll('.player-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  document.querySelectorAll(".player-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
   renderChart();
 }
 
@@ -214,16 +390,16 @@ function updatePlayer() {
 }
 
 function renderGlobalChart() {
-  const ctx = document.getElementById('globalChart').getContext('2d');
+  const ctx = document.getElementById("globalChart").getContext("2d");
   if (globalChartInstance) globalChartInstance.destroy();
 
-  const isBar = currentGlobalMetric === 'new';
-  const label = isBar ? 'New Real Players Joined' : 'Total Real Players';
-  const color = isBar ? '#089981' : '#2962ff';
-  const bg = isBar ? 'rgba(8, 153, 129, 0.4)' : 'rgba(41, 98, 255, 0.15)';
+  const isBar = currentGlobalMetric === "new";
+  const label = isBar ? "New Real Players Joined" : "Total Real Players";
+  const color = isBar ? "#089981" : "#2962ff";
+  const bg = isBar ? "rgba(8, 153, 129, 0.4)" : "rgba(41, 98, 255, 0.15)";
 
   globalChartInstance = new Chart(ctx, {
-    type: isBar ? 'bar' : 'line',
+    type: isBar ? "bar" : "line",
     data: {
       labels: globalData.dates,
       datasets: [{
@@ -233,9 +409,9 @@ function renderGlobalChart() {
         backgroundColor: bg,
         borderWidth: isBar ? 1.5 : 2.5,
         fill: true,
-        tension: 0.2,
+        tension: 0.35,
         borderRadius: isBar ? 4 : 0,
-        pointRadius: isBar ? 0 : 3,
+        pointRadius: isBar ? 0 : (globalData.dates.length > 40 ? 0 : 3),
         pointBackgroundColor: color
       }]
     },
@@ -245,22 +421,19 @@ function renderGlobalChart() {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1e222d',
-          titleColor: '#fff',
+          backgroundColor: "#1e222d",
+          titleColor: "#fff",
           bodyColor: color,
-          borderColor: '#2a2e39',
+          borderColor: "#2a2e39",
           borderWidth: 1
         }
       },
       scales: {
-        x: {
-          grid: { color: '#2a2e39' },
-          ticks: { color: '#787b86', maxTicksLimit: 6 }
-        },
+        x: { grid: { color: "#2a2e39" }, ticks: { color: "#787b86", maxTicksLimit: 6 } },
         y: {
           beginAtZero: isBar,
-          grid: { color: '#2a2e39' },
-          ticks: { color: '#787b86', precision: 0 }
+          grid: { color: "#2a2e39" },
+          ticks: { color: "#787b86", precision: 0 }
         }
       }
     }
@@ -269,13 +442,52 @@ function renderGlobalChart() {
 
 function setGlobalMetric(metric, btn) {
   currentGlobalMetric = metric;
-  document.querySelectorAll('.global-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  document.querySelectorAll(".global-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
   renderGlobalChart();
 }
 
-renderChart();
-renderGlobalChart();
+// ---- boot -------------------------------------------------------------
+async function load() {
+  if (!firebaseReady() && !initFirebase()) {
+    document.getElementById("sync-badge").textContent = "⚠️ Cloud offline";
+    return;
+  }
+  document.getElementById("sync-badge").textContent = "☁️ Loading…";
+  try {
+    const docs = await fetchPoints();
+    reshape(docs);
+    fillSelect();
+    renderChart();
+    renderGlobalChart();
+    const last = docs[docs.length - 1];
+    document.getElementById("globalTotal").innerText = last ? fmt((last.totals && last.totals.players) || 0) : "—";
+    document.getElementById("globalNew").innerText = last ? "+" + fmt(Number(last.newPlayers) || 0) : "—";
+    document.getElementById("sync-badge").textContent =
+      "☁️ Cloud · updated " + (last ? (last.hourKey || last.dayKey).replace("_", " ") : "—");
+  } catch (e) {
+    console.warn("[growth] load failed:", e && e.message);
+    document.getElementById("sync-badge").textContent = "⚠️ Cloud load failed — tap to retry";
+  }
+}
+
+document.getElementById("range-row").addEventListener("click", (e) => {
+  const btn = e.target.closest(".range-btn");
+  if (!btn) return;
+  rangeMode = btn.getAttribute("data-range");
+  document.querySelectorAll("#range-row .range-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("custom-range").classList.toggle("show", rangeMode === "custom");
+  if (rangeMode !== "custom") load();
+});
+document.getElementById("range-apply").addEventListener("click", () => {
+  rangeMode = "custom";
+  load();
+});
+document.getElementById("sync-badge").addEventListener("click", load);
+
+// Defer the first load until the (deferred) Firestore SDK has executed.
+window.addEventListener("DOMContentLoaded", () => setTimeout(load, 50));
 </script>
 </body>
 </html>

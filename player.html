@@ -146,8 +146,13 @@
         <button class="chip-btn" data-metric="rc">Total RC</button>
         <button class="chip-btn" data-metric="rp">Total RP</button>
       </div>
+      <div class="pp-tabs" id="pp-range-tabs">
+        <button class="chip-btn liked" data-range="24h">🕐 24 Hours</button>
+        <button class="chip-btn" data-range="7d">📅 7 Days</button>
+        <button class="chip-btn" data-range="30d">📅 30 Days</button>
+      </div>
       <div class="pp-chartbox"><canvas id="ppGrowthChart"></canvas></div>
-      <div class="pp-chart-note" id="pp-growth-note">History updates daily — synced from the realm's growth report. <a href="growth.html">See all players →</a></div>
+      <div class="pp-chart-note" id="pp-growth-note">☁️ Cloud snapshots — updated every hour. The lighter band shows the min/max reached <b>between</b> prints (spikes &amp; dips inside the hour). <a href="growth.html">See all players →</a></div>
     </section>
 
     <!-- ===== Event standings ===== -->
@@ -302,29 +307,66 @@
       " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
-  // ---------- growth history (read from the daily-updated growth.html) ----------
-  function fetchGrowthSeries(name) {
-    return fetch("growth.html", { cache: "no-store" })
-      .then(function (r) { return r.text(); })
-      .then(function (text) {
-        var m = text.match(/const players = (\{[\s\S]*?\});/);
-        if (!m) return null;
-        var players = JSON.parse(m[1]);
-        if (players[name]) return players[name];
-        var lower = String(name || "").toLowerCase();
-        for (var k in players) {
-          if (Object.prototype.hasOwnProperty.call(players, k) && k.toLowerCase() === lower) return players[k];
-        }
-        return null;
-      })
-      .catch(function () { return null; });
+  // ---------- growth history (cloud snapshots: hourly + daily rollups) ----------
+  // growth_snapshots/{YYYY-MM-DD_HH} for the 24h view, growth_daily/{YYYY-MM-DD}
+  // for week views — written hourly by the hourlyGrowthSnapshot function.
+  var growthRange = "24h";
+  var growthUid = null;
+
+  function hourKeyOf(ms) { return new Date(ms).toISOString().slice(0, 13).replace("T", "_"); }
+  function dayKeyOf(ms) { return new Date(ms).toISOString().slice(0, 10); }
+  function growthLabel(key) {
+    return key.length === 13 ? key.slice(5).replace("_", " ") + "h" : key.slice(5);
+  }
+
+  function fetchGrowthSeries(uid) {
+    var fdb = firebase.firestore();
+    var now = Date.now();
+    var q;
+    if (growthRange === "24h") {
+      q = fdb.collection("growth_snapshots")
+        .where("hourKey", ">=", hourKeyOf(now - 24 * 3600 * 1000))
+        .orderBy("hourKey", "asc");
+    } else {
+      var days = growthRange === "30d" ? 30 : 7;
+      q = fdb.collection("growth_daily")
+        .where("dayKey", ">=", dayKeyOf(now - days * 86400000))
+        .where("dayKey", "<=", dayKeyOf(now))
+        .orderBy("dayKey", "asc");
+    }
+    return q.get().then(function (snap) {
+      var series = {
+        dates: [], eb: [], rc: [], rp: [], plots_history: [],
+        min: { eb: [], rc: [], rp: [], plots: [] },
+        max: { eb: [], rc: [], rp: [], plots: [] },
+      };
+      var found = false;
+      snap.docs.forEach(function (d) {
+        var p = d.data() || {};
+        var s = (p.players || {})[uid];
+        if (!s) return;
+        found = true;
+        series.dates.push(growthLabel(p.hourKey || p.dayKey));
+        series.eb.push(s.eb || 0);
+        series.rc.push(s.cash || 0);
+        series.rp.push(s.rp || 0);
+        series.plots_history.push(s.plots || 0);
+        var lo = s.min || { eb: s.eb || 0, cash: s.cash || 0, rp: s.rp || 0, plots: s.plots || 0 };
+        var hi = s.max || { eb: s.eb || 0, cash: s.cash || 0, rp: s.rp || 0, plots: s.plots || 0 };
+        series.min.eb.push(lo.eb); series.min.rc.push(lo.cash);
+        series.min.rp.push(lo.rp); series.min.plots.push(lo.plots);
+        series.max.eb.push(hi.eb); series.max.rc.push(hi.cash);
+        series.max.rp.push(hi.rp); series.max.plots.push(hi.plots);
+      });
+      return found ? series : null;
+    }).catch(function () { return null; });
   }
 
   var METRICS = {
-    plots_history: { label: "Plots Owned", color: "#4ade80", bg: "rgba(74, 222, 128, 0.15)" },
-    eb: { label: "Total EB", color: "#2962ff", bg: "rgba(41, 98, 255, 0.15)" },
-    rc: { label: "Total RC", color: "#f7a600", bg: "rgba(247, 166, 0, 0.15)" },
-    rp: { label: "Total RP", color: "#e91e63", bg: "rgba(233, 30, 99, 0.15)" }
+    plots_history: { label: "Plots Owned", color: "#4ade80", bg: "rgba(74, 222, 128, 0.15)", key: "plots", rgb: "74, 222, 128" },
+    eb: { label: "Total EB", color: "#2962ff", bg: "rgba(41, 98, 255, 0.15)", key: "eb", rgb: "41, 98, 255" },
+    rc: { label: "Total RC", color: "#f7a600", bg: "rgba(247, 166, 0, 0.15)", key: "rc", rgb: "247, 166, 0" },
+    rp: { label: "Total RP", color: "#e91e63", bg: "rgba(233, 30, 99, 0.15)", key: "rp", rgb: "233, 30, 99" }
   };
 
   function renderGrowthChart() {
@@ -333,21 +375,44 @@
     if (growthChart) { growthChart.destroy(); growthChart = null; }
     if (!growthSeries) return;
     var conf = METRICS[growthMetric] || METRICS.plots_history;
+
+    // Lighter min/max band (intra-period volatility) + bold smoothed main line.
+    var k = conf.key;
+    var datasets = [];
+    if (growthSeries.min && growthSeries.max) {
+      datasets.push({
+        label: "Low",
+        data: growthSeries.min[k] || [],
+        borderColor: "rgba(" + conf.rgb + ", 0.22)",
+        backgroundColor: "rgba(" + conf.rgb + ", 0.10)",
+        borderWidth: 1, pointRadius: 0, fill: false, tension: 0.35, order: 2,
+      });
+      datasets.push({
+        label: "High",
+        data: growthSeries.max[k] || [],
+        borderColor: "rgba(" + conf.rgb + ", 0.22)",
+        backgroundColor: "rgba(" + conf.rgb + ", 0.10)",
+        borderWidth: 1, pointRadius: 0, fill: "-1", tension: 0.35, order: 2,
+      });
+    }
+    datasets.push({
+      label: conf.label,
+      data: growthSeries[growthMetric] || [],
+      borderColor: conf.color,
+      backgroundColor: conf.bg,
+      borderWidth: 2.5,
+      fill: true,
+      tension: 0.35,
+      pointRadius: (growthSeries.dates || []).length > 40 ? 0 : 3,
+      pointBackgroundColor: conf.color,
+      order: 1,
+    });
+
     growthChart = new Chart(canvas.getContext("2d"), {
       type: "line",
       data: {
         labels: growthSeries.dates || [],
-        datasets: [{
-          label: conf.label,
-          data: growthSeries[growthMetric] || [],
-          borderColor: conf.color,
-          backgroundColor: conf.bg,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.25,
-          pointRadius: 3,
-          pointBackgroundColor: conf.color
-        }]
+        datasets: datasets,
       },
       options: {
         responsive: true,
@@ -359,13 +424,29 @@
             titleColor: "#fff",
             bodyColor: conf.color,
             borderColor: "#263349",
-            borderWidth: 1
+            borderWidth: 1,
+            filter: function (item) { return item.dataset.order === 1; },
           }
         },
         scales: {
           x: { grid: { color: "#1d2839" }, ticks: { color: "#6b7a92", maxTicksLimit: 6 } },
           y: { grid: { color: "#1d2839" }, ticks: { color: "#6b7a92" } }
         }
+      }
+    });
+  }
+
+  // Re-fetch + re-render the growth chart for the current uid/range.
+  function loadGrowth(uid) {
+    if (!uid) return;
+    return fetchGrowthSeries(uid).then(function (series) {
+      growthSeries = series;
+      if (series) {
+        renderGrowthChart();
+      } else {
+        $("pp-growth-note").innerHTML =
+          "☁️ Your growth history will appear here after the first hourly cloud snapshot. " +
+          "<a href=\"growth.html\">See all players →</a>";
       }
     });
   }
@@ -726,17 +807,9 @@
       // ---- events ----
       loadEvents(uid);
 
-      // ---- growth chart (daily history from growth.html) ----
-      fetchGrowthSeries(name).then(function (series) {
-        growthSeries = series;
-        if (series) {
-          renderGrowthChart();
-        } else {
-          $("pp-growth-note").innerHTML =
-            "Your daily growth history will appear here after the next growth sync. " +
-            "<a href=\"growth.html\">See all players →</a>";
-        }
-      });
+      // ---- growth chart (hourly/daily cloud snapshots) ----
+      growthUid = uid;
+      loadGrowth(uid);
     });
   }
 
@@ -762,6 +835,19 @@
       btn.classList.add("liked");
       renderGrowthChart();
     });
+
+    // Growth range tabs (24h hourly / 7d / 30d daily rollups)
+    var rangeTabs = $("pp-range-tabs");
+    if (rangeTabs) {
+      rangeTabs.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-range]");
+        if (!btn) return;
+        growthRange = btn.getAttribute("data-range");
+        Array.prototype.forEach.call(rangeTabs.querySelectorAll(".chip-btn"), function (b) { b.classList.remove("liked"); });
+        btn.classList.add("liked");
+        if (growthUid) loadGrowth(growthUid);
+      });
+    }
 
     // Receipt filter tabs
     $("pp-filter-tabs").addEventListener("click", function (e) {
