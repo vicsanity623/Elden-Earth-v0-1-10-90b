@@ -204,13 +204,15 @@
   }
 
   function loadMailbox() {
-    if (loaded || typeof firebase === "undefined" || !firebase.firestore) return;
+    if (loaded) return;
+    var fb = safeFirebase();
+    if (!fb || !fb.firestore) return;
     var user = null;
-    try { user = firebase.auth && firebase.auth().currentUser; } catch (e) {}
+    try { user = fb.auth && fb.auth().currentUser; } catch (e) {}
     if (!user) return;
     loaded = true;
     var db;
-    try { db = firebase.firestore(); } catch (e) { loaded = false; renderMailError(); return; }
+    try { db = fb.firestore(); } catch (e) { loaded = false; renderMailError(); return; }
     db.collection("global_mail").orderBy("createdAt", "desc").limit(50).get().then(function (snap) {
       mailItems = [];
       alertItems = [];
@@ -243,12 +245,13 @@
 
   function claimGift(mailId, btn) {
     if (!mailId || (btn && btn.disabled)) return;
-    if (typeof firebase === "undefined" || !firebase.functions) {
+    var fb = safeFirebase();
+    if (!fb || !fb.functions) {
       if (typeof showToast === "function") showToast("⚠️ Server connection required.", 3500);
       return;
     }
     if (btn) { btn.disabled = true; btn.textContent = "CLAIMING…"; }
-    var fn = firebase.functions().httpsCallable("claimGlobalMail");
+    var fn = fb.functions().httpsCallable("claimGlobalMail");
     fn({ mailId: String(mailId) }).then(function (res) {
       var r = (res && res.data) || {};
       if (!r.ok) {
@@ -362,10 +365,49 @@
     a.remove();
   }
 
+  // ---------- safe Firebase access ----------
+  // The game initializes the Firebase app LATE (after the loading/invite-gate
+  // flow), so touching firebase.auth() at DOMContentLoaded throws
+  // "No Firebase App '[DEFAULT]' has been created" — which used to kill the
+  // whole init() and silently disable the mailbox. Never touch firebase
+  // unless the app exists.
+  function safeFirebase() {
+    try {
+      if (typeof firebase === "undefined") return null;
+      if (!firebase.apps || !firebase.apps.length) return null;
+      return firebase;
+    } catch (e) { return null; }
+  }
+
+  var authBound = false;
+  function bindAuthWhenReady() {
+    if (authBound) return;
+    var fb = safeFirebase();
+    if (!fb || !fb.auth) return;
+    try {
+      fb.auth().onAuthStateChanged(function (user) {
+        if (user) { loaded = false; loadMailbox(); }
+      });
+      authBound = true;
+      if (fb.auth().currentUser) { loaded = false; loadMailbox(); }
+    } catch (e) { authBound = false; }
+  }
+
   // ---------- boot ----------
   function init() {
+    // Dot first — it must work even if anything else fails.
+    try { refreshMenuDot(); } catch (e) {}
+
     tickClock();
     setInterval(tickClock, 1000);
+
+    // Keep asking for the auth binding until the game has created the
+    // Firebase app (once bound, this becomes a no-op).
+    var bindTimer = setInterval(function () {
+      bindAuthWhenReady();
+      if (authBound) clearInterval(bindTimer);
+    }, 2000);
+    setTimeout(function () { try { clearInterval(bindTimer); } catch (e) {} }, 120000);
 
     var tabs = $("menu-tabs");
     if (tabs) {
@@ -383,6 +425,7 @@
         if (retry) {
           var box = $("mail-list");
           if (box) box.innerHTML = '<div class="mail-empty">📭 Checking the mailbox…</div>';
+          loaded = false;
           loadMailbox();
           return;
         }
@@ -396,30 +439,34 @@
     var historyBtn = $("menu-history-btn");
     if (historyBtn) historyBtn.addEventListener("click", function () { openExternal(HISTORY_URL); });
 
-    wireSettings();
+    try { wireSettings(); } catch (e) {}
 
-    // Mail/alerts arrive once signed in (and refresh every time the menu
-    // opens so a fresh gift shows up without a restart).
-    if (typeof firebase !== "undefined" && firebase.auth) {
-      firebase.auth().onAuthStateChanged(function (user) {
-        if (user) { loaded = false; loadMailbox(); }
-      });
-    }
+    // Refresh the mailbox whenever the app returns to the foreground.
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) { loaded = false; loadMailbox(); }
+      if (!document.hidden) {
+        bindAuthWhenReady();
+        loaded = false;
+        loadMailbox();
+      }
     });
 
-    // Re-assert the button dot whenever the menu closes as well — main.js
-    // hides it on open, but unclaimed gifts should keep nagging.
+    // The button dot re-asserts when the menu closes (main.js hides it on
+    // open), and the mailbox refreshes when it OPENS so a fresh gift shows
+    // up without a restart.
     var modal = $("menu-modal");
     if (modal && typeof MutationObserver !== "undefined") {
       new MutationObserver(function () {
-        if (modal.classList.contains("hidden")) refreshMenuDot();
+        if (modal.classList.contains("hidden")) {
+          refreshMenuDot();
+        } else {
+          bindAuthWhenReady();
+          loaded = false;
+          loadMailbox();
+        }
       }).observe(modal, { attributes: true, attributeFilter: ["class"] });
     }
 
-    refreshMenuDot();
-    if (typeof firebase !== "undefined" && firebase.auth && firebase.auth().currentUser) loadMailbox();
+    bindAuthWhenReady();
   }
 
   window.GameMenu = {
