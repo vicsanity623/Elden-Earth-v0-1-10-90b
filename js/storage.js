@@ -402,7 +402,10 @@ const Store = (() => {
           });
         }
       });
-      out.bag = Array.from(byUid.values()).slice(0, 30);
+      // 🎒 Respect the player's upgraded capacity (server-owned bagSlots,
+      // default 30, +50 per Buddy Bag upgrade).
+      const bagCap = Math.max(30, Number(remote.bagSlots) || Number(local.bagSlots) || 30);
+      out.bag = Array.from(byUid.values()).slice(0, bagCap);
       // --- wild spawns (the "appears and disappears" bug) ---
       const now = Date.now();
       const sById = new Map();

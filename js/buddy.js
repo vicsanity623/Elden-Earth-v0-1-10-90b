@@ -197,6 +197,13 @@ const BuddySystem = (() => {
     }, 350);
   }
 
+  // 🎒 Buddy Bag capacity — server-owned (buddy.bagSlots, written only by the
+  // upgradeBuddyBag callable). Default 30, +50 per upgrade.
+  function bagCap() {
+    const b = buddyState();
+    return Math.max(30, Number(b.bagSlots) || 30);
+  }
+
   /* ============================================================= GEO */
   function haversine(lat1, lon1, lat2, lon2) {
     const R = 6378137;
@@ -1124,9 +1131,14 @@ const BuddySystem = (() => {
       <button class="bd-close">✕</button>
       <h2>🎒 Buddy Bag</h2>
       <p class="bd-sub">
-        ${b.bag.length} / 30 buddies collected &middot; ${b.totalTamed} tamed &middot;
+        ${b.bag.length} / ${bagCap()} buddies collected &middot; ${b.totalTamed} tamed &middot;
         ${b.totalFeasted} feasted &middot; ${b.totalSpawns} wild spawns seen
       </p>
+      <div class="bd-row" style="margin-top:8px">
+        <button class="bd-btn gold" id="bd-bag-upgrade-btn" style="width:100%">
+          🎒 Upgrade Bag — +50 slots &middot; 1000 EB &middot; 1.00 RC &middot; 500 💎 &middot; 🎬 2 ads
+        </button>
+      </div>
       <div class="ee-ad-slot" aria-label="Advertisement"></div>
       <div class="bd-sortbar">
         <select id="bd-sort" class="bd-sort" aria-label="Sort buddies">
@@ -1153,6 +1165,71 @@ const BuddySystem = (() => {
       </div>
     `);
     wireClose(BAG_ID);
+
+    // 🎒 Buddy Bag upgrade — flat 1000 EB + 1.00 RC + 500 💎, gated behind
+    // exactly TWO rewarded-ad watches (the anti-bot gate: farms can't sit
+    // through ads). The server re-checks credits + funds atomically in the
+    // upgradeBuddyBag callable.
+    const upBtn = document.getElementById("bd-bag-upgrade-btn");
+    if (upBtn) upBtn.addEventListener("click", async () => {
+      upBtn.disabled = true;
+      const label = upBtn.innerHTML;
+      for (let i = 0; i < 2; i++) {
+        upBtn.textContent = `🎬 Watching ad ${i + 1} of 2…`;
+        const earned = await Ads.showRewarded("bag_upgrade");
+        if (!earned) {
+          upBtn.disabled = false;
+          upBtn.innerHTML = label;
+          toast("Ad not completed — watch both ads to unlock the upgrade.");
+          return;
+        }
+        const claim = await ServerAntiCheat.claimAdReward("bag_upgrade");
+        if (!claim || !claim.ok) {
+          upBtn.disabled = false;
+          upBtn.innerHTML = label;
+          toast("⚠️ Could not verify the ad — try again.", 4000);
+          return;
+        }
+        if (i === 0) toast("🎬 1 of 2 ads watched — one more to unlock!");
+      }
+      upBtn.textContent = "Unlocking…";
+      try {
+        const fn = firebase.functions().httpsCallable("upgradeBuddyBag");
+        const res = await fn({});
+        const d = (res && res.data) || {};
+        if (!d.ok) {
+          const why = {
+            ads_required: "🎬 Watch both ads first — the upgrade unlocks after 2.",
+            insufficient_funds: `💰 Need ${d.needEb} EB · ${Number(d.needCash || 0).toFixed(2)} RC · ${d.needDiamonds} 💎`,
+            no_save_found: "⚠️ Account not found — restart the game.",
+          }[d.reason] || "Upgrade failed — try again.";
+          toast(why);
+          upBtn.disabled = false;
+          upBtn.innerHTML = label;
+          return;
+        }
+        // Adopt the server result: new capacity + post-cost balances.
+        const bb = buddyState();
+        bb.bagSlots = Number(d.bagSlots) || (bagCap() + 50);
+        try {
+          const st = (typeof Store !== "undefined" && Store.get) ? Store.get() : null;
+          if (st && d.next) {
+            st.eb = Math.max(0, Number(d.next.eb) || 0);
+            st.cash = Math.max(0, Number(d.next.cash) || 0);
+            st.diamonds = Math.max(0, Number(d.next.diamonds) || 0);
+            if (typeof Store.save === "function") Store.save(true);
+          }
+        } catch (e) {}
+        persist();
+        renderHudBadge();
+        toast(`🎒 Buddy Bag upgraded! Capacity is now ${d.bagSlots} slots.`, 5000);
+        openBag(); // re-render the modal with the new capacity
+      } catch (e) {
+        toast("⚠️ Upgrade failed — check your connection");
+        upBtn.disabled = false;
+        upBtn.innerHTML = label;
+      }
+    });
 
     function renderBagList() {
       const list = document.getElementById("bd-bag-list");
@@ -1697,7 +1774,7 @@ const BuddySystem = (() => {
           same_buddy: "Pick two different buddies",
           buddy_not_found: "That buddy is no longer in your bag — refresh and try again",
           buddy_in_training: "A parent is away training — wait for the session to end",
-          bag_full: "Your Buddy Bag is full (30/30) — feast someone first",
+          bag_full: `Your Buddy Bag is full (${bagCap()}) — feast someone or 🎒 upgrade the bag`,
           parent_cooldown: `A parent bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}` +
             ((typeof Ads !== "undefined" && Ads.isRewardedAvailable()) ? " — or 🎬 Watch Ad for a free breed." : ""),
           pair_cooldown: `This pair bred recently — wait ${fmtRemain(d.retryAfterMs || 0)}`,
@@ -2482,13 +2559,13 @@ const BuddySystem = (() => {
 
     if (summary.outcome === "tame" && summary.tamed) {
       const tamed = summary.tamed;
-      if (b.bag.length < 30) {
+      if (b.bag.length < bagCap()) {
         b.bag.push(tamed);
         b.totalTamed += 1;
         if (!b.activeUid) b.activeUid = tamed.uid;
         toast(`🎉 ${tamed.nickname} was tamed and added to your Buddy Bag!`);
       } else {
-        toast("Your Buddy Bag is full (30 max)");
+        toast(`Your Buddy Bag is full (${bagCap()} max) — feast someone or 🎒 upgrade the bag`);
       }
       // Winning the fight is what earns the XP — same as feast/loss.
       awardBuddyXp(BuddyEngine.battleXpReward(wildInst, "win"));
