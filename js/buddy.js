@@ -1668,13 +1668,13 @@ const BuddySystem = (() => {
     const lasts = (b.breedLastAt && typeof b.breedLastAt === "object") ? b.breedLastAt : {};
     const pairLast = Number(pairs[pairKey]) || 0;
     if (pairLast && now - pairLast < BREED_PAIR_MS) {
-      return { ready: false, label: `Pair cooldown — ${fmtRemain(BREED_PAIR_MS - (now - pairLast))} left` };
+      return { ready: false, lock: "pair", label: `Pair cooldown — ${fmtRemain(BREED_PAIR_MS - (now - pairLast))} left` };
     }
     const last = Math.max(Number(lasts[aUid]) || 0, Number(lasts[partnerUid]) || 0);
     if (last && now - last < BREED_PARENT_MS) {
-      return { ready: false, label: `Parent cooldown — ${fmtRemain(BREED_PARENT_MS - (now - last))} left` };
+      return { ready: false, lock: "parent", label: `Parent cooldown — ${fmtRemain(BREED_PARENT_MS - (now - last))} left` };
     }
-    return { ready: true, label: "Ready to breed · 7d parent / 30d pair cooldown" };
+    return { ready: true, lock: null, label: "Ready to breed · 7d parent / 30d pair cooldown" };
   }
 
   // 🎬 Rewarded placement (breed_refresh): set when an ad mints a parent-rest
@@ -1765,42 +1765,51 @@ const BuddySystem = (() => {
 
     // 🎬 Rewarded placement (breed_refresh): mints a server-held FREE BREED
     // credit — breedBuddy consumes it to waive the EB/Diamonds cost AND the
-    // parent rest. An unused credit stays banked (cap 2/day).
+    // parent rest. An unused credit stays banked (cap 20/day).
+    async function mintFreeBreed(btn) {
+      const earned = await Ads.showRewarded("breed_refresh");
+      if (!earned) {
+        if (btn) { btn.disabled = false; btn.textContent = adBreedLabel; }
+        toast("Ad not completed — no free breed granted.");
+        return false;
+      }
+      const claim = await ServerAntiCheat.claimAdReward("breed_refresh");
+      if (!claim || !claim.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = adBreedLabel; }
+        toast(claim && claim.reason === "daily_cap"
+          ? "🎬 No free breeds left today — resets at midnight UTC."
+          : "⚠️ Could not grant the free breed.", 4000);
+        return false;
+      }
+      breedAdCredit = true;
+      if (btn) { btn.textContent = "✅ Free breed ready — pick a pair and breed"; btn.disabled = true; }
+      toast("🎬 Free breed unlocked! (Cost + parent rest waived once. The 30-day pair lock still applies.)");
+      return true;
+    }
     const adBtn = document.getElementById("bd-breed-ad");
     if (adBtn) adBtn.addEventListener("click", async () => {
       adBtn.disabled = true;
       adBtn.textContent = "Loading ad…";
-      const earned = await Ads.showRewarded("breed_refresh");
-      if (!earned) {
-        adBtn.disabled = false;
-        adBtn.textContent = adBreedLabel;
-        toast("Ad not completed — no free breed granted.");
-        return;
-      }
-      const claim = await ServerAntiCheat.claimAdReward("breed_refresh");
-      if (!claim || !claim.ok) {
-        adBtn.disabled = false;
-        adBtn.textContent = adBreedLabel;
-        toast(claim && claim.reason === "daily_cap"
-          ? "🎬 No free breeds left today."
-          : "⚠️ Could not grant the free breed.", 4000);
-        return;
-      }
-      breedAdCredit = true;
-      adBtn.textContent = "✅ Free breed ready — pick a pair and breed";
-      adBtn.disabled = true;
-      toast("🎬 Free breed unlocked! (Cost + parent rest waived once. The 30-day pair lock still applies.)");
+      await mintFreeBreed(adBtn);
     });
 
     let selected = null;
+    let selectedNeedsCredit = false;
     const listEl = document.getElementById("bd-breed-list");
     candidates.forEach(c => {
       const sp = BuddyData.getSpecies(c.speciesId) || {};
       const rarity = BuddyData.getRarity(sp.rarity);
       const grade = BuddyEngine.ivGrade(BuddyEngine.ivPercent(c.ivs));
       const cd = breedCooldownFor(b, parentAUid, c.uid, now);
+      // 🎬 FIX: a pair resting on the 7-day PARENT cooldown used to be
+      // un-selectable, so the free-breed credit had nothing to be spent on —
+      // the ad literally could not deliver a breed when it was needed. Such
+      // rows are now selectable (the credit waives the rest server-side).
+      const adUnlock = !cd.ready && cd.lock === "parent" && adsReady;
+      const selectable = cd.ready || adUnlock;
       const row = document.createElement("div");
-      row.className = "bd-breed-row" + (cd.ready ? "" : " locked");
+      row.className = "bd-breed-row" + (selectable ? (cd.ready ? "" : " ad-unlock") : " locked");
+      if (adUnlock) row.style.borderColor = "rgba(247, 201, 72, 0.5)";
       row.innerHTML = `
         <div class="fr-body">
           <div class="fr-nm">${c.nickname}
@@ -1809,20 +1818,35 @@ const BuddySystem = (() => {
           <div class="fr-sub">
             <span style="color:${rarity.color}">${rarity.name}</span>
             &middot; Grade ${grade.letter}
-            &middot; ${cd.ready ? `<span style="color:#34d399">${cd.label}</span>` : `<span class="fr-cd">⏱ ${cd.label}</span>`}
+            &middot; ${cd.ready
+              ? `<span style="color:#34d399">${cd.label}</span>`
+              : adUnlock
+                ? `<span style="color:#f7c948">⏱ ${cd.label} · 🎬 FREE with ad</span>`
+                : `<span class="fr-cd">⏱ ${cd.label}</span>`}
           </div>
         </div>
-        <div class="fr-pick">${cd.ready ? "＋" : "🔒"}</div>
+        <div class="fr-pick">${selectable ? (adUnlock ? "🎬" : "＋") : "🔒"}</div>
       `;
-      if (cd.ready) {
-        row.addEventListener("click", () => {
+      if (selectable) {
+        row.addEventListener("click", async () => {
+          // A resting pair needs the free-breed credit — mint one now if the
+          // player does not already hold one.
+          if (adUnlock && !breedAdCredit) {
+            row.style.opacity = "0.55";
+            const ok = await mintFreeBreed(null);
+            row.style.opacity = "";
+            if (!ok) return;
+          }
           selected = c;
+          selectedNeedsCredit = adUnlock;
           listEl.querySelectorAll(".bd-breed-row").forEach(r => r.classList.remove("sel"));
           row.classList.add("sel");
           const confirm = document.getElementById("bd-breed-confirm");
           if (confirm) {
             confirm.disabled = false;
-            confirm.textContent = `🍼 Breed ${parentA.nickname} × ${c.nickname}`;
+            confirm.textContent = selectedNeedsCredit && breedAdCredit
+              ? `🍼 Breed FREE (ad credit) — ${parentA.nickname} × ${c.nickname}`
+              : `🍼 Breed ${parentA.nickname} × ${c.nickname}`;
           }
         });
       }

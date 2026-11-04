@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buddy Master Guide — Battles, Taming, Breeding &amp; Arena | Elden Earth</title>
+<meta name="description" content="Everything about Elden Earth buddies: wild spawns, battle XP math, taming, IVs and natures, training, breeding, the PvP Arena, berries and ad boosts.">
+<link rel="icon" href="../assets/icon512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site/css/portal.css">
+<script async id="adsense-portal" crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5972331036113330"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.9.0/firebase-functions-compat.js"></script>
+<script defer src="../site/js/portal.js"></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<section class="page-hero">
+  <div class="wrap">
+    <div class="crumb"><a href="../index.html">Home</a> / <a href="../guides.html">Guides</a> / Buddy Master Guide</div>
+    <h1>The Buddy Master Guide</h1>
+    <p class="lead">Wild spawns, battle math, taming, genetics, training, breeding and the weekly PvP Arena — everything your fighting companion can do, in one place.</p>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <div class="wrap prose">
+    <p>Your <strong>active buddy</strong> walks beside you on the map, fights wild
+    buddies, defends your citadel, and battles in the weekly Arena. This guide
+    covers the full journey — from your first wild encounter to a Level 50
+    legend.</p>
+
+    <h2>🌍 Wild buddy spawns &amp; tracking</h2>
+    <p>Wild buddies appear as glowing orbs on your map as you walk.</p>
+    <ul>
+      <li>You earn a spawn every <strong>250 ft (76 m) of real walking</strong></li>
+      <li>They appear <strong>22–70 m away</strong> — a short walk to reach</li>
+      <li>Up to <strong>3 wild buddies</strong> can be active at once</li>
+      <li>Each spawn lives for <strong>8 minutes</strong>, then despawns</li>
+      <li>Daily cap: <strong>50 spawns</strong>, resetting at midnight UTC</li>
+    </ul>
+    <div class="callout">
+      <p><strong>What counts as real walking:</strong> GPS accuracy within 60 m,
+      genuine steps over 4 m, human pace (0.35–12 m/s — jogging and cycling are
+      fine, cars are not), and <em>new ground</em>: you must be 25 m away from
+      ground you already earned credit for 45+ seconds ago. Treadmills and
+      walking in circles stop crediting quickly. Roughly 250 m of credit per
+      minute maximum.</p>
+    </div>
+
+    <h2>⚔️ Battles &amp; XP</h2>
+    <p>Tap a wild buddy orb to start a turn-based battle with your active buddy.
+    Every outcome trains your buddy — here is the exact math:</p>
+    <table class="table">
+      <tr><th>Outcome</th><th>XP earned</th></tr>
+      <tr><td><strong>Win</strong></td><td>(18 + opponent level × 7) × rarity multiplier</td></tr>
+      <tr><td><strong>Feast</strong> (consume it)</td><td>Full win XP <strong>+ 75% bonus + 25</strong>, +12 happiness, full heal</td></tr>
+      <tr><td><strong>Tame</strong> (befriend it)</td><td>Full win XP <strong>+ a new buddy</strong> for your bag</td></tr>
+      <tr><td><strong>Let it go</strong></td><td>60% of win XP</td></tr>
+      <tr><td><strong>Loss</strong></td><td>(18 + opponent level × 7) × 0.25 — losing still trains</td></tr>
+    </table>
+    <p>Rarity multipliers: <strong>Common ×1 · Uncommon ×1.25 · Rare ×1.6 ·
+    Legendary ×2.4</strong>. Wild buddy levels track your strongest buddy, so
+    fights stay competitive as you grow.</p>
+    <div class="callout green">
+      <p><strong>Watch the XP bar fill.</strong> At the end of every battle the
+      results screen stays open and your buddy's XP bar fills with a glowing
+      animation — <em>"Buddy earned 87 XP during this battle!"</em> — with a
+      level-up celebration, sparkles and any newly learned moves. Tame and
+      release battles show it too.</p>
+    </div>
+
+    <h2>🤝 Taming &amp; your Buddy Bag</h2>
+    <ol>
+      <li>Win the battle — the wild buddy must faint</li>
+      <li>Choose <strong>Tame — Befriend the Wild Buddy</strong></li>
+      <li>Feed it <strong>30 berries across 3 feedings</strong> (~15 seconds)</li>
+      <li>It joins your Buddy Bag 🎉</li>
+    </ol>
+    <ul>
+      <li>The bag holds up to <strong>30 buddies</strong> — tap any buddy to inspect stats, IVs, nature and moves</li>
+      <li>Set one as your <strong>Active Buddy</strong> to battle with it</li>
+      <li><strong>Rename</strong> buddies and change their hue / colorway — cosmetics never affect stats</li>
+      <li><strong>Heal with berries: 30% HP per berry</strong>, and HP regenerates slowly over time</li>
+    </ul>
+
+    <h2>🧬 Stats, IVs, natures &amp; rarity</h2>
+    <ul>
+      <li><strong>Individual Values (IVs)</strong> — permanent genetics from 0–15 per stat: HP, ATK, DEF, SPD. Shown as a grade like <em>Grade C · 63% IV</em> — higher is better at every level</li>
+      <li><strong>Natures</strong> — small stat personalities (Hardy and others) shown on the buddy card</li>
+      <li><strong>Hue &amp; colorway</strong> — pure cosmetics; mix and match freely</li>
+      <li><strong>Rarity</strong> — Common · Uncommon · Rare · Legendary: better battle XP and base potential; the spawn orb's ring shows the tier</li>
+      <li>Level-ups <strong>recompute stats and fully heal</strong> the buddy</li>
+    </ul>
+
+    <h2>🎓 Training &amp; leveling</h2>
+    <p>Level cap: <strong>Lv. 50</strong>. Send reserve buddies to
+    <strong>Training</strong> for passive XP over a timer (long sessions give the
+    biggest drops), while your active buddy battles — two growth tracks at
+    once. Short on time? Watch an ad for an <strong>Instant Training</strong>
+    credit to claim early (3 ad credits per day). Your own trainer level grows
+    from battles, tames, feasts and buddy level-ups.</p>
+
+    <h2>💞 Breeding</h2>
+    <p>Pick two parents from your bag — the baby is born fully grown at Level 5
+    with <strong>inherited IVs</strong>, stat mutations and a chance at a rarity
+    upgrade.</p>
+    <ul>
+      <li>Parents rest <strong>7 days</strong> after breeding; each specific
+      <strong>pair rests 30 days</strong></li>
+      <li>Breeding costs <strong>EB + Diamonds</strong></li>
+      <li><strong>🎬 Free Breed by watching an ad</strong> — up to
+      <strong>20 per day!</strong> One ad = one free breed: it waives the cost
+      <em>and</em> the 7-day parent rest. The 30-day pair lock is never
+      waivable. Credits bank up if you don't spend them</li>
+    </ul>
+    <div class="callout">
+      <p><strong>Strategy:</strong> breed your highest-IV buddies to chase
+      S-grade offspring, keep one strong pair on rotation, and spend Free Breed
+      credits on resting parents to skip the wait entirely.</p>
+    </div>
+
+    <h2>⚔️ PvP Arena — seasons, rank &amp; payouts</h2>
+    <p>Weekly asynchronous PvP: your buddy battles other players' <strong>Defense
+    Buddies</strong> — AI-controlled, exactly as strong as their owner set them.</p>
+    <ul>
+      <li>Seasons run <strong>Monday → Sunday</strong> (UTC); the leaderboard shows the Top 500</li>
+      <li>Set a <strong>Defense Buddy</strong> — its snapshot is what opponents face</li>
+      <li><strong>1 AP</strong> per battle; free entries regenerate into a bank that fills to 5</li>
+      <li><strong>15 battles per day</strong>, resetting at midnight UTC</li>
+      <li><strong>Sparring</strong> mode: practice vs a dummy — never moves rank</li>
+      <li>Win: <strong>+10 rank points</strong> · Loss: <strong>−5</strong></li>
+      <li>Season-end payouts are staged by rank — <strong>RP, diamonds, Elden
+      Stop Seeds and even plots</strong> — then claimed in-game</li>
+      <li>Every arena battle trains your buddy (full win XP, quarter XP on losses)</li>
+    </ul>
+
+    <h2>🍓 Berries, pets &amp; ad boosts</h2>
+    <p>Berries are the buddy currency — feed your pet (1 berry = +5 mood, high
+    mood = +25% sprint speed and diamond scouting), heal buddies (30% HP each),
+    and tame wild buddies (30 per tame). Earn them from <strong>Elden Stop
+    spins (1–3 each!)</strong>, badge rewards and dev gifts in your 📮 Mail box.</p>
+    <table class="table">
+      <tr><th>Ad boost</th><th>What it does</th><th>Daily cap</th></tr>
+      <tr><td>⏱️ Instant Training</td><td>Claim training XP early</td><td>3 / day</td></tr>
+      <tr><td>💞 Free Breed</td><td>Free breed — waives cost + parent rest</td><td><strong>20 / day</strong></td></tr>
+      <tr><td>🎰 +5 Wheel Spins</td><td>More diamonds, more progress</td><td>20 / day</td></tr>
+    </table>
+    <p>Ads are never required — everything is earnable by playing.</p>
+
+    <h2>🏅 Badges &amp; pro tips</h2>
+    <p>Chase the buddy badges: <strong>Win 50 PvP battles · Tame 25 buddies ·
+    Feast 50 · Level a buddy 25× · Reach Lv. 50 · Own 15 buddies</strong> —
+    paying diamonds, berries and RP.</p>
+    <ul class="checklist">
+      <li>Keep one tanky defender set in the Arena — defense wins farm rank</li>
+      <li>Feast weak spawns (bonus XP!), tame rare and legendary ones</li>
+      <li>Spin Elden Stops daily — berries fuel everything in this guide</li>
+      <li>Never battle with low berries — healing mid-hunt saves runs</li>
+    </ul>
+
+    <div class="guide-nav">
+      <a href="pets-stops.html">🐾 Pets &amp; Elden Stops<small>Companions, berries &amp; beacons</small></a>
+      <a href="citadels.html">🏰 Citadels &amp; sieges<small>Defend with your buddy</small></a>
+      <a href="../community.html">💬 Community hub<small>Ask questions, share wins</small></a>
+    </div>
+  </div>
+</section>
+
+<div id="site-footer"></div>
+</body>
+</html>
