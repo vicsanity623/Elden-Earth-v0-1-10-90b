@@ -58,7 +58,7 @@ const BuddyData = (() => {
     ripple_shot:     { id: "ripple_shot",     name: "Ripple Shot",     type: "aqua",   category: "special",  power: 40, accuracy: 100, pp: 30, effect: null,       effectChance: 0  },
     tide_crash:      { id: "tide_crash",      name: "Tide Crash",      type: "aqua",   category: "physical", power: 60, accuracy: 95,  pp: 25, effect: null,       effectChance: 0  },
     abyssal_surge:   { id: "abyssal_surge",   name: "Abyssal Surge",   type: "aqua",   category: "special",  power: 90, accuracy: 85,  pp: 10, effect: "defDown",  effectChance: 20 },
-    mending_tide:    { id: "mending_tide",    name: "Mending Tide",    type: "aqua",   category: "status",   power: 0,  accuracy: 100, pp: 15, effect: "heal",     effectChance: 100 },
+    mending_tide:    { id: "mending_tide",    name: "Mending Tide",    type: "aqua",   category: "status",   power: 0,  accuracy: 100, pp: 5, effect: "heal",     effectChance: 100 },
     // --- Terra ---
     pebble_toss:     { id: "pebble_toss",     name: "Pebble Toss",     type: "terra",  category: "physical", power: 40, accuracy: 100, pp: 30, effect: null,       effectChance: 0  },
     fissure_slam:    { id: "fissure_slam",    name: "Fissure Slam",    type: "terra",  category: "physical", power: 65, accuracy: 95,  pp: 20, effect: "defDown",  effectChance: 18 },

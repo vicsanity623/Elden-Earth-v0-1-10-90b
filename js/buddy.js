@@ -1183,7 +1183,11 @@ const BuddySystem = (() => {
           toast("Ad not completed — watch both ads to unlock the upgrade.");
           return;
         }
-        const claim = await ServerAntiCheat.claimAdReward("bag_upgrade");
+        const claim = await claimAdRewardWithRetry("bag_upgrade");
+        // credit_cap = both unlock credits are already banked (an earlier
+        // attempt abandoned after the ads) — upgradeBuddyBag will consume
+        // them, so skip the remaining ads and unlock.
+        if (claim && claim.ok === false && claim.reason === "credit_cap") break;
         if (!claim || !claim.ok) {
           upBtn.disabled = false;
           upBtn.innerHTML = label;
@@ -1993,6 +1997,19 @@ const BuddySystem = (() => {
     }
   }
 
+  // claimAdReward with the server's 20s ad-claim spacing honored. A rewarded
+  // ad (especially the fast demo/test units) can finish sooner than the
+  // window, so "too_soon" gets one wait-and-retry instead of a dead button.
+  // Resolves with the raw server payload ({ ok, reason, retryAfterMs, ... }).
+  async function claimAdRewardWithRetry(kind) {
+    let claim = await ServerAntiCheat.claimAdReward(kind);
+    if (claim && claim.ok === false && claim.reason === "too_soon" && claim.retryAfterMs > 0) {
+      await new Promise((r) => setTimeout(r, Math.min(30000, claim.retryAfterMs) + 750));
+      claim = await ServerAntiCheat.claimAdReward(kind);
+    }
+    return claim;
+  }
+
   async function doClaimTraining(reward, adCredit) {
     try {
       if (typeof firebase === "undefined" || !firebase.functions) {
@@ -2158,7 +2175,12 @@ const BuddySystem = (() => {
     // 🎬 Rewarded placement (train_instant): one ad unlocks early claiming for
     // this whole session. claimAdReward mints + holds the credit server-side
     // and buddyClaimTraining consumes it — the ad callback grants nothing.
-    let adUnlocked = false;
+    // The unlock is SESSION-WIDE and must survive re-renders: the partial-claim
+    // path re-renders this modal after every reward, and re-initializing the
+    // flag to false locked the remaining rewards again (the next claim sent no
+    // adCredit and got "not_ready" back). The server remembers on the session
+    // (earlyClaimed), so trust that too — reopening the modal stays unlocked.
+    let adUnlocked = !!(training && training.earlyClaimed === true);
     async function onAdClaimNow() {
       const btn = document.getElementById("td-ad-claim");
       if (btn) { btn.disabled = true; btn.textContent = "Loading ad…"; }
@@ -2168,8 +2190,12 @@ const BuddySystem = (() => {
         toast("Ad not completed — rewards stay locked until the session ends.");
         return;
       }
-      const claim = await ServerAntiCheat.claimAdReward("train_instant");
-      if (!claim || !claim.ok) {
+      const claim = await claimAdRewardWithRetry("train_instant");
+      // credit_cap = early-claim credits are already banked (3 max) —
+      // buddyClaimTraining consumes one of those, so unlock as if the ad
+      // had minted a fresh one.
+      const unlocked = !!((claim && claim.ok) || (claim && claim.reason === "credit_cap"));
+      if (!unlocked) {
         if (btn) { btn.disabled = false; btn.textContent = "Watch Ad ▶"; }
         toast(claim && claim.reason === "daily_cap"
           ? "🎬 No ad skips left today — the session finishes on its own."

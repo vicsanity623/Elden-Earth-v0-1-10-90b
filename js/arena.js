@@ -141,21 +141,29 @@ const Arena = (() => {
   letter-spacing:.2px;
 }
 .ar-season-line b{ color:#fff; font-variant-numeric:tabular-nums; }
-.ar-entry-strip{
-  display:flex; gap:6px; margin:10px auto 0; justify-content:center;
-}
-.ar-entry-cell{
-  flex:1 1 0; max-width:120px; padding:7px 4px; text-align:center;
+.ar-energy{
+  margin:10px auto 0; padding:10px 12px; border-radius:12px;
   background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
-  border-radius:8px;
 }
-.ar-entry-num{
-  display:block; color:#fff; font-size:15px; font-weight:900;
+.ar-energy-head{
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;
+}
+.ar-energy-title{
+  color:#93a4c0; font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.8px; font-weight:900;
+}
+.ar-energy-num{
+  color:#fff; font-size:15px; font-weight:900;
   font-variant-numeric:tabular-nums; line-height:1.2;
 }
-.ar-entry-lbl{
-  display:block; color:#93a4c0; font-size:10px; text-transform:uppercase;
-  letter-spacing:.4px; margin-top:2px;
+.ar-energy-bar{
+  height:12px; border-radius:8px; overflow:hidden;
+  background:rgba(255,255,255,.1);
+}
+.ar-energy-bar i{
+  display:block; height:100%; border-radius:8px;
+  background:linear-gradient(90deg,#fbbf24,#f59e0b);
+  transition:width .3s ease;
 }
 .ar-regen-line{
   margin:8px 0 0; text-align:center; font-size:12px; color:#fcd34d;
@@ -171,6 +179,14 @@ const Arena = (() => {
 }
 .ar-battle-btn small{ display:block; font-size:10px; font-weight:700; opacity:.85; margin-top:2px; }
 .ar-battle-btn:disabled{ opacity:.5; box-shadow:none; }
+.ar-ad-row{ margin-top:10px; }
+.ar-ad-btn{
+  width:100%; padding:11px 10px !important; font-size:13px !important; font-weight:800;
+  background:rgba(255,255,255,.08) !important; color:#fcd34d !important;
+  border:1px solid rgba(252,211,77,.45) !important;
+}
+.ar-ad-btn:disabled{ opacity:.55; }
+.ar-ad-btn b{ font-variant-numeric:tabular-nums; }
 .ar-note{
   margin:10px 2px 0; font-size:10.5px; color:#8fa6c4; line-height:1.55; text-align:center;
 }
@@ -322,32 +338,41 @@ const Arena = (() => {
     const cd = el("ar-countdown");
     if (cd) cd.textContent = fmtCountdown(remain);
 
-    // Live free-entry regen countdown (server snapshot + local drift).
-    const sentNextIn = (me.freeNextInMs === null || me.freeNextInMs === undefined)
-      ? null : Number(me.freeNextInMs);
+    // Live ⚡ regen countdown (server snapshot + local drift).
+    const sentNextIn = (me.nextRegenMs === null || me.nextRegenMs === undefined)
+      ? null : Number(me.nextRegenMs);
     const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
     const nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
-    const freeLeft = Number(me.freeLeft) || 0;
-    const freeBankMax = Number(me.freeBankMax) || 5;
+    const energy = Number(me.energy) || 0;
+    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 100;
 
-    if (nextIn !== null && nextIn > 0 && freeLeft < freeBankMax) {
+    if (nextIn !== null && nextIn > 0 && energy < energyMax) {
       const t = mmss(nextIn);
       const regenEl = el("ar-regen");
       if (regenEl) regenEl.textContent = t;
       const btnTimerEl = el("ar-btn-timer");
       if (btnTimerEl) btnTimerEl.textContent = t;
+    } else if (nextIn !== null && nextIn <= 0 && energy < energyMax) {
+      // The regen countdown reached zero: a real +1 ⚡ has landed. Adopt it
+      // LOCALLY (the server granted it at that moment — this is just the view)
+      // and re-render once so the Battle button unlocks. No network refresh:
+      // the lobby follows the 30-minute cadence below.
+      me.energy = Math.min(energyMax, energy + 1);
+      me.nextRegenMs = me.energy >= energyMax ? null : (Number(rules.regenMs) || 120000);
+      lastStateAt = Date.now();
+      renderLobby();
       return;
     }
 
-    // The regen countdown reached zero: a real free entry has landed. Adopt it
-    // LOCALLY (the server granted it at that moment — this is just the view)
-    // and re-render once so the Battle button unlocks. No network refresh:
-    // the lobby follows the 30-minute cadence below.
-    if (nextIn !== null && nextIn <= 0 && freeLeft < freeBankMax) {
-      me.freeLeft = Math.min(freeBankMax, freeLeft + 1);
-      me.freeNextInMs = Number(rules.freeRegenMs) || 120000;
-      lastStateAt = Date.now();
-      renderLobby();
+    // 🎬 Rewarded-ad refill cooldown ("NEXT AD in mm:ss").
+    const sentAdIn = (me.adRefillInMs === null || me.adRefillInMs === undefined)
+      ? 0 : Number(me.adRefillInMs);
+    const adIn = Math.max(0, sentAdIn - ageMs);
+    const adTimerEl = el("ar-ad-timer");
+    if (adTimerEl) adTimerEl.textContent = mmss(adIn);
+    if (sentAdIn > 0 && adIn <= 0) {
+      me.adRefillInMs = 0;
+      renderLobby(); // re-enable the Watch Ad button
     }
   }
 
@@ -440,57 +465,51 @@ const Arena = (() => {
     const payout = d.payout || null; // 🏁 end-of-week results (claimable when staged)
 
     const remain = Math.max(0, (Number(season.end) || Date.now()) - Date.now());
-    const freeLeft = Number(me.freeLeft) || 0;
-    const freeBankMax = Number(me.freeBankMax) || 5;
-    const paidLeft = Number(me.paidLeft) || 0;
-    const paidCost = Number(rules.paidCost) || 3;
+    const energy = Number(me.energy) || 0;
+    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 100;
+    const battleCost = Number(me.battleCost) || Number(rules.battleCost) || 2;
+    const adRefill = Number(me.adRefillEnergy) || Number(rules.adRefillEnergy) || 20;
     const ap = Number(me.ap) || 0;
-    const maxDay = Number(rules.maxPerDay) || 15;
     const usedToday = Number(me.battlesToday) || 0;
 
-    // Live regen countdown. The server reports freeNextInMs as a snapshot;
+    // Live ⚡ regen countdown. The server reports nextRegenMs as a snapshot;
     // subtract the time elapsed since that snapshot arrived so the number
     // ticks down every second without re-fetching.
-    const sentNextIn = (me.freeNextInMs === null || me.freeNextInMs === undefined)
-      ? null : Number(me.freeNextInMs);
+    const sentNextIn = (me.nextRegenMs === null || me.nextRegenMs === undefined)
+      ? null : Number(me.nextRegenMs);
     const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
     let nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
+    // 🎬 Rewarded-ad refill cooldown — same snapshot-drift trick.
+    const sentAdIn = (me.adRefillInMs === null || me.adRefillInMs === undefined)
+      ? 0 : Number(me.adRefillInMs);
+    let adIn = Math.max(0, sentAdIn - ageMs);
 
     // (The old code re-fetched the whole state the moment the locally-ticked
     // regen countdown reached zero — a network refresh + full re-render every
     // 2 minutes that also threw the ranks scroll around. tickLive() now lands
-    // that free entry LOCALLY; real refreshes follow the 30-minute cadence.)
+    // that +1 ⚡ LOCALLY; real refreshes follow the 30-minute cadence.)
 
     // (mmss lives at module scope now — shared with the 1s live tick.)
 
-    // Footer button state. Order matters: the daily cap outranks everything,
-    // then a banked free entry, then an affordable paid bypass, then either
-    // "wait for the timer" or "you are out" — never the old flat dead-end.
+    // Footer button state. ⚡ Energy is the ONLY gate now — battle when the
+    // pool can afford it, otherwise show the countdown (and the ad refill)
+    // instead of a dead end. No daily limit exists anymore.
     let btnLabel, btnSub = "", btnDisabled = false, btnTimer = "";
-    if (usedToday >= maxDay) {
-      btnLabel = "Daily limit reached";
-      btnSub = `${usedToday}/${maxDay} battles used — resets at midnight`;
-      btnDisabled = true;
-    } else if (freeLeft > 0) {
-      btnLabel = `Battle (${freeLeft}/${freeBankMax})`;
-      btnSub = `${usedToday}/${maxDay} today`;
-    } else if (paidLeft > 0 && ap >= paidCost) {
-      btnLabel = `Battle (${paidCost} AP)`;
-      btnSub = `Paid left ${paidLeft} · ${usedToday}/${maxDay} today`;
+    if (energy >= battleCost) {
+      btnLabel = `⚔️ Battle (Costs ${battleCost} ⚡)`;
+      btnSub = usedToday > 0
+        ? `${usedToday} battle${usedToday === 1 ? "" : "s"} today`
+        : "Climb the ranks!";
     } else if (nextIn !== null && nextIn > 0) {
-      // The fix for the old lockout: waiting, not out. The countdown lives in
-      // its own span so the 1s tick can update it WITHOUT re-rendering.
-      btnLabel = "Free entry in";
+      // Waiting, not out. The countdown lives in its own span so the 1s tick
+      // can update it WITHOUT re-rendering.
+      btnLabel = `⚡ Need ${battleCost} Energy`;
       btnTimer = mmss(nextIn);
-      btnSub = paidLeft > 0 ? `or ${paidCost} AP to skip the wait` : "Next free entry incoming";
-      btnDisabled = true;
-    } else if (paidLeft > 0) {
-      btnLabel = "No attempts left";
-      btnSub = `Need ${paidCost} AP — you have ${ap}`;
+      btnSub = `Next +1 ⚡ — or watch an ad for +${adRefill} ⚡`;
       btnDisabled = true;
     } else {
-      btnLabel = "No attempts left";
-      btnSub = "Come back tomorrow";
+      btnLabel = `⚡ Need ${battleCost} Energy`;
+      btnSub = "Energy is regenerating";
       btnDisabled = true;
     }
 
@@ -549,25 +568,18 @@ const Arena = (() => {
         <div class="ar-pill" style="display:inline-block">⭐ ${fmtNum(me.score)} pts</div>
         <div class="ar-pill alt" style="display:inline-block">W/L ${fmtRatio(me.wins, me.losses)}</div>
 
-        <div class="ar-entry-strip">
-          <div class="ar-entry-cell">
-            <span class="ar-entry-num">${freeLeft}/${freeBankMax}</span>
-            <span class="ar-entry-lbl">Free</span>
+        <div class="ar-energy">
+          <div class="ar-energy-head">
+            <span class="ar-energy-title">⚡ Energy</span>
+            <span class="ar-energy-num">${energy} / ${energyMax}</span>
           </div>
-          <div class="ar-entry-cell">
-            <span class="ar-entry-num">${paidLeft}</span>
-            <span class="ar-entry-lbl">Paid left</span>
-          </div>
-          <div class="ar-entry-cell">
-            <span class="ar-entry-num">${usedToday}/${maxDay}</span>
-            <span class="ar-entry-lbl">Battles today</span>
-          </div>
-        </div>
-        ${nextIn !== null && nextIn > 0 ? `
+          <div class="ar-energy-bar"><i style="width:${Math.max(0, Math.min(100, Math.round((energy / energyMax) * 100)))}%"></i></div>
+          ${nextIn !== null && nextIn > 0 && energy < energyMax ? `
           <div class="ar-regen-line">
-            ⏳ Next free entry in <b id="ar-regen">${mmss(nextIn)}</b> · fills to ${freeBankMax}
-          </div>` : (freeLeft >= freeBankMax ? `
-          <div class="ar-regen-line full">✅ Free entry bank is full</div>` : "")}
+            ⏱ Next +1 ⚡ in <b id="ar-regen">${mmss(nextIn)}</b>
+          </div>` : `
+          <div class="ar-regen-line full">⚡ Energy Full</div>`}
+        </div>
       </div>
 
       ${payout && !payout.claimed ? `
@@ -585,6 +597,16 @@ const Arena = (() => {
           ⚠ You have no Defense Buddy set. Open the Buddy Bag, tap a buddy and
           choose “Set as Defense Buddy” before you can battle.
         </div>`}
+
+      <div class="ar-ad-row">
+        ${adIn > 0 ? `
+        <button class="btn ar-ad-btn" id="ar-ad-btn" disabled>
+          🎬 Next ad in <b id="ar-ad-timer">${mmss(adIn)}</b>
+        </button>` : `
+        <button class="btn ar-ad-btn" id="ar-ad-btn">
+          🎬 Watch Ad (+${adRefill} ⚡ Energy)
+        </button>`}
+      </div>
 
       <div class="ar-actions">
         <button class="btn" id="ar-cancel-btn">Cancel</button>
@@ -612,6 +634,8 @@ const Arena = (() => {
     if (cancel) cancel.addEventListener("click", closeLobby);
     const battle = el("ar-battle-btn");
     if (battle) battle.addEventListener("click", () => { if (!battle.disabled) startBattle(); });
+    const adBtn = el("ar-ad-btn");
+    if (adBtn) adBtn.addEventListener("click", () => { if (!adBtn.disabled) watchAdRefill(); });
   }
 
   /* --------------------------------------------------------------- open */
@@ -756,6 +780,50 @@ const Arena = (() => {
     return false;
   }
 
+  /* ------------------------------------------------⚡ ad energy refill */
+  // 🎬 The ad callback grants NOTHING by itself: claimAdReward('arena_energy')
+  // mints the credit server-side and arenaAdRefillEnergy spends it for +20 ⚡
+  // (5-min spacing between refills). A rejected refill never consumes the
+  // credit — it stays banked for the next attempt.
+  async function watchAdRefill() {
+    const btn = el("ar-ad-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Loading ad…"; }
+    const earned = (typeof Ads !== "undefined" && Ads.showRewarded)
+      ? await Ads.showRewarded("arena_energy") : false;
+    if (!earned) {
+      renderLobby();
+      (window.showToast || alert)("Ad not completed — energy unchanged.");
+      return;
+    }
+    let claim = await ServerAntiCheat.claimAdReward("arena_energy");
+    // The server spaces ad claims 20s apart — fast (demo/test) ads can finish
+    // sooner than that; wait out the window and retry once.
+    if (claim && claim.ok === false && claim.reason === "too_soon" && claim.retryAfterMs > 0) {
+      await new Promise((r) => setTimeout(r, Math.min(30000, claim.retryAfterMs) + 750));
+      claim = await ServerAntiCheat.claimAdReward("arena_energy");
+    }
+    if (!claim || !claim.ok) {
+      renderLobby();
+      (window.showToast || alert)(claim && claim.reason === "daily_cap"
+        ? "🎬 No ad refills left today — energy regenerates on its own."
+        : "⚠️ Could not verify the ad — try again.", 4000);
+      return;
+    }
+    const d = await call("arenaAdRefillEnergy", {});
+    if (d && d.ok) {
+      applyEntry(d);
+      (window.showToast || alert)(`⚡ +${d.granted || 20} Arena Energy restored!`, 4000);
+    } else {
+      renderLobby();
+      const why = {
+        ad_cooldown: "🎬 Next ad refill is still cooling down.",
+        no_credit: "⚠️ Credit missing — watch the ad again.",
+        energy_full: "⚡ Energy is already full.",
+      }[(d && d.reason)] || "⚠️ Could not restore energy — try again.";
+      (window.showToast || alert)(why, 4000);
+    }
+  }
+
   /* ---------------------------------------------------------- battle */
   async function startBattle() {
     if (typeof showToast === "function") showToast("🔎 Finding an opponent…");
@@ -763,13 +831,11 @@ const Arena = (() => {
     if (!d || !d.ok) {
       const why = {
         no_defender: "Set a Defense Buddy first.",
-        daily_limit: "Daily battle limit reached.",
-        no_attempts: "No attempts left today.",
-        // Not an error — the timer is simply still running. Say so, with the
-        // countdown, instead of blaming the player's connection.
-        regen_wait: d && d.entry && d.entry.freeNextInMs
-          ? `No entries yet — the next free one lands in ${Math.ceil(d.entry.freeNextInMs / 60000)} min.`
-          : "No entries yet — your next free entry is on its way.",
+        // Not a lockout — the pool is simply empty. Point at the countdown
+        // and the ad refill instead of blaming the player.
+        need_energy: d && d.entry && d.entry.nextRegenMs
+          ? `⚡ Not enough Energy — next +1 ⚡ in ${Math.ceil(d.entry.nextRegenMs / 60000)} min, or watch an ad to refill.`
+          : "⚡ Not enough Energy — wait for regen or watch an ad to refill.",
         no_opponents: "No opponents available yet — set a Defense Buddy and check back.",
         // Every available opponent has already been fought 3 times today. This
         // is the fairness cap doing its job, so say so plainly rather than
@@ -878,10 +944,13 @@ const Arena = (() => {
       // `dailyFree` survive as a silent 0 on the client for so long.
       applyEntry({
         ap: d.ap, wins: d.wins, losses: d.losses, score: d.score,
-        freeLeft: d.freeLeft,
-        freeBankMax: d.freeBankMax,
-        freeNextInMs: d.freeNextInMs,
-        paidLeft: d.paidLeft, battlesToday: d.battlesToday,
+        energy: d.energy,
+        energyMax: d.energyMax,
+        battleCost: d.battleCost,
+        nextRegenMs: d.nextRegenMs,
+        adRefillEnergy: d.adRefillEnergy,
+        adRefillInMs: d.adRefillInMs,
+        battlesToday: d.battlesToday,
       });
       if (typeof showToast === "function") {
         const apLine = `+${d.apAwarded} AP`;
