@@ -632,8 +632,8 @@
             let playerBaseRate = 0;
             for (const id in allPlots) {
               if (allPlots[id].ownerId === targetPlayerData.ownerId) {
-                const rKey = allPlots[id].rarity?.key || allPlots[id].rarity;
-                playerBaseRate += CONFIG.plotRate(rKey, allPlots[id].lucky === true);
+                // 🧩 plotTileRate: merged blocks count once, construction tiles 0.
+                playerBaseRate += CONFIG.plotTileRate(id, allPlots[id]);
               }
             }
 
@@ -681,8 +681,8 @@
     let incomeRate = 0;
     for (const id in allPlots) {
       if (allPlots[id].ownerId === targetOwnerId) {
-        const rKey = allPlots[id].rarity?.key || allPlots[id].rarity;
-        incomeRate += CONFIG.plotRate(rKey, allPlots[id].lucky === true);
+        // 🧩 plotTileRate: merged blocks count once, construction tiles 0.
+        incomeRate += CONFIG.plotTileRate(id, allPlots[id]);
       }
     }
     // Apply boost multiplier if viewing self (delegated to Multiplier module)

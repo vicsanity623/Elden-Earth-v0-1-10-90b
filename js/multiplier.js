@@ -67,7 +67,9 @@ const Multiplier = (() => {
    */
   function getEffectiveMultiplier(state) {
     const base = Number(state.boostMultiplier) === 50 ? 50 : 20;
-    const plotCount = state.plots ? Object.keys(state.plots).length : 0;
+    // 🧩 A merged block counts as ONE plot (its anchor tile), not N² tiles.
+    const plotCount = state.plots
+      ? Object.values(state.plots).filter((p) => p && !p.satelliteOf).length : 0;
     const tierFactor = getTierFactor(plotCount);
     return Math.round(base * tierFactor);
   }
@@ -86,7 +88,9 @@ const Multiplier = (() => {
       // still carry boostMultiplier: 30, so normalise anything that is not the
       // 50X event down to 20 — otherwise old boosts keep paying at the old rate.
       const base = Number(state.boostMultiplier) === 50 ? 50 : 20;
-      const plotCount = state.plots ? Object.keys(state.plots).length : 0;
+      // 🧩 A merged block counts as ONE plot (its anchor tile), not N² tiles.
+      const plotCount = state.plots
+        ? Object.values(state.plots).filter((p) => p && !p.satelliteOf).length : 0;
       const tierFactor = getTierFactor(plotCount);
       return rate * base * tierFactor;
     }

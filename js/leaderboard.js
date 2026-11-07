@@ -254,9 +254,8 @@ const Leaderboard = (() => {
       if (claimedTime > 0 && claimedTime < 1e11) claimedTime *= 1000;
       if (!claimedTime || claimedTime > now) claimedTime = now;
       const ageSec = Math.max(0, (now - claimedTime) / 1000);
-      const rarityKey = plot.rarity?.key || plot.rarity || "common";
-      // 🍀 Lucky plots accrue ×1.1 rent over their lifetime.
-      totalRent += ageSec * CONFIG.plotRate(rarityKey, plot.lucky === true);
+      // 🍀/🧩 plotTileRate handles lucky ×1.1 AND merged-block accounting.
+      totalRent += ageSec * CONFIG.plotTileRate(tid, plot);
     }
 
     // Players with plots get true passive rent computed from plot ages —
@@ -326,9 +325,9 @@ const Leaderboard = (() => {
       if (p.demo === true) continue;
       const oid = p.ownerId || "unknown";
 
-      const rKey = p.rarity?.key || p.rarity || "common";
-      // 🍀 Lucky plots contribute ×1.1 to a player's displayed rate.
-      const pRate = CONFIG.plotRate(rKey, p.lucky === true);
+      // 🍀/🧩 plotTileRate handles lucky ×1.1 AND merged-block accounting
+      // (a block contributes its boosted rate exactly once).
+      const pRate = CONFIG.plotTileRate(tid, p);
       playerRateMap[oid] = (playerRateMap[oid] || 0) + pRate;
 
       if (!playerStats[oid]) {

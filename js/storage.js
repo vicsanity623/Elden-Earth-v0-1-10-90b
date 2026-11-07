@@ -57,6 +57,9 @@ const Store = (() => {
       plotBag: {},
       plotBagItems: {},
       luckyBagItems: {},
+      // 🧩 Merge construction queue (server-owned mirror) — drives the
+      // "My Empire" progress bars. The client never writes it.
+      plotMerges: {},
       plotsVersion: 0,
       saveVersion: 0,
       eldenStopSeeds: 0,
@@ -553,6 +556,11 @@ const Store = (() => {
             state.luckyBagItems = { ...result.data.luckyBagItems };
             mirrorDirty = true;
           }
+          if (result.data?.plotMerges && typeof result.data.plotMerges === "object") {
+            // 🧩 Server-owned merge construction queue (read-only mirror).
+            state.plotMerges = { ...result.data.plotMerges };
+            mirrorDirty = true;
+          }
           if (Array.isArray(result.data?.plotDroppedTids) && result.data.plotDroppedTids.length) {
             // Server just evicted tiles whose instanceId already sits in the
             // bag (bag↔map invariant). Drop them locally too, otherwise the
@@ -953,6 +961,12 @@ const Store = (() => {
           if (cloudData.luckyBagItems && typeof cloudData.luckyBagItems === "object") {
             state.luckyBagItems = { ...cloudData.luckyBagItems };
           }
+          // 🧩 Merge queue is server-owned exactly like the bag (absent from
+          // SAFE_SAVE_FIELDS) — adopt unconditionally so a claim on another
+          // device retires the entry here too.
+          if (cloudData.plotMerges && typeof cloudData.plotMerges === "object") {
+            state.plotMerges = { ...cloudData.plotMerges };
+          }
           if (cloudData.plotBag && typeof cloudData.plotBag === "object") {
             state.plotBag = { ...cloudData.plotBag };
           }
@@ -1190,10 +1204,9 @@ let lastConflictCheck = {};
     lastPlotsCount = cacheKey;
     let sum = 0;
     for (const id in state.plots) {
-      const p = state.plots[id];
-      const rKey = p.rarity?.key || p.rarity || "common";
-      // 🍀 Lucky plots earn ×1.1; plotRate() handles the multiplier.
-      sum += CONFIG.plotRate(rKey, p.lucky === true);
+      // 🧩 plotTileRate: merged blocks count once (anchor), construction
+      // tiles earn nothing — mirrors the server's clamp math exactly.
+      sum += CONFIG.plotTileRate(id, state.plots[id]);
     }
     cachedBaseRate = sum;
   }
@@ -1436,10 +1449,8 @@ let lastConflictCheck = {};
     let baseRate = 0;
     if (state && state.plots) {
       for (const id in state.plots) {
-        const p = state.plots[id];
-        const rKey = p.rarity?.key || p.rarity || "common";
-        // 🍀 Lucky plots earn ×1.1 while offline too.
-        baseRate += CONFIG.plotRate(rKey, p.lucky === true);
+        // 🍀/🧩 plotTileRate handles lucky ×1.1 AND merged-block accounting.
+        baseRate += CONFIG.plotTileRate(id, state.plots[id]);
       }
     }
 
@@ -1543,10 +1554,8 @@ let lastConflictCheck = {};
     if (!state || !state.plots) return 0;
     let rate = 0;
     for (const id in state.plots) {
-      const p = state.plots[id];
-      const rKey = p.rarity?.key || p.rarity || "common";
-      // 🍀 Lucky plots (🍀) earn ×1.1 their rarity rate.
-      rate += CONFIG.plotRate(rKey, p.lucky === true);
+      // 🍀/🧩 plotTileRate handles lucky ×1.1 AND merged-block accounting.
+      rate += CONFIG.plotTileRate(id, state.plots[id]);
     }
     // Apply 20X/50X boost if active (delegated to Multiplier module)
     if (typeof Multiplier !== "undefined") {

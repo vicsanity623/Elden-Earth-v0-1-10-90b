@@ -32,6 +32,8 @@ const Grid = (() => {
   let isAscensionMode = false;
   let ascensionSelections = [];
   let onAscensionPick = null;
+  // 🧩 Merge Mode: GeoJSON features for the eligible-cluster highlight layer.
+  let mergeClusterFeatures = [];
 
   function tileId(tx, ty) { return tx + "_" + ty; }
 
@@ -246,8 +248,10 @@ const Grid = (() => {
     document.getElementById("plot-modal-rarity").style.color = isLucky ? "" : rarity.color;
     document.getElementById("plot-modal-name").textContent = `${plot.ownerName || "Traveler"}'s Plot`;
     document.getElementById("plot-modal-coords").textContent = `Coords: [${plot.tx}, ${plot.ty}]`;
-    const modalRate = CONFIG.plotRate(String(plot.rarity?.key || plot.rarity || "common"), isLucky);
-    document.getElementById("plot-modal-rate").textContent = `${modalRate} EB / sec${isLucky ? " (🍀 +10%)" : ""}`;
+    // 🧩 Merged blocks rate at base × 4.2^tier (their footprint renders as
+    // one plot; satellites never open this modal).
+    const modalRate = CONFIG.plotRate(String(plot.rarity?.key || plot.rarity || "common"), isLucky, Number(plot.tier) || 0);
+    document.getElementById("plot-modal-rate").textContent = `${modalRate} EB / sec${isLucky ? " (🍀 +10%)" : ""}${Number(plot.tier) >= 1 ? ` · T${Number(plot.tier)} merged` : ""}`;
     document.getElementById("plot-modal-location").textContent = [plot.city, plot.state, plot.country].filter(Boolean).join(", ") || "Unknown";
     // Show relocate button only for the player's own plots
     const relocateBtn = document.getElementById("plot-relocate-btn");
@@ -926,7 +930,25 @@ const Grid = (() => {
 
     for (const tid in allPlots) {
       const plot = allPlots[tid];
-      const bounds = cachedTileBounds(plot.tx, plot.ty);
+      // 🧩 Satellite tiles of a merged block are pure geometry — the block
+      // renders as ONE polygon from its anchor tile (below).
+      if (plot.satelliteOf) continue;
+      const tier = Number(plot.tier) || 0;
+      let bounds = cachedTileBounds(plot.tx, plot.ty);
+      if (tier >= 1) {
+        // 🧩 Footprint rectangle: NW corner of the anchor tile through the SE
+        // corner of the far tile (2^tier × 2^tier tiles per side).
+        const S = Math.pow(2, tier);
+        const far = cachedTileBounds(plot.tx + S - 1, plot.ty + S - 1);
+        const lats = bounds.concat(far).map(pt => pt[0]);
+        const lons = bounds.concat(far).map(pt => pt[1]);
+        bounds = [
+          [Math.min(...lats), Math.min(...lons)],
+          [Math.min(...lats), Math.max(...lons)],
+          [Math.max(...lats), Math.max(...lons)],
+          [Math.max(...lats), Math.min(...lons)],
+        ];
+      }
       const coords = bounds.map(pt => [pt[1], pt[0]]);
       coords.push(coords[0]);
 
@@ -959,6 +981,10 @@ const Grid = (() => {
           pending: isPending,
           // 🍀 Lucky plots get an animated rainbow outline on the map.
           lucky: !isPending && plot.lucky === true,
+          // 🧩 Merged-block styling: tier drives the border treatment and
+          // "merging" tiles render as dashed construction sites.
+          tier: tier,
+          merging: plot.status === "merging",
         },
         geometry: { type: "Polygon", coordinates: [coords] },
       });
@@ -1040,6 +1066,69 @@ const Grid = (() => {
           "line-color": "#ffffff",
           "line-width": 3,
           "line-dasharray": [1.2, 1.2],
+          "line-opacity": 0.9,
+        },
+      });
+
+      // 6. 🧩 MERGED BLOCKS — glassmorphism approximation: a polished bright
+      //    border on T1/T2 (frosted glass reads through the translucent fill
+      //    above), a wider gold glow on T3. Real backdrop-blur is impossible
+      //    on MapLibre polygons — layered translucency + bright edges is the
+      //    canvas equivalent; the My Empire screen gets the true CSS glass.
+      map.addLayer({
+        id: "plots-merged-line",
+        type: "line",
+        source: "plots-source",
+        filter: [">=", ["get", "tier"], 1],
+        paint: {
+          "line-color": ["case",
+            [">=", ["get", "tier"], 3], "#ffd770",
+            "#dbe4f0"],
+          "line-width": ["case", [">=", ["get", "tier"], 3], 5.5, 3],
+          "line-opacity": 0.9,
+        },
+      });
+
+      // 7. 🧩 CONSTRUCTION SITES — dashed amber outline while a merge runs.
+      map.addLayer({
+        id: "plots-merging-line",
+        type: "line",
+        source: "plots-source",
+        filter: ["==", ["get", "merging"], true],
+        paint: {
+          "line-color": "#fbbf24",
+          "line-width": 3.5,
+          "line-dasharray": [1.6, 1.2],
+          "line-opacity": 0.95,
+        },
+      });
+    }
+
+    // 🧩 MERGE-MODE HIGHLIGHT — eligible 2×2 clusters glow green while the
+    // My Empire merge tool is open. Populated via Grid.showMergeClusters().
+    const mergeFeatures = mergeClusterFeatures;
+    const mergeGeoJSON = { type: "FeatureCollection", features: mergeFeatures };
+    if (map.getSource("merge-clusters-source")) {
+      map.getSource("merge-clusters-source").setData(mergeGeoJSON);
+    } else {
+      map.addSource("merge-clusters-source", { type: "geojson", data: mergeGeoJSON });
+      map.addLayer({
+        id: "merge-clusters-fill",
+        type: "fill",
+        source: "merge-clusters-source",
+        paint: {
+          "fill-color": "#2ee59d",
+          "fill-opacity": 0.22,
+        },
+      });
+      map.addLayer({
+        id: "merge-clusters-line",
+        type: "line",
+        source: "merge-clusters-source",
+        paint: {
+          "line-color": "#2ee59d",
+          "line-width": 2.5,
+          "line-dasharray": [2, 1.5],
           "line-opacity": 0.9,
         },
       });
@@ -1686,5 +1775,16 @@ const Grid = (() => {
     scheduleRender();
   }
 
-  return { init, render, promptBuyTile, executeBuy, getAllPlots, setBuyMode, setAscensionMode, getAscensionSelections, setAscensionSelections, getMap, projectTid, setGlobalPlot, setPlayerPosition, getPlayerPosition };
+  // 🧩 Merge Mode highlight — the My Empire merge tool passes eligible 2×2
+  // clusters as GeoJSON features (green glow) and clears them when done.
+  function showMergeClusters(features) {
+    mergeClusterFeatures = Array.isArray(features) ? features : [];
+    render();
+  }
+  function clearMergeClusters() {
+    mergeClusterFeatures = [];
+    render();
+  }
+
+  return { init, render, promptBuyTile, executeBuy, getAllPlots, setBuyMode, setAscensionMode, getAscensionSelections, setAscensionSelections, getMap, projectTid, setGlobalPlot, setPlayerPosition, getPlayerPosition, showMergeClusters, clearMergeClusters };
 })();

@@ -72,9 +72,8 @@ const WeeklyPool = (() => {
       if (p.plots) {
         for (const tid in p.plots) {
           const plot = p.plots[tid];
-          const rKey = plot.rarity?.key || plot.rarity || "common";
-          // 🍀 Lucky plots accrue ×1.1 into the global rent pool.
-          globalRateSec += CONFIG.plotRate(rKey, plot.lucky === true);
+          // 🍀/🧩 plotTileRate handles lucky ×1.1 AND merged-block accounting.
+          globalRateSec += CONFIG.plotTileRate(tid, plot);
         }
       } else if (p.plotsCount) {
         // No save doc loaded for this player (the leaderboard query caps at 50):

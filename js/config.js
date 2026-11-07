@@ -10,7 +10,7 @@ if (typeof maplibregl !== "undefined") window.mapboxgl = maplibregl;
 
 const CONFIG = {
   // --- Game Version (bump on every patch to auto-wipe stale localStorage) ---
-  GAME_VERSION: "1.1.02.41a",
+  GAME_VERSION: "1.2.00.00a",
   
   // --- Realm Server Epoch ---
   // Bump this timestamp whenever you intentionally wipe the Firestore database.
@@ -181,11 +181,41 @@ const CONFIG = {
     MAX_FRIEND_BONUS: 0.05,// +5% only at max friendship (10 hearts) → 5.5% cap
   },
 
-  // Helper: authoritative rate for one plot (rarity key + lucky flag).
+  // --- 🧩 Plot Merging ("My Empire", T0 → T3) — mirrors functions/plot-merge.js ---
+  // 4 same-tier same-rarity plots in a strict 2×2 square merge into one plot
+  // of the next tier: rate × 4.2 per tier, construction timer + trainer level
+  // gate. T3 (8×8 tiles) is the cap; merged plots are immobile monuments.
+  PLOT_MERGE: {
+    RATE_MULT: 4.2,
+    MAX_TIER: 3,
+    // Target tier -> { construction duration, trainer level gate }.
+    TIERS: {
+      1: { durationMs: 24 * 60 * 60 * 1000,       level: 30, label: "Landholder" },
+      2: { durationMs: 3 * 24 * 60 * 60 * 1000,   level: 50, label: "Baron" },
+      3: { durationMs: 10 * 24 * 60 * 60 * 1000,  level: 65, label: "High Lord" },
+    },
+  },
+
+  // Helper: authoritative rate for one plot (rarity key + lucky flag + tier).
   // Lucky = rarity rate × 1.1, so a Lucky Common beats a normal Common, etc.
-  plotRate(rKey, lucky) {
+  // Merged plots (tier 1-3) earn base × 4.2^tier.
+  plotRate(rKey, lucky, tier) {
     const r = this.PLOT_RARITIES.find(x => x.key === rKey) || this.PLOT_RARITIES[0];
-    return lucky ? r.rate * this.LUCKY.RATE_MULT : r.rate;
+    const mult = Math.pow(this.PLOT_MERGE.RATE_MULT,
+      Math.max(0, Math.min(this.PLOT_MERGE.MAX_TIER, Number(tier) || 0)));
+    return lucky ? r.rate * mult * this.LUCKY.RATE_MULT : r.rate * mult;
+  },
+
+  // 🧩 Earn rate of ONE TILE of a plots map (state.plots / globalPlots).
+  // Satellite tiles of a merged block earn NOTHING — the block's boosted
+  // rate counts exactly once at its anchor tile — and tiles under
+  // construction ("merging") earn nothing either. Every loop that sums
+  // income over tiles must use this instead of plotRate.
+  plotTileRate(tid, p) {
+    if (!p || typeof p !== "object") return 0;
+    if (p.satelliteOf) return 0;
+    if (p.status === "merging") return 0;
+    return this.plotRate(p.rarity?.key || p.rarity || "common", p.lucky === true, p.tier);
   },
 
   // --- Friendship (❤ hearts / XP) ---
