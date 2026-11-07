@@ -34,6 +34,11 @@ const PlayerXP = (() => {
 
   let lastLevel = 1;
   let hooksInstalled = false;
+
+  // 🛡️ EXPLOIT FIX (2026-11-07): quests that are "open a window" rather than
+  // gameplay ("mayor" = open the player profile). They may complete for their
+  // own EB reward, but they NEVER pay trainer XP — XP is for real actions.
+  const UI_QUEST_IDS = ["mayor"];
   
   const iconCoin = `<img src="assets/eb-coin.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
   const iconDiamond = `<img src="assets/diamond-spawn.png" style="width: 1.1em; height: 1.1em; vertical-align: -0.15em; display: inline-block;" />`;
@@ -137,7 +142,18 @@ const PlayerXP = (() => {
       if (typeof original === "function" && !original.__xpWrapped) {
         const wrapped = function (...args) {
           const r = original.apply(this, args);
-          try { addXP(XP.dailyQuest, "daily_quest"); } catch (e) {}
+          try {
+            // 🛡️ EXPLOIT FIX (2026-11-07): XP only on a GENUINELY new
+            // completion — the old wrapper paid 15 XP on EVERY call, so an
+            // autoclicker tapping the player-info modal open/close farmed max
+            // trainer level overnight (openPlayerInfo fires a daily quest
+            // call every tap). UI-type quests — opening a window, not playing
+            // — never pay trainer XP at all.
+            const questId = String(args[0] || "");
+            if (r === true && !UI_QUEST_IDS.includes(questId)) {
+              addXP(XP.dailyQuest, "daily_quest");
+            }
+          } catch (e) {}
           return r;
         };
         wrapped.__xpWrapped = true;
@@ -182,21 +198,12 @@ const PlayerXP = (() => {
       }
     } catch (e) {}
 
-    // Elden Stop spins.
-    try {
-      if (typeof EldenStops !== "undefined" && EldenStops.openStopSession) {
-        const orig = EldenStops.openStopSession;
-        if (typeof orig === "function" && !orig.__xpWrapped) {
-          const wrapped = function (...args) {
-            const r = orig.apply(this, args);
-            try { addXP(XP.spin, "elden_stop"); } catch (e) {}
-            return r;
-          };
-          wrapped.__xpWrapped = true;
-          EldenStops.openStopSession = wrapped;
-        }
-      }
-    } catch (e) {}
+    // 🛡️ EXPLOIT FIX (2026-11-07): the EldenStops.openStopSession hook paid
+    // XP for merely OPENING the stop window — removed. Trainer XP comes from
+    // real gameplay only (the spin itself pays through its daily quest).
+    //
+    // (The remaining hooks — quest completions, achievement actions, pet
+    // feeding — all fire on real in-game actions.)
   }
 
   /* ------------------------------------------------------------- UI */

@@ -3138,10 +3138,13 @@
     function completeDailyQuest(questId) {
       const qState = getDailyQuestsState();
       const q = qState.quests[questId];
-      if (!q || q.claimed || q.completed) return;
+      // Returns true ONLY on a genuinely new completion — the trainer-XP hook
+      // (js/player-xp.js) keys off this so re-tapping a window that fires a
+      // quest can never farm XP (2026-11-07 exploit fix).
+      if (!q || q.claimed || q.completed) return false;
 
       const qDef = activeQuestDefs().find(x => x.id === questId);
-      if (!qDef) return;
+      if (!qDef) return false;
 
       const needed = Number(qDef.progressNeeded) || 0;
       if (needed > 1) {
@@ -3157,6 +3160,7 @@
       }
       Store.save(true);
       renderDailyQuests();
+      return true;
     }
     window.completeDailyQuest = completeDailyQuest;
 

@@ -20,7 +20,9 @@ const Empire = (() => {
   const STYLE_ID = "empire-style";
 
   let state = null; // last computed view model
-  let mergeMode = false;
+  // 🧩 Map Merge Mode: the list hands the player to the map (Buy-Land style)
+  // where green clusters are tappable — the confirm sheet opens right there.
+  let mapMergeMode = false;
   // 🎥 Cluster focus: tapping a cluster in the list flies the camera to it on
   // the map (players are often nowhere near their land), with a floating
   // confirm card. Beginning/claiming a merge snaps the camera home to the
@@ -245,6 +247,21 @@ const Empire = (() => {
   animation:emPulse 1.6s ease-in-out infinite;
 }
 @keyframes emPulse{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.55; transform:scale(.8); } }
+/* 🧩 Merge Mode banner — the Buy-Land-style header shown while the map is
+   the merge interface. */
+#em-merge-banner{
+  position:fixed; top:calc(10px + env(safe-area-inset-top,0px)); left:12px; right:12px;
+  z-index:57; border-radius:16px; padding:12px 14px;
+  display:flex; align-items:center; gap:12px;
+  background:linear-gradient(165deg, rgba(24,32,56,.93), rgba(14,18,34,.95));
+  border:1px solid rgba(46,229,157,.45);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 14px 40px rgba(0,0,0,.45);
+  animation:emFocusIn .3s cubic-bezier(.22,1,.36,1);
+}
+.em-banner-title{ font-size:12px; font-weight:900; letter-spacing:1.6px; color:#2ee59d; white-space:nowrap; }
+.em-banner-sub{ flex:1 1 auto; font-size:11px; color:#cdd8ea; line-height:1.4; }
+#em-merge-done{ width:auto; padding:9px 18px !important; font-size:12px !important; }
 `;
     const style = document.createElement("style");
     style.id = STYLE_ID;
@@ -267,7 +284,11 @@ const Empire = (() => {
     const income = fmtRate(rate);
     const merges = (s && s.plotMerges && typeof s.plotMerges === "object") ? s.plotMerges : {};
     const mergeList = Object.entries(merges);
-    const clusters = eligibleClusters();
+    const allClusters = eligibleClusters();
+    // 🧩 The list only shows clusters the camera can SEE — a global list of
+    // 100+ clusters is impossible to navigate. Pan the map (or use Merge
+    // Mode) to bring more land into view.
+    const clusters = clustersInView(allClusters);
     const level = trainerLevel();
 
     // ---- overview ----
@@ -316,8 +337,11 @@ const Empire = (() => {
     // ---- merge tool ----
     const mergeTool = `
       <div class="em-section">🧩 Merge Tool</div>
+      <button class="em-btn ${mapMergeMode ? "gold" : ""}" id="em-merge-mode" style="margin-bottom:10px">
+        🧩 ${mapMergeMode ? "Merge Mode is ON — return to the map" : "Merge Mode — tap green clusters on the map"}
+      </button>
       ${clusters.length ? `
-        <div class="em-sub" style="margin-bottom:8px">${clusters.length} eligible 2×2 cluster${clusters.length > 1 ? "s" : ""} on your land${mergeMode ? " — highlighted in green on the map" : ""}.</div>
+        <div class="em-sub" style="margin-bottom:8px">${clusters.length} mergeable cluster${clusters.length > 1 ? "s" : ""} in view${allClusters.length > clusters.length ? ` · ${allClusters.length - clusters.length} more elsewhere on your land` : ""} — tap a cluster to fly the camera to it.</div>
         ${clusters.map((c, i) => {
           const locked = level < (c.def ? c.def.level : 99);
           return `
@@ -341,10 +365,9 @@ const Empire = (() => {
             </button>
           </div>`;
         }).join("")}
-        <button class="em-btn ghost" id="em-merge-mode">${mergeMode ? "✓ Merge Mode ON — tap to clear highlights" : "Show eligible clusters on the map"}</button>
       ` : `
         <div class="em-glass">
-          <div class="em-sub">No mergeable clusters yet. A merge needs <b>4 same-rarity plots of the same tier arranged in a tight 2×2 square</b> — expand your land into blocks and they'll appear here.</div>
+          <div class="em-sub">No mergeable clusters in view. Pan the map over your land — or tap <b>Merge Mode</b> above and hunt for glowing green blocks. A merge needs <b>4 same-rarity plots of the same tier in a tight 2×2 square</b>.</div>
         </div>
       `}
     `;
@@ -388,13 +411,77 @@ const Empire = (() => {
     });
     const mm = el("em-merge-mode");
     if (mm) mm.addEventListener("click", () => {
-      mergeMode = !mergeMode;
-      if (typeof Grid !== "undefined") {
-        if (mergeMode) Grid.showMergeClusters(clusterGeoJSON(clusters));
-        else Grid.clearMergeClusters();
+      if (mapMergeMode) {
+        // Already on the map — return to it instead of stacking modes.
+        open();
+        return;
       }
-      render();
+      enterMapMergeMode();
     });
+  }
+
+  /* ------------------------------------------------ 🧩 map merge mode */
+  // Clusters whose land is inside the current camera viewport.
+  function clustersInView(clusters) {
+    try {
+      const map = (typeof Grid !== "undefined" && Grid.getMap) ? Grid.getMap() : null;
+      if (!map || !map.getBounds) return clusters;
+      const b = map.getBounds();
+      const ts = CONFIG.TILE_SIZE_METERS;
+      return clusters.filter((c) => {
+        const cx = Math.floor(c.anchorTx + c.size / 2);
+        const cy = Math.floor(c.anchorTy + c.size / 2);
+        const bounds = Geo.tileBounds(cx, cy, ts);
+        const lat = (bounds[0][0] + bounds[2][0]) / 2;
+        const lon = (bounds[0][1] + bounds[2][1]) / 2;
+        return b.contains([lon, lat]);
+      });
+    } catch (e) {
+      return clusters;
+    }
+  }
+
+  function enterMapMergeMode() {
+    const clusters = clustersInView(eligibleClusters());
+    if (!clusters.length) {
+      toast("No mergeable clusters in view — pan the map over your land first.");
+      return;
+    }
+    mapMergeMode = true;
+    // The map IS the interface now (like Buy Land mode) — the list hides.
+    const m = el(MODAL_ID);
+    if (m) m.classList.add("hidden");
+    if (typeof Grid !== "undefined") {
+      Grid.showMergeClusters(clusterGeoJSON(clusters));
+      // Tap a green block → the merge confirm opens right there on the map.
+      Grid.setMergeMode(true, clusters, (c) => confirmMerge(c));
+    }
+    showMergeBanner(clusters.length);
+  }
+
+  function exitMapMergeMode(reopenMenu) {
+    mapMergeMode = false;
+    if (typeof Grid !== "undefined") {
+      Grid.setMergeMode(false);
+      Grid.clearMergeClusters();
+    }
+    const b = el("em-merge-banner");
+    if (b) b.remove();
+    if (reopenMenu) open();
+  }
+
+  function showMergeBanner(count) {
+    let banner = el("em-merge-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "em-merge-banner";
+      document.body.appendChild(banner);
+    }
+    banner.innerHTML = `
+      <div class="em-banner-title">🧩 MERGE MODE</div>
+      <div class="em-banner-sub">Tap a glowing green cluster to merge it · ${count} in view</div>
+      <button class="em-btn ghost" id="em-merge-done">Done</button>`;
+    banner.querySelector("#em-merge-done").addEventListener("click", () => exitMapMergeMode(true));
   }
 
   /* ------------------------------------------------- 🎥 camera focus */
@@ -466,6 +553,8 @@ const Empire = (() => {
   // Snap the camera home to the player — called after a merge begins or a
   // monument is claimed ("complete/begin merge flies camera back").
   function flyPlayerBack() {
+    // Any map-side merge session ends here too (banner + tap mode).
+    if (mapMergeMode) exitMapMergeMode(false);
     const map = (typeof Grid !== "undefined" && Grid.getMap) ? Grid.getMap() : null;
     if (map) {
       const pos = (typeof Grid !== "undefined" && Grid.getPlayerPosition) ? Grid.getPlayerPosition() : null;
@@ -597,10 +686,7 @@ const Empire = (() => {
   function close() {
     const m = el(MODAL_ID);
     if (m) m.classList.add("hidden");
-    if (mergeMode) {
-      mergeMode = false;
-      if (typeof Grid !== "undefined") Grid.clearMergeClusters();
-    }
+    if (mapMergeMode) exitMapMergeMode(false);
     const overlay = document.getElementById("em-confirm");
     if (overlay) overlay.remove();
     // A stray focus card must never linger over the map.

@@ -34,6 +34,11 @@ const Grid = (() => {
   let onAscensionPick = null;
   // 🧩 Merge Mode: GeoJSON features for the eligible-cluster highlight layer.
   let mergeClusterFeatures = [];
+  // 🧩 Merge Mode taps: while active, map taps resolve to an eligible merge
+  // cluster (green blocks) instead of Buy Land / plot modal behavior.
+  let isMergeMode = false;
+  let mergeClusters = [];
+  let onMergePick = null;
 
   function tileId(tx, ty) { return tx + "_" + ty; }
 
@@ -1668,6 +1673,22 @@ const Grid = (() => {
         handleAscensionClick(e.lngLat);
         return;
       }
+      if (isMergeMode) {
+        // 🧩 Merge Mode: tapping a green cluster opens its merge confirm.
+        const ts0 = CONFIG.TILE_SIZE_METERS || 6.096;
+        const t0 = Geo.tileForLatLon(e.lngLat.lat, e.lngLat.lng, ts0);
+        const hit = mergeClusters.find((c) =>
+          t0.tx >= c.anchorTx && t0.tx < c.anchorTx + c.size &&
+          t0.ty >= c.anchorTy && t0.ty < c.anchorTy + c.size);
+        if (hit) {
+          if (typeof onMergePick === "function") onMergePick(hit);
+          return;
+        }
+        if (typeof showToast === "function") {
+          showToast("That tile isn't part of a mergeable cluster — tap a glowing green block.", 2800);
+        }
+        return;
+      }
       if (!isBuyMode) return; // Only allow buying in Buy Land mode
       const { lng, lat } = e.lngLat;
       const ts = CONFIG.TILE_SIZE_METERS || 6.096;
@@ -1786,5 +1807,12 @@ const Grid = (() => {
     render();
   }
 
-  return { init, render, promptBuyTile, executeBuy, getAllPlots, setBuyMode, setAscensionMode, getAscensionSelections, setAscensionSelections, getMap, projectTid, setGlobalPlot, setPlayerPosition, getPlayerPosition, showMergeClusters, clearMergeClusters };
+  // 🧩 Enter/leave Merge Mode (map taps resolve to merge clusters while on).
+  function setMergeMode(on, clusters, onPick) {
+    isMergeMode = !!on;
+    mergeClusters = Array.isArray(clusters) ? clusters : [];
+    onMergePick = onPick || null;
+  }
+
+  return { init, render, promptBuyTile, executeBuy, getAllPlots, setBuyMode, setAscensionMode, getAscensionSelections, setAscensionSelections, getMap, projectTid, setGlobalPlot, setPlayerPosition, getPlayerPosition, showMergeClusters, clearMergeClusters, setMergeMode };
 })();
