@@ -358,7 +358,7 @@ const Arena = (() => {
     const ageMs = lastStateAt ? Math.max(0, Date.now() - lastStateAt) : 0;
     const nextIn = sentNextIn === null ? null : Math.max(0, sentNextIn - ageMs);
     const energy = Number(me.energy) || 0;
-    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 100;
+    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 15;
 
     if (nextIn !== null && nextIn > 0 && energy < energyMax) {
       const t = mmss(nextIn);
@@ -372,7 +372,7 @@ const Arena = (() => {
       // and re-render once so the Battle button unlocks. No network refresh:
       // the lobby follows the 30-minute cadence below.
       me.energy = Math.min(energyMax, energy + 1);
-      me.nextRegenMs = me.energy >= energyMax ? null : (Number(rules.regenMs) || 120000);
+      me.nextRegenMs = me.energy >= energyMax ? null : (Number(rules.regenMs) || 180000);
       lastStateAt = Date.now();
       renderLobby();
       return;
@@ -480,9 +480,9 @@ const Arena = (() => {
 
     const remain = Math.max(0, (Number(season.end) || Date.now()) - Date.now());
     const energy = Number(me.energy) || 0;
-    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 100;
-    const battleCost = Number(me.battleCost) || Number(rules.battleCost) || 2;
-    const adRefill = Number(me.adRefillEnergy) || Number(rules.adRefillEnergy) || 20;
+    const energyMax = Number(me.energyMax) || Number(rules.energyMax) || 15;
+    const battleCost = Number(me.battleCost) || Number(rules.battleCost) || 4;
+    const adRefill = Number(me.adRefillEnergy) || Number(rules.adRefillEnergy) || 5;
     const ap = Number(me.ap) || 0;
     const usedToday = Number(me.battlesToday) || 0;
 

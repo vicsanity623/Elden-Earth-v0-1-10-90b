@@ -1321,7 +1321,12 @@
     // 2. Camera Follow Deadzone: Only glide camera if player actually moved > 0.8 meters
     const dist = lastCameraCenter ? Geo.haversine(lastCameraCenter.lat, lastCameraCenter.lon, currentPos.lat, currentPos.lon) : 999;
 
-    if (dist > 0.8 && !isUserInteracting && !isOrbiting && !(typeof EldenStops !== "undefined" && EldenStops.isCinematicOpen())) {
+    // 🎥 Empire cluster focus: while the camera is inspecting a merge cluster
+    // on the land (possibly far away), GPS auto-follow must not yank it home.
+    const empireCameraLocked = (typeof Empire !== "undefined" && Empire.isCameraLocked)
+      ? Empire.isCameraLocked() : false;
+
+    if (dist > 0.8 && !isUserInteracting && !isOrbiting && !empireCameraLocked && !(typeof EldenStops !== "undefined" && EldenStops.isCinematicOpen())) {
       lastCameraCenter = { lat: currentPos.lat, lon: currentPos.lon };
       map.easeTo({
         center: [currentPos.lon, currentPos.lat],
@@ -1552,7 +1557,12 @@
 
     // Re-lock center strictly when gestures finish (never interrupts animations mid-flight)
     map.on("zoomend", () => {
-      if (currentPos) map.setCenter([currentPos.lon, currentPos.lat]);
+      // 🎥 Empire cluster focus: the fly-to-cluster animation ITSELF ends with
+      // a zoomend — re-centering here was what snapped the camera straight
+      // back to the player the moment it arrived at the cluster.
+      const empireCameraLocked = (typeof Empire !== "undefined" && Empire.isCameraLocked)
+        ? Empire.isCameraLocked() : false;
+      if (currentPos && !empireCameraLocked) map.setCenter([currentPos.lon, currentPos.lat]);
       applyMapLod();
       refreshMapModulesAfterZoom();
     });

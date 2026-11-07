@@ -28,6 +28,13 @@ const Empire = (() => {
   let focusCluster = null;
   let savedView = null;
 
+  // 🎥 True while the camera is out on the land focusing a cluster — the
+  // game's GPS auto-follow and zoomend re-lock must NOT yank the camera back
+  // to the player while this is set (main.js checks it).
+  function isCameraLocked() {
+    return focusCluster !== null;
+  }
+
   /* ------------------------------------------------------ plumbing */
   async function call(name, payload) {
     try {
@@ -319,7 +326,7 @@ const Empire = (() => {
             <div class="em-row">
               <div>
                 <div class="em-big">T${c.tier} → T${c.targetTier} · ${String(c.rarity).toUpperCase()}${c.lucky ? " 🍀" : ""}</div>
-                <div class="em-sub">Square at [${c.anchorTx}, ${c.anchorTy}] · ${c.size}×${c.size} tiles after merge</div>
+                <div class="em-sub">At [${c.anchorTx}, ${c.anchorTy}] · covers ${c.size}×${c.size} tiles (${c.size * c.size} total) · built from 4 plots</div>
               </div>
               <div style="text-align:right">
                 <div class="em-big" style="color:#86efac">+5%</div>
@@ -442,7 +449,7 @@ const Empire = (() => {
       <div class="em-row">
         <div>
           <div class="em-big">T${c.tier} → T${c.targetTier} · ${String(c.rarity).toUpperCase()}${c.lucky ? " 🍀" : ""}</div>
-          <div class="em-sub">Cluster at [${c.anchorTx}, ${c.anchorTy}] · ${c.size}×${c.size} tiles after merge · ${c.newRate.toExponential(2)} RC/sec</div>
+          <div class="em-sub">Cluster at [${c.anchorTx}, ${c.anchorTy}] · covers ${c.size}×${c.size} tiles (${c.size * c.size} total) · ${c.newRate.toExponential(2)} RC/sec</div>
         </div>
       </div>
       <div style="display:flex; gap:9px; margin-top:12px">
@@ -500,6 +507,7 @@ const Empire = (() => {
         </div>
         <div class="em-sub" style="text-align:center">
           New yield: <b style="color:#86efac">${c.newRate.toExponential(2)} RC / sec</b> (+5% vs the 4 plots unmerged)<br>
+          🏛 The monument stands on the same ${c.size}×${c.size} tiles — no extra land is taken.<br>
           ⏱ Construction takes <b>${fmtDuration(c.def.durationMs)}</b> — the 4 plots stop earning immediately and cannot be cancelled.
           ${c.lucky ? "<br>🍀 All four are lucky — the merged plot keeps 🍀." : ""}
         </div>
@@ -618,7 +626,7 @@ const Empire = (() => {
     init();
   }
 
-  return { init, open, close, render, ownedBlocks, eligibleClusters };
+    return { init, open, close, render, ownedBlocks, eligibleClusters, isCameraLocked };
 })();
 
 window.Empire = Empire;
