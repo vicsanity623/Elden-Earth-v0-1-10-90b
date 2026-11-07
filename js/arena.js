@@ -171,6 +171,20 @@ const Arena = (() => {
 }
 .ar-regen-line b{ color:#fff; font-variant-numeric:tabular-nums; }
 .ar-regen-line.full{ color:#86efac; }
+.ar-strikes{
+  margin:8px auto 0; padding:8px 12px; border-radius:12px; text-align:center;
+  background:rgba(239,68,68,.10); border:1px solid rgba(239,68,68,.35);
+}
+.ar-strikes-title{
+  display:block; color:#fca5a5; font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.8px; font-weight:900;
+}
+.ar-strikes-pips{
+  display:block; color:#ef4444; font-size:15px; font-weight:900;
+  letter-spacing:3px; margin:3px 0 2px;
+}
+.ar-strikes-pips .off{ color:rgba(239,68,68,.3); }
+.ar-strikes-note{ display:block; color:#f5b7b7; font-size:10px; }
 .ar-actions{ display:flex; gap:10px; margin-top:14px; }
 .ar-actions .btn{ flex:1 1 0; padding:15px 10px; font-size:15px; }
 .ar-battle-btn{
@@ -491,11 +505,18 @@ const Arena = (() => {
 
     // (mmss lives at module scope now — shared with the 1s live tick.)
 
-    // Footer button state. ⚡ Energy is the ONLY gate now — battle when the
-    // pool can afford it, otherwise show the countdown (and the ad refill)
-    // instead of a dead end. No daily limit exists anymore.
+    // Footer button state. ⛔ Loss strikes gate everything (a benched player
+    // must clear one first), then ⚡ Energy — battle when the pool can afford
+    // it, otherwise show the countdown (and the ad refill) instead of a dead
+    // end. No daily limit exists anymore.
+    const strikes = Number(me.lossStrikes) || 0;
+    const strikesMax = Number(me.strikesMax) || 3;
     let btnLabel, btnSub = "", btnDisabled = false, btnTimer = "";
-    if (energy >= battleCost) {
+    if (strikes >= strikesMax) {
+      btnLabel = `⛔ ${strikesMax} Loss Strikes`;
+      btnSub = "Watch an ad to clear one and continue";
+      btnDisabled = true;
+    } else if (energy >= battleCost) {
       btnLabel = `⚔️ Battle (Costs ${battleCost} ⚡)`;
       btnSub = usedToday > 0
         ? `${usedToday} battle${usedToday === 1 ? "" : "s"} today`
@@ -580,6 +601,12 @@ const Arena = (() => {
           </div>` : `
           <div class="ar-regen-line full">⚡ Energy Full</div>`}
         </div>
+        ${strikes > 0 ? `
+        <div class="ar-strikes">
+          <span class="ar-strikes-title">⛔ Loss Strikes</span>
+          <span class="ar-strikes-pips">${"✕ ".repeat(strikes)}<span class="off">${"✕ ".repeat(Math.max(0, strikesMax - strikes))}</span></span>
+          <span class="ar-strikes-note">a win or an ad clears one · resets at midnight</span>
+        </div>` : ""}
       </div>
 
       ${payout && !payout.claimed ? `
@@ -598,6 +625,13 @@ const Arena = (() => {
           choose “Set as Defense Buddy” before you can battle.
         </div>`}
 
+      ${strikes > 0 ? `
+      <div class="ar-ad-row">
+        <button class="btn ar-ad-btn ar-strike-btn" id="ar-strike-btn">
+          🎬 Watch Ad (Clear 1 Strike)
+        </button>
+      </div>` : ""}
+      ${strikes < strikesMax ? `
       <div class="ar-ad-row">
         ${adIn > 0 ? `
         <button class="btn ar-ad-btn" id="ar-ad-btn" disabled>
@@ -606,7 +640,7 @@ const Arena = (() => {
         <button class="btn ar-ad-btn" id="ar-ad-btn">
           🎬 Watch Ad (+${adRefill} ⚡ Energy)
         </button>`}
-      </div>
+      </div>` : ""}
 
       <div class="ar-actions">
         <button class="btn" id="ar-cancel-btn">Cancel</button>
@@ -636,6 +670,8 @@ const Arena = (() => {
     if (battle) battle.addEventListener("click", () => { if (!battle.disabled) startBattle(); });
     const adBtn = el("ar-ad-btn");
     if (adBtn) adBtn.addEventListener("click", () => { if (!adBtn.disabled) watchAdRefill(); });
+    const strikeBtn = el("ar-strike-btn");
+    if (strikeBtn) strikeBtn.addEventListener("click", () => { if (!strikeBtn.disabled) watchAdStrike(); });
   }
 
   /* --------------------------------------------------------------- open */
@@ -780,6 +816,51 @@ const Arena = (() => {
     return false;
   }
 
+  /* -------------------------------------------------⛔ ad strike relief */
+  // ⛔🎬 The ad callback grants NOTHING by itself: claimAdReward
+  // ('arena_strike_clear') mints the credit server-side and arenaClearStrike
+  // spends it (−1 loss strike). One strike also comes off per win and the
+  // counter resets at midnight — the ad is the fast path off the bench.
+  async function watchAdStrike() {
+    const btn = el("ar-strike-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Loading ad…"; }
+    const earned = (typeof Ads !== "undefined" && Ads.showRewarded)
+      ? await Ads.showRewarded("arena_strike_clear") : false;
+    if (!earned) {
+      renderLobby();
+      (window.showToast || alert)("Ad not completed — strikes unchanged.");
+      return;
+    }
+    let claim = await ServerAntiCheat.claimAdReward("arena_strike_clear");
+    // Same 20s ad-claim spacing as every other placement — retry once.
+    if (claim && claim.ok === false && claim.reason === "too_soon" && claim.retryAfterMs > 0) {
+      await new Promise((r) => setTimeout(r, Math.min(30000, claim.retryAfterMs) + 750));
+      claim = await ServerAntiCheat.claimAdReward("arena_strike_clear");
+    }
+    if (!claim || !claim.ok) {
+      renderLobby();
+      (window.showToast || alert)(claim && claim.reason === "daily_cap"
+        ? "🎬 No strike clears left today — strikes reset at midnight."
+        : "⚠️ Could not verify the ad — try again.", 4000);
+      return;
+    }
+    const d = await call("arenaClearStrike", {});
+    if (d && d.ok) {
+      applyEntry(d);
+      const left = Number(d.lossStrikes) || 0;
+      (window.showToast || alert)(left > 0
+        ? `⛔ Strike cleared — ${left} left. Win one to clear another!`
+        : "⛔ Strike cleared — you're back in the fight!", 4000);
+    } else {
+      renderLobby();
+      const why = {
+        no_strikes: "No strikes to clear.",
+        no_credit: "⚠️ Credit missing — watch the ad again.",
+      }[(d && d.reason)] || "⚠️ Could not clear the strike — try again.";
+      (window.showToast || alert)(why, 4000);
+    }
+  }
+
   /* ------------------------------------------------⚡ ad energy refill */
   // 🎬 The ad callback grants NOTHING by itself: claimAdReward('arena_energy')
   // mints the credit server-side and arenaAdRefillEnergy spends it for +20 ⚡
@@ -831,6 +912,8 @@ const Arena = (() => {
     if (!d || !d.ok) {
       const why = {
         no_defender: "Set a Defense Buddy first.",
+        // Benched by the loss-strike brake (quit-farm guard).
+        strikes: "⛔ 3 loss strikes — watch an ad to clear one (or win one first), then battle on.",
         // Not a lockout — the pool is simply empty. Point at the countdown
         // and the ad refill instead of blaming the player.
         need_energy: d && d.entry && d.entry.nextRegenMs
@@ -951,6 +1034,8 @@ const Arena = (() => {
         adRefillEnergy: d.adRefillEnergy,
         adRefillInMs: d.adRefillInMs,
         battlesToday: d.battlesToday,
+        lossStrikes: d.lossStrikes,
+        strikesMax: d.strikesMax,
       });
       if (typeof showToast === "function") {
         const apLine = `+${d.apAwarded} AP`;
