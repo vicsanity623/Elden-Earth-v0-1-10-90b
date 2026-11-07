@@ -1549,7 +1549,7 @@ let lastConflictCheck = {};
     return _rarityRateCache[rKey];
   }
 
-  // Calculate total EB/sec from all owned plots + boost multiplier
+  // Calculate total RC/sec from all owned plots + boost multiplier
   function totalRate() {
     if (!state || !state.plots) return 0;
     let rate = 0;

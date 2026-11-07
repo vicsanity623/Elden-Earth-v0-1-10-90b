@@ -251,7 +251,7 @@ const Grid = (() => {
     // 🧩 Merged blocks rate at base × 4.2^tier (their footprint renders as
     // one plot; satellites never open this modal).
     const modalRate = CONFIG.plotRate(String(plot.rarity?.key || plot.rarity || "common"), isLucky, Number(plot.tier) || 0);
-    document.getElementById("plot-modal-rate").textContent = `${modalRate} EB / sec${isLucky ? " (🍀 +10%)" : ""}${Number(plot.tier) >= 1 ? ` · T${Number(plot.tier)} merged` : ""}`;
+    document.getElementById("plot-modal-rate").textContent = `${modalRate} RC / sec${isLucky ? " (🍀 +10%)" : ""}${Number(plot.tier) >= 1 ? ` · T${Number(plot.tier)} merged` : ""}`;
     document.getElementById("plot-modal-location").textContent = [plot.city, plot.state, plot.country].filter(Boolean).join(", ") || "Unknown";
     // Show relocate button only for the player's own plots
     const relocateBtn = document.getElementById("plot-relocate-btn");

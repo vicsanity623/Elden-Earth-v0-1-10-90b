@@ -38,11 +38,11 @@ const Empire = (() => {
   const toast = (msg, ms) => (window.showToast || alert)(msg, ms);
 
   function fmtRate(rate) {
-    // Plots earn fractions of a cent per second — present EB/hr and EB/day.
-    const hr = rate * 3600;
-    const day = rate * 86400;
-    const fmt = (n) => n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(4);
-    return { perSec: rate, hr: `${fmt(hr)} EB/hr`, day: `${fmt(day)} EB/day` };
+    // Plots accrue REALM COINS (RC) per SECOND — the game's canonical unit
+    // (land income lands in state.cash, the RC wallet, once per tick).
+    // Rates are tiny fractions, so exponential notation is the honest display.
+    const perSec = rate >= 0.01 ? rate.toFixed(2) : rate.toExponential(2);
+    return { perSec, text: `${perSec} RC / sec` };
   }
   function fmtDuration(ms) {
     const s = Math.ceil(ms / 1000);
@@ -244,9 +244,9 @@ const Empire = (() => {
       <div class="em-stats">
         <div class="em-stat"><b>${blocks.length}</b><span>Land Holdings</span></div>
         <div class="em-stat"><b>${totalTiles.toLocaleString()}</b><span>Tiles Owned</span></div>
-        <div class="em-stat"><b>${income.hr}</b><span>Net Income</span></div>
+        <div class="em-stat"><b>${income.perSec}</b><span>RC / Sec</span></div>
       </div>
-      <div class="em-sub" style="text-align:center">${income.day} · ${income.perSec.toExponential(2)} EB/sec · Trainer Lv ${level}</div>
+      <div class="em-sub" style="text-align:center">Passive income: +${income.text} · Trainer Lv ${level}</div>
     `;
 
     // ---- construction queue ----
@@ -295,7 +295,7 @@ const Empire = (() => {
               </div>
               <div style="text-align:right">
                 <div class="em-big" style="color:#86efac">+5%</div>
-                <div class="em-sub">vs unmerged<br>${CONFIG.plotRate(c.rarity, c.lucky, c.tier + 1).toExponential(2)} EB/s</div>
+                <div class="em-sub">vs unmerged<br>${CONFIG.plotRate(c.rarity, c.lucky, c.tier + 1).toExponential(2)} RC/sec</div>
               </div>
             </div>
             ${locked
@@ -328,7 +328,7 @@ const Empire = (() => {
             </div>
             <div style="text-align:right">
               <div class="em-big">${b.rate.toExponential(2)}</div>
-              <div class="em-sub">EB/sec</div>
+              <div class="em-sub">RC / sec</div>
             </div>
           </div>
         </div>
@@ -371,7 +371,7 @@ const Empire = (() => {
           4 × T${c.tier} ${c.rarity.toUpperCase()}${c.lucky ? " 🍀" : ""} → 1 × T${c.targetTier}
         </div>
         <div class="em-sub" style="text-align:center">
-          New yield: <b style="color:#86efac">${c.newRate.toExponential(2)} EB/sec</b> (+5% vs the 4 plots unmerged)<br>
+          New yield: <b style="color:#86efac">${c.newRate.toExponential(2)} RC / sec</b> (+5% vs the 4 plots unmerged)<br>
           ⏱ Construction takes <b>${fmtDuration(c.def.durationMs)}</b> — the 4 plots stop earning immediately and cannot be cancelled.
           ${c.lucky ? "<br>🍀 All four are lucky — the merged plot keeps 🍀." : ""}
         </div>
@@ -410,7 +410,7 @@ const Empire = (() => {
   async function claimMerge(mergeInstanceId) {
     const d = await call("plotClaimMerge", { mergeInstanceId });
     if (d && d.ok) {
-      toast(`🏛 ${d.plot.rarity.toUpperCase()} T${d.plot.tier} monument complete! It's earning ${d.plot.rate.toExponential(2)} EB/sec now.`, 5500);
+      toast(`🏛 ${d.plot.rarity.toUpperCase()} T${d.plot.tier} monument complete! It's earning ${d.plot.rate.toExponential(2)} RC / sec now.`, 5500);
       await refreshFromServer();
     } else {
       toast(d && d.reason === "not_ready"
