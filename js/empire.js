@@ -21,6 +21,12 @@ const Empire = (() => {
 
   let state = null; // last computed view model
   let mergeMode = false;
+  // 🎥 Cluster focus: tapping a cluster in the list flies the camera to it on
+  // the map (players are often nowhere near their land), with a floating
+  // confirm card. Beginning/claiming a merge snaps the camera home to the
+  // player.
+  let focusCluster = null;
+  let savedView = null;
 
   /* ------------------------------------------------------ plumbing */
   async function call(name, payload) {
@@ -210,6 +216,28 @@ const Empire = (() => {
 .em-btn.ghost{ background:rgba(255,255,255,.09); color:#dbe4f0; border:1px solid rgba(255,255,255,.18); }
 .em-warn{ color:#fca5a5; font-size:10.5px; margin-top:6px; }
 .em-ok{ color:#86efac; font-size:10.5px; margin-top:6px; }
+/* 🎥 Cluster focus card — floats over the map while the camera is out on
+   the land. The cluster itself glows green behind it. */
+#em-focus{
+  position:fixed; left:12px; right:12px;
+  /* Sits above the MORE/BUY tab bar but UNDER every .modal (z 58) — the
+     merge confirm sheet must cover this card, not the other way round. */
+  bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  z-index:57; border-radius:18px; padding:16px;
+  background:linear-gradient(165deg, rgba(24,32,56,.93), rgba(14,18,34,.95));
+  border:1px solid rgba(46,229,157,.45);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 18px 50px rgba(0,0,0,.5);
+  animation:emFocusIn .3s cubic-bezier(.22,1,.36,1);
+}
+@keyframes emFocusIn{ from{ opacity:0; transform:translateY(18px); } to{ opacity:1; transform:none; } }
+#em-focus .em-big{ display:flex; align-items:center; gap:7px; }
+#em-focus .em-big::before{
+  content:""; width:9px; height:9px; border-radius:50%;
+  background:#2ee59d; box-shadow:0 0 12px #2ee59d;
+  animation:emPulse 1.6s ease-in-out infinite;
+}
+@keyframes emPulse{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.55; transform:scale(.8); } }
 `;
     const style = document.createElement("style");
     style.id = STYLE_ID;
@@ -286,7 +314,7 @@ const Empire = (() => {
         ${clusters.map((c, i) => {
           const locked = level < (c.def ? c.def.level : 99);
           return `
-          <div class="em-glass ${c.targetTier >= 3 ? "t3" : "t2"}">
+          <div class="em-glass ${c.targetTier >= 3 ? "t3" : "t2"}" data-focus="${i}" style="cursor:pointer" title="Tap to fly the camera to this cluster">
             ${c.targetTier >= 3 ? `<div class="em-shimmer"></div>` : ""}
             <div class="em-row">
               <div>
@@ -341,8 +369,15 @@ const Empire = (() => {
     box.querySelectorAll("[data-claim]").forEach((btn) => {
       btn.addEventListener("click", () => claimMerge(btn.getAttribute("data-claim")));
     });
+    // 🎥 Tapping a cluster card flies the camera to it on the map.
+    box.querySelectorAll("[data-focus]").forEach((card) => {
+      card.addEventListener("click", () => flyToCluster(clusters[Number(card.getAttribute("data-focus"))]));
+    });
     box.querySelectorAll("[data-merge]").forEach((btn) => {
-      btn.addEventListener("click", () => confirmMerge(clusters[Number(btn.getAttribute("data-merge"))]));
+      btn.addEventListener("click", (e) => {
+        if (e && e.stopPropagation) e.stopPropagation(); // don't also fly
+        confirmMerge(clusters[Number(btn.getAttribute("data-merge"))]);
+      });
     });
     const mm = el("em-merge-mode");
     if (mm) mm.addEventListener("click", () => {
@@ -353,6 +388,99 @@ const Empire = (() => {
       }
       render();
     });
+  }
+
+  /* ------------------------------------------------- 🎥 camera focus */
+  function clusterBounds(c) {
+    const ts = CONFIG.TILE_SIZE_METERS;
+    const b1 = Geo.tileBounds(c.anchorTx, c.anchorTy, ts);
+    const b2 = Geo.tileBounds(c.anchorTx + c.size - 1, c.anchorTy + c.size - 1, ts);
+    const lats = b1.concat(b2).map((p) => p[0]);
+    const lons = b1.concat(b2).map((p) => p[1]);
+    return [
+      [Math.min(...lons), Math.min(...lats)],
+      [Math.max(...lons), Math.max(...lats)],
+    ];
+  }
+
+  function flyToCluster(c) {
+    if (!c || typeof Grid === "undefined" || !Grid.getMap) return;
+    const map = Grid.getMap();
+    if (!map) return;
+    savedView = { center: map.getCenter(), zoom: map.getZoom() };
+    focusCluster = c;
+
+    // The list hides while the camera is out on the land.
+    const m = el(MODAL_ID);
+    if (m) m.classList.add("hidden");
+
+    // This one cluster glows green on the map — the visual anchor for the
+    // floating confirm card.
+    if (Grid.showMergeClusters) Grid.showMergeClusters(clusterGeoJSON([c]));
+
+    try {
+      map.fitBounds(clusterBounds(c), {
+        padding: { top: 120, bottom: 300, left: 56, right: 56 },
+        maxZoom: 19,
+        duration: 1600,
+        essential: true,
+      });
+    } catch (e) {
+      console.warn("[Empire] camera flight failed:", e && e.message);
+    }
+    renderFocusOverlay(c);
+  }
+
+  function renderFocusOverlay(c) {
+    let ov = el("em-focus");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "em-focus";
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = `
+      <div class="em-row">
+        <div>
+          <div class="em-big">T${c.tier} → T${c.targetTier} · ${String(c.rarity).toUpperCase()}${c.lucky ? " 🍀" : ""}</div>
+          <div class="em-sub">Cluster at [${c.anchorTx}, ${c.anchorTy}] · ${c.size}×${c.size} tiles after merge · ${c.newRate.toExponential(2)} RC/sec</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:9px; margin-top:12px">
+        <button class="em-btn" id="em-focus-merge">🧩 Merge This Cluster</button>
+        <button class="em-btn ghost" id="em-focus-back" style="flex:0 0 auto; width:130px">↩ My Empire</button>
+      </div>`;
+    ov.querySelector("#em-focus-merge").addEventListener("click", () => confirmMerge(c));
+    ov.querySelector("#em-focus-back").addEventListener("click", () => {
+      flyPlayerBack();
+      open();
+    });
+  }
+
+  // Snap the camera home to the player — called after a merge begins or a
+  // monument is claimed ("complete/begin merge flies camera back").
+  function flyPlayerBack() {
+    const map = (typeof Grid !== "undefined" && Grid.getMap) ? Grid.getMap() : null;
+    if (map) {
+      const pos = (typeof Grid !== "undefined" && Grid.getPlayerPosition) ? Grid.getPlayerPosition() : null;
+      const target = pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)
+        ? [pos.lon, pos.lat]
+        : (savedView ? [savedView.center.lng, savedView.center.lat] : null);
+      try {
+        if (target) {
+          map.flyTo({
+            center: target,
+            zoom: savedView ? savedView.zoom : map.getZoom(),
+            duration: 1500,
+            essential: true,
+          });
+        }
+      } catch (e) {}
+    }
+    focusCluster = null;
+    savedView = null;
+    if (typeof Grid !== "undefined" && Grid.clearMergeClusters) Grid.clearMergeClusters();
+    const ov = el("em-focus");
+    if (ov) ov.remove();
   }
 
   /* -------------------------------------------------------- actions */
@@ -388,6 +516,9 @@ const Empire = (() => {
       if (d && d.ok) {
         overlay.remove();
         toast(`🔨 Merge started! Your T${d.targetTier} ${c.rarity} plot will be ready in ${fmtDuration(d.durationMs)}.`, 5000);
+        // 🎥 Begin merge → the camera snaps home to the player; the site is
+        // now a dashed amber construction block on the map.
+        flyPlayerBack();
         await refreshFromServer();
       } else {
         const why = {
@@ -411,6 +542,9 @@ const Empire = (() => {
     const d = await call("plotClaimMerge", { mergeInstanceId });
     if (d && d.ok) {
       toast(`🏛 ${d.plot.rarity.toUpperCase()} T${d.plot.tier} monument complete! It's earning ${d.plot.rate.toExponential(2)} RC / sec now.`, 5500);
+      // 🎥 Claim → camera snaps home to the player as the monument lights up.
+      close();
+      flyPlayerBack();
       await refreshFromServer();
     } else {
       toast(d && d.reason === "not_ready"
@@ -461,6 +595,9 @@ const Empire = (() => {
     }
     const overlay = document.getElementById("em-confirm");
     if (overlay) overlay.remove();
+    // A stray focus card must never linger over the map.
+    const focus = el("em-focus");
+    if (focus) focus.remove();
   }
 
   // Entry wiring — delegated so script order never matters. The Home tab of
