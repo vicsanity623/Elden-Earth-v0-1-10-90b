@@ -1115,7 +1115,7 @@ const BuddySystem = (() => {
       if (mode.startsWith("level")) return Number(inst.level) || 1;
       if (mode.startsWith("rarity")) {
         const sp = BuddyData.getSpecies(inst.speciesId) || {};
-        return RARITY_RANK[sp.rarity] || 1;
+        return RARITY_RANK[inst.rarity || sp.rarity] || 1;
       }
       // Grade: letter tier, then raw IV% as the tiebreak inside a tier.
       const pct = BuddyEngine.ivPercent(inst.ivs);
@@ -1327,7 +1327,7 @@ const BuddySystem = (() => {
       <div style="margin:2px 0 10px">
         <span class="bd-tag">${inst.colorway} hue</span>
         <span class="bd-tag">${nature.name} nature</span>
-        <span class="bd-tag">${(sp.rarity || "common")} rarity</span>
+        <span class="bd-tag">${(inst.rarity || sp.rarity || "common")} rarity</span>
         <span class="bd-tag">Grade ${grade.letter} · ${pct}% IV</span>
       </div>
 
@@ -1576,7 +1576,7 @@ const BuddySystem = (() => {
   // Display-only; the server computes the real award.
   function feastEstXp(inst) {
     const sp = BuddyData.getSpecies(inst.speciesId) || {};
-    const rarity = BuddyData.getRarity(sp.rarity);
+    const rarity = BuddyData.getRarity(inst.rarity || sp.rarity);
     const level = Math.max(1, Math.min(50, Number(inst.level) || 1));
     const base = 18 + level * 7;
     const reward = Math.max(1, Math.floor(base * (rarity.xpMul || 1)));
@@ -1673,7 +1673,7 @@ const BuddySystem = (() => {
     candidates.forEach(c => {
       const sp = BuddyData.getSpecies(c.speciesId) || {};
       const grade = BuddyEngine.ivGrade(BuddyEngine.ivPercent(c.ivs));
-      const rarity = BuddyData.getRarity(sp.rarity);
+      const rarity = BuddyData.getRarity(c.rarity || sp.rarity);
       const row = document.createElement("div");
       row.className = "bd-feast-row";
       row.innerHTML = `
@@ -1875,7 +1875,7 @@ const BuddySystem = (() => {
     const listEl = document.getElementById("bd-breed-list");
     candidates.forEach(c => {
       const sp = BuddyData.getSpecies(c.speciesId) || {};
-      const rarity = BuddyData.getRarity(sp.rarity);
+      const rarity = BuddyData.getRarity(c.rarity || sp.rarity);
       const grade = BuddyEngine.ivGrade(BuddyEngine.ivPercent(c.ivs));
       const cd = breedCooldownFor(b, parentAUid, c.uid, now);
       // 🎬 FIX: a pair resting on the 7-day PARENT cooldown used to be
@@ -1945,7 +1945,7 @@ const BuddySystem = (() => {
       closeModal(BREED_ID);
       const baby = d.baby || {};
       const sp = BuddyData.getSpecies(baby.speciesId) || {};
-      const rarity = BuddyData.getRarity(sp.rarity);
+      const rarity = BuddyData.getRarity(baby.rarity || sp.rarity);
       toast(`🍼 ${baby.nickname} was born! ${rarity.name} ${sp.name || ""} · Level ${baby.level}`);
       openDetail(baby.uid); // show off the newborn
     });
@@ -2049,7 +2049,7 @@ const BuddySystem = (() => {
     clearTrainTimer();
 
     const sp = BuddyData.getSpecies(inst.speciesId) || {};
-    const mul = (BuddyData.getRarity(sp.rarity) || {}).xpMul || 1;
+    const mul = (BuddyData.getRarity(inst.rarity || sp.rarity) || {}).xpMul || 1;
 
     buildModal(TRAINING_ID, `
       <button class="bd-close">✕</button>
@@ -2518,14 +2518,19 @@ const BuddySystem = (() => {
     let battleXp = null;
     const grantXp = (target, amount) => {
       if (!target || !amount) return { leveled: 0, learned: [] };
+      // 💡 FIX: Capture level and XP BEFORE mutating target with addXp
+      const prevLevel = Number(target.level) || 1;
       const before = (typeof BuddyEngine !== "undefined" && BuddyEngine.xpProgress)
         ? BuddyEngine.xpProgress(target) : { current: Number(target.xp) || 0, need: 1 };
+      
       const r = BuddyEngine.addXp(target, amount);
-      const after = BuddyEngine.xpProgress(target);
+      const after = (typeof BuddyEngine !== "undefined" && BuddyEngine.xpProgress)
+        ? BuddyEngine.xpProgress(target) : { current: Number(target.xp) || 0, need: 1 };
+
       battleXp = {
         nickname: String(target.nickname || "Buddy"),
         xpAward: (Number(battleXp && battleXp.xpAward) || 0) + Math.floor(amount),
-        fromLevel: battleXp ? battleXp.fromLevel : (r.fromLevel != null ? r.fromLevel : Number(target.level) || 1),
+        fromLevel: battleXp ? battleXp.fromLevel : (r.fromLevel != null ? r.fromLevel : prevLevel),
         toLevel: Number(target.level) || 1,
         leveled: (Number(battleXp && battleXp.leveled) || 0) + (r.leveled || 0),
         learned: [].concat((battleXp && battleXp.learned) || [], r.learned || []),
@@ -2633,7 +2638,8 @@ const BuddySystem = (() => {
     // Continue closes the battle. This is the payoff moment the battle flow
     // was missing.
     try {
-      if (battleXp && battleXp.xpAward > 0 &&
+      // 💡 FIX: Also allow capped (max level) buddies to see the victory celebration screen
+      if (battleXp && (battleXp.xpAward > 0 || battleXp.capped) &&
           typeof BuddyBattle !== "undefined" && BuddyBattle.showXpResults) {
         BuddyBattle.showXpResults(Object.assign({}, battleXp, { outcome: summary.outcome }));
       }

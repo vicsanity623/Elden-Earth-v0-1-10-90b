@@ -165,7 +165,7 @@ const BuddyEngine = (() => {
       const entry = BuddyData.COLORWAYS.find(c => c.name === o.colorway) || BuddyData.COLORWAYS[0];
       cw = { name: entry.name, h: entry.h, s: entry.s, l: entry.l };
     } else {
-      cw = rollColorway(sp.rarity);
+      cw = rollColorway(o.rarity || sp.rarity); // 👈 Uses the upgraded rarity for the color roll
     }
 
     const hue = (typeof o.hue === "number") ? o.hue : cw.h;
@@ -175,6 +175,7 @@ const BuddyEngine = (() => {
     return {
       uid: o.uid || newId("bd"),
       speciesId,
+      rarity: o.rarity || sp.rarity, // 👈 Saves the instance rarity so it never gets lost!
       nickname: o.nickname || sp.name,
       level: lvl,
       xp: o.xp || 0,

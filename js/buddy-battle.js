@@ -988,7 +988,7 @@ const BuddyBattle = (() => {
       </div>
       <div style="margin:6px 0 2px">
         <span class="bb-colorway">${inst.colorway} hue</span>
-        <span class="bb-colorway">${sp.rarity || "common"}</span>
+        <span class="bb-colorway">${inst.rarity || sp.rarity || "common"}</span>
         <span class="bb-colorway">${nature.name} nature</span>
       </div>
 
@@ -1207,6 +1207,12 @@ const BuddyBattle = (() => {
       try { cb(summary); } catch (e) { console.warn("[BuddyBattle] onResult error:", e); }
     }
 
+    // 💡 FIX: If the XP panel opened, dismiss the tame/capture/pvp modal so the XP screen is visible!
+    if (xpPanelOpen) {
+      hideOverlay();
+      return;
+    }
+
     // Animate out, then tear down — unless the XP panel owns the screen now
     // (its Continue button tears down instead).
     const root = el(ROOT_ID);
@@ -1256,18 +1262,20 @@ const BuddyBattle = (() => {
   }
 
   function showXpResults(info) {
-    if (!info || !(Number(info.xpAward) > 0)) return;
-    const root = el(ROOT_ID);
-    if (!root) return;
+    if (!info || (!(Number(info.xpAward) > 0) && !info.capped)) return;
+    // 💡 FIX: Mount to #bb-root stage and hide the old capture/choice overlay immediately
+    const host = el("bb-root") || el(ROOT_ID);
+    if (!host) return;
     xpPanelOpen = true;
+    hideOverlay();
 
     if (!document.getElementById("bb-xp-style")) {
       const st = document.createElement("style");
       st.id = "bb-xp-style";
       st.textContent = `
 .bb-xp-screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  background:rgba(8,10,20,0.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
-  z-index:60;animation:bbXpIn .35s ease;padding:18px;}
+  background:rgba(8,10,20,0.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  z-index:9999;animation:bbXpIn .35s ease;padding:18px;}
 @keyframes bbXpIn{from{opacity:0}to{opacity:1}}
 .bb-xp-card{position:relative;width:min(440px,94vw);border-radius:22px;padding:26px 22px 20px;
   background:linear-gradient(165deg,#221b3a,#14162b 55%,#101322);
@@ -1344,7 +1352,7 @@ const BuddyBattle = (() => {
         ${maxed ? `<div class="bb-xp-learned">👑 MAX LEVEL REACHED</div>` : ""}
         <button class="bb-btn bb-primary bb-xp-continue" id="bb-xp-continue">Continue</button>
       </div>`;
-    root.appendChild(wrap);
+    host.appendChild(wrap);
 
     const fill = wrap.querySelector(".bb-xp-fill");
     const nums = wrap.querySelector(".bb-xp-nums");
@@ -1358,8 +1366,7 @@ const BuddyBattle = (() => {
     const toPct = maxed ? 100 : Math.max(0, Math.min(100, ((Number(info.toXp) || 0) / toNeed) * 100));
 
     // The fill: ease the bar to full on a level-up (then roll into the new
-    // level), or straight to the new percentage otherwise. The shine sweep +
-    // glow give it the "premium" feel.
+    // level), or straight to the new percentage otherwise.
     fill.style.width = fromPct + "%";
     countUp(amountEl, 0, Number(info.xpAward) || 0, 1100);
 
@@ -1370,8 +1377,6 @@ const BuddyBattle = (() => {
 
     if (leveled > 0) {
       setTimeout(() => {
-        // Level-up burst: flash, sparkles, badge bounce — then the bar rolls
-        // into the new level and fills to where the buddy landed.
         levelupEl.classList.remove("hidden");
         levelupEl.classList.add("bb-pop");
         card.classList.add("bb-flash");
@@ -1403,7 +1408,15 @@ const BuddyBattle = (() => {
     if (cont) {
       cont.addEventListener("click", () => {
         xpPanelOpen = false;
+        try { wrap.remove(); } catch (e) {}
         teardown();
+        // 💡 FIX: Notify arena or buddy callbacks that Continue was clicked
+        if (typeof info.onContinue === "function") {
+          try { info.onContinue(); } catch (e) {}
+        }
+        if (typeof info.onClose === "function") {
+          try { info.onClose(); } catch (e) {}
+        }
       });
     }
   }
